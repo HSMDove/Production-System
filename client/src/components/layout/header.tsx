@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -37,6 +37,17 @@ export function Header() {
             >
               <Lightbulb className="h-4 w-4" />
               <span className="hidden sm:inline">الأفكار</span>
+            </Button>
+          </Link>
+          <Link href="/calendar">
+            <Button
+              variant={location === "/calendar" ? "secondary" : "ghost"}
+              size="default"
+              className="gap-2"
+              data-testid="link-calendar"
+            >
+              <CalendarDays className="h-4 w-4" />
+              <span className="hidden sm:inline">التقويم</span>
             </Button>
           </Link>
           <Link href="/settings">

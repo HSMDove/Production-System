@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { format } from "date-fns";
+import { ar } from "date-fns/locale";
+import { CalendarIcon, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +27,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { IdeaWithFolder, Folder } from "@/lib/types";
 import { ideaStatusLabels, ideaCategoryLabels } from "@/lib/types";
 
@@ -39,6 +49,7 @@ const ideaFormSchema = z.object({
   targetAudience: z.string().optional(),
   notes: z.string().optional(),
   folderId: z.string().nullable().optional(),
+  scheduledDate: z.date().nullable().optional(),
 });
 
 type IdeaFormValues = z.infer<typeof ideaFormSchema>;
@@ -71,6 +82,7 @@ export function IdeaDialog({
       targetAudience: "",
       notes: "",
       folderId: null,
+      scheduledDate: null,
     },
   });
 
@@ -85,6 +97,7 @@ export function IdeaDialog({
         targetAudience: idea.targetAudience || "",
         notes: idea.notes || "",
         folderId: idea.folderId || null,
+        scheduledDate: idea.scheduledDate ? new Date(idea.scheduledDate) : null,
       });
     } else {
       form.reset({
@@ -96,6 +109,7 @@ export function IdeaDialog({
         targetAudience: "",
         notes: "",
         folderId: null,
+        scheduledDate: null,
       });
     }
   }, [idea, form]);
@@ -263,6 +277,58 @@ export function IdeaDialog({
                 )}
               />
             )}
+            <FormField
+              control={form.control}
+              name="scheduledDate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>تاريخ الجدولة</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-right font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-scheduled-date"
+                          >
+                            <CalendarIcon className="ml-2 h-4 w-4" />
+                            {field.value ? (
+                              format(field.value, "PPP", { locale: ar })
+                            ) : (
+                              <span>اختر تاريخ الجدولة (اختياري)</span>
+                            )}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value || undefined}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {field.value && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => field.onChange(null)}
+                        data-testid="button-clear-scheduled-date"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="notes"

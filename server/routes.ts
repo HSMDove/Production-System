@@ -301,7 +301,11 @@ export async function registerRoutes(
 
   app.post("/api/ideas", async (req, res) => {
     try {
-      const parsed = insertIdeaSchema.safeParse(req.body);
+      const body = { ...req.body };
+      if (body.scheduledDate && typeof body.scheduledDate === 'string') {
+        body.scheduledDate = new Date(body.scheduledDate);
+      }
+      const parsed = insertIdeaSchema.safeParse(body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
@@ -326,7 +330,11 @@ export async function registerRoutes(
 
   app.patch("/api/ideas/:id", async (req, res) => {
     try {
-      const parsed = updateIdeaSchema.safeParse(req.body);
+      const body = { ...req.body };
+      if (body.scheduledDate && typeof body.scheduledDate === 'string') {
+        body.scheduledDate = new Date(body.scheduledDate);
+      }
+      const parsed = updateIdeaSchema.safeParse(body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }

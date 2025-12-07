@@ -98,6 +98,7 @@ export const ideas = pgTable("ideas", {
   estimatedDuration: text("estimated_duration"),
   targetAudience: text("target_audience"),
   notes: text("notes"),
+  scheduledDate: timestamp("scheduled_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
