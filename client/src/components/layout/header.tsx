@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -48,6 +48,17 @@ export function Header() {
             >
               <CalendarDays className="h-4 w-4" />
               <span className="hidden sm:inline">التقويم</span>
+            </Button>
+          </Link>
+          <Link href="/analytics">
+            <Button
+              variant={location === "/analytics" ? "secondary" : "ghost"}
+              size="default"
+              className="gap-2"
+              data-testid="link-analytics"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">التحليلات</span>
             </Button>
           </Link>
           <Link href="/settings">

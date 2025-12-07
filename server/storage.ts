@@ -46,11 +46,14 @@ export interface IStorage {
   updateSource(id: string, source: Partial<InsertSource>): Promise<Source | undefined>;
   deleteSource(id: string): Promise<boolean>;
   
+  getAllContent(): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
   createContent(contentItem: InsertContent): Promise<Content>;
   createContentIfNotExists(contentItem: InsertContent): Promise<Content | null>;
   deleteContentBySourceId(sourceId: string): Promise<boolean>;
+  
+  getAllSources(): Promise<Source[]>;
   
   getAllIdeas(): Promise<Idea[]>;
   getIdeasByFolderId(folderId: string): Promise<Idea[]>;
@@ -140,8 +143,16 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
+  async getAllContent(): Promise<Content[]> {
+    return db.select().from(content).orderBy(content.fetchedAt);
+  }
+
   async getContentByFolderId(folderId: string): Promise<Content[]> {
     return db.select().from(content).where(eq(content.folderId, folderId)).orderBy(content.fetchedAt);
+  }
+
+  async getAllSources(): Promise<Source[]> {
+    return db.select().from(sources).orderBy(sources.createdAt);
   }
 
   async getContentBySourceId(sourceId: string): Promise<Content[]> {

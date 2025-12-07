@@ -522,5 +522,113 @@ export async function registerRoutes(
     }
   });
 
+  // Analytics endpoints
+  app.get("/api/analytics/overview", async (req, res) => {
+    try {
+      const [folders, allIdeas, allContent, allSources] = await Promise.all([
+        storage.getAllFolders(),
+        storage.getAllIdeas(),
+        storage.getAllContent(),
+        storage.getAllSources(),
+      ]);
+
+      // Ideas by status
+      const ideasByStatus: Record<string, number> = {};
+      for (const idea of allIdeas) {
+        ideasByStatus[idea.status] = (ideasByStatus[idea.status] || 0) + 1;
+      }
+
+      // Ideas by category
+      const ideasByCategory: Record<string, number> = {};
+      for (const idea of allIdeas) {
+        ideasByCategory[idea.category] = (ideasByCategory[idea.category] || 0) + 1;
+      }
+
+      // Content by folder
+      const contentByFolder: { folderId: string; folderName: string; count: number }[] = [];
+      for (const folder of folders) {
+        const folderContent = allContent.filter(c => c.folderId === folder.id);
+        contentByFolder.push({
+          folderId: folder.id,
+          folderName: folder.name,
+          count: folderContent.length,
+        });
+      }
+
+      // Sources by type
+      const sourcesByType: Record<string, number> = {};
+      for (const source of allSources) {
+        sourcesByType[source.type] = (sourcesByType[source.type] || 0) + 1;
+      }
+
+      // Ideas created over time (last 30 days)
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const ideasOverTime: { date: string; count: number }[] = [];
+      const dateMap: Record<string, number> = {};
+      
+      for (const idea of allIdeas) {
+        const createdDate = new Date(idea.createdAt);
+        if (createdDate >= thirtyDaysAgo) {
+          const dateStr = createdDate.toISOString().split('T')[0];
+          dateMap[dateStr] = (dateMap[dateStr] || 0) + 1;
+        }
+      }
+      
+      // Fill in missing days with 0 - clone date each iteration
+      for (let i = 0; i <= 30; i++) {
+        const d = new Date(thirtyDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
+        const dateStr = d.toISOString().split('T')[0];
+        ideasOverTime.push({
+          date: dateStr,
+          count: dateMap[dateStr] || 0,
+        });
+      }
+
+      // Content fetched over time (last 30 days)
+      const contentOverTime: { date: string; count: number }[] = [];
+      const contentDateMap: Record<string, number> = {};
+      
+      for (const contentItem of allContent) {
+        const fetchedDate = new Date(contentItem.fetchedAt);
+        if (fetchedDate >= thirtyDaysAgo) {
+          const dateStr = fetchedDate.toISOString().split('T')[0];
+          contentDateMap[dateStr] = (contentDateMap[dateStr] || 0) + 1;
+        }
+      }
+      
+      for (let i = 0; i <= 30; i++) {
+        const d = new Date(thirtyDaysAgo.getTime() + i * 24 * 60 * 60 * 1000);
+        const dateStr = d.toISOString().split('T')[0];
+        contentOverTime.push({
+          date: dateStr,
+          count: contentDateMap[dateStr] || 0,
+        });
+      }
+
+      // Completion rate
+      const completedCount = allIdeas.filter(i => i.status === 'completed').length;
+      const completionRate = allIdeas.length > 0 ? Math.round((completedCount / allIdeas.length) * 100) : 0;
+
+      res.json({
+        totalFolders: folders.length,
+        totalIdeas: allIdeas.length,
+        totalContent: allContent.length,
+        totalSources: allSources.length,
+        completionRate,
+        ideasByStatus,
+        ideasByCategory,
+        contentByFolder,
+        sourcesByType,
+        ideasOverTime,
+        contentOverTime,
+      });
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   return httpServer;
 }
