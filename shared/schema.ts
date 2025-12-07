@@ -103,10 +103,44 @@ export const ideas = pgTable("ideas", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const ideasRelations = relations(ideas, ({ one }) => ({
+export const ideasRelations = relations(ideas, ({ one, many }) => ({
   folder: one(folders, {
     fields: [ideas.folderId],
     references: [folders.id],
+  }),
+  comments: many(ideaComments),
+  assignments: many(ideaAssignments),
+}));
+
+// Idea Comments - comment threads on ideas
+export const ideaComments = pgTable("idea_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ideaId: varchar("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  authorName: text("author_name").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ideaCommentsRelations = relations(ideaComments, ({ one }) => ({
+  idea: one(ideas, {
+    fields: [ideaComments.ideaId],
+    references: [ideas.id],
+  }),
+}));
+
+// Idea Assignments - team member assignments for ideas
+export const ideaAssignments = pgTable("idea_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ideaId: varchar("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  assigneeName: text("assignee_name").notNull(),
+  role: text("role"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const ideaAssignmentsRelations = relations(ideaAssignments, ({ one }) => ({
+  idea: one(ideas, {
+    fields: [ideaAssignments.ideaId],
+    references: [ideas.id],
   }),
 }));
 
@@ -138,6 +172,16 @@ export const updateIdeaSchema = createInsertSchema(ideas).omit({
   createdAt: true,
 }).partial();
 
+export const insertIdeaCommentSchema = createInsertSchema(ideaComments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertIdeaAssignmentSchema = createInsertSchema(ideaAssignments).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type Folder = typeof folders.$inferSelect;
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
@@ -151,6 +195,12 @@ export type InsertContent = z.infer<typeof insertContentSchema>;
 export type Idea = typeof ideas.$inferSelect;
 export type InsertIdea = z.infer<typeof insertIdeaSchema>;
 export type UpdateIdea = z.infer<typeof updateIdeaSchema>;
+
+export type IdeaComment = typeof ideaComments.$inferSelect;
+export type InsertIdeaComment = z.infer<typeof insertIdeaCommentSchema>;
+
+export type IdeaAssignment = typeof ideaAssignments.$inferSelect;
+export type InsertIdeaAssignment = z.infer<typeof insertIdeaAssignmentSchema>;
 
 // Prompt Templates - custom AI prompt templates for idea generation
 export const promptTemplates = pgTable("prompt_templates", {

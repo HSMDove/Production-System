@@ -10,6 +10,8 @@ import {
   updateIdeaSchema,
   insertPromptTemplateSchema,
   updatePromptTemplateSchema,
+  insertIdeaCommentSchema,
+  insertIdeaAssignmentSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -441,6 +443,82 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  // Idea Comments routes
+  app.get("/api/ideas/:id/comments", async (req, res) => {
+    try {
+      const comments = await storage.getCommentsByIdeaId(req.params.id);
+      res.json(comments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/ideas/:id/comments", async (req, res) => {
+    try {
+      const parsed = insertIdeaCommentSchema.safeParse({
+        ...req.body,
+        ideaId: req.params.id,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const comment = await storage.createComment(parsed.data);
+      res.status(201).json(comment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  app.delete("/api/comments/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteComment(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
+  // Idea Assignments routes
+  app.get("/api/ideas/:id/assignments", async (req, res) => {
+    try {
+      const assignments = await storage.getAssignmentsByIdeaId(req.params.id);
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch assignments" });
+    }
+  });
+
+  app.post("/api/ideas/:id/assignments", async (req, res) => {
+    try {
+      const parsed = insertIdeaAssignmentSchema.safeParse({
+        ...req.body,
+        ideaId: req.params.id,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const assignment = await storage.createAssignment(parsed.data);
+      res.status(201).json(assignment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create assignment" });
+    }
+  });
+
+  app.delete("/api/assignments/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAssignment(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Assignment not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete assignment" });
     }
   });
 

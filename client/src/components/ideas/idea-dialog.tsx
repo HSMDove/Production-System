@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { CalendarIcon, X } from "lucide-react";
+import { CalendarIcon, X, MessageCircle, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { IdeaWithFolder, Folder } from "@/lib/types";
 import { ideaStatusLabels, ideaCategoryLabels } from "@/lib/types";
+import { IdeaCollaboration } from "./idea-collaboration";
 
 const ideaFormSchema = z.object({
   title: z.string().min(1, "عنوان الفكرة مطلوب"),
@@ -348,6 +349,11 @@ export function IdeaDialog({
                 </FormItem>
               )}
             />
+            
+            {idea && (
+              <IdeaCollaboration ideaId={idea.id} />
+            )}
+            
             <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 type="button"

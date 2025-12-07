@@ -100,6 +100,16 @@ Preferred communication style: Simple, everyday language.
 - Fields: id, name, description, promptContent, isDefault, timestamps
 - Supports placeholders: {{FOLDER_NAME}}, {{CONTENT_SUMMARY}}
 
+*Idea Comments Table*
+- Comment threads on ideas for team collaboration
+- Fields: id, ideaId, authorName, content, createdAt
+- Cascade delete when parent idea is removed
+
+*Idea Assignments Table*
+- Team member assignments for ideas
+- Fields: id, ideaId, assigneeName, role (optional), createdAt
+- Cascade delete when parent idea is removed
+
 ### External Dependencies
 
 **AI Services**

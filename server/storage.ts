@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   folders,
@@ -7,6 +7,8 @@ import {
   ideas,
   users,
   promptTemplates,
+  ideaComments,
+  ideaAssignments,
   type Folder,
   type InsertFolder,
   type Source,
@@ -21,6 +23,10 @@ import {
   type PromptTemplate,
   type InsertPromptTemplate,
   type UpdatePromptTemplate,
+  type IdeaComment,
+  type InsertIdeaComment,
+  type IdeaAssignment,
+  type InsertIdeaAssignment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -60,6 +66,14 @@ export interface IStorage {
   updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined>;
   deletePromptTemplate(id: string): Promise<boolean>;
   setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
+  
+  getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]>;
+  createComment(comment: InsertIdeaComment): Promise<IdeaComment>;
+  deleteComment(id: string): Promise<boolean>;
+  
+  getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
+  createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
+  deleteAssignment(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -225,6 +239,34 @@ export class DatabaseStorage implements IStorage {
       .where(eq(promptTemplates.id, id))
       .returning();
     return updated;
+  }
+
+  async getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]> {
+    return db.select().from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).orderBy(desc(ideaComments.createdAt));
+  }
+
+  async createComment(comment: InsertIdeaComment): Promise<IdeaComment> {
+    const [created] = await db.insert(ideaComments).values(comment).returning();
+    return created;
+  }
+
+  async deleteComment(id: string): Promise<boolean> {
+    const deleted = await db.delete(ideaComments).where(eq(ideaComments.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  async getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]> {
+    return db.select().from(ideaAssignments).where(eq(ideaAssignments.ideaId, ideaId)).orderBy(ideaAssignments.createdAt);
+  }
+
+  async createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment> {
+    const [created] = await db.insert(ideaAssignments).values(assignment).returning();
+    return created;
+  }
+
+  async deleteAssignment(id: string): Promise<boolean> {
+    const deleted = await db.delete(ideaAssignments).where(eq(ideaAssignments.id, id)).returning();
+    return deleted.length > 0;
   }
 }
 

@@ -1,6 +1,6 @@
-import type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType } from "@shared/schema";
+import type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType, IdeaComment, IdeaAssignment } from "@shared/schema";
 
-export type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType };
+export type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType, IdeaComment, IdeaAssignment };
 
 // Extended types with relations
 export interface FolderWithSources extends Folder {
