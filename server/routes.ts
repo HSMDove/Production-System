@@ -8,6 +8,8 @@ import {
   insertSourceSchema,
   insertIdeaSchema,
   updateIdeaSchema,
+  insertPromptTemplateSchema,
+  updatePromptTemplateSchema,
 } from "@shared/schema";
 
 export async function registerRoutes(
@@ -149,7 +151,21 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No content available to generate ideas from" });
       }
       
-      const generatedIdeas = await generateIdeasFromContent(content, folder.name, folder.id);
+      // Get custom template if specified
+      // "builtin" = use built-in prompt (no template)
+      // undefined = use user's default template if exists
+      // any other value = use the specified template ID
+      let template = null;
+      const templateId = req.body.templateId as string | undefined;
+      if (templateId && templateId !== "builtin") {
+        template = await storage.getPromptTemplateById(templateId);
+      } else if (!templateId) {
+        // No template specified - use user's default if exists
+        template = await storage.getDefaultPromptTemplate();
+      }
+      // If templateId === "builtin", template stays null (use built-in prompt)
+      
+      const generatedIdeas = await generateIdeasFromContent(content, folder.name, folder.id, template);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -333,6 +349,90 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete idea" });
+    }
+  });
+
+  // Prompt Templates routes
+  app.get("/api/prompt-templates", async (req, res) => {
+    try {
+      const templates = await storage.getAllPromptTemplates();
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch prompt templates" });
+    }
+  });
+
+  app.get("/api/prompt-templates/default", async (req, res) => {
+    try {
+      const template = await storage.getDefaultPromptTemplate();
+      res.json(template || null);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch default template" });
+    }
+  });
+
+  app.get("/api/prompt-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getPromptTemplateById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  app.post("/api/prompt-templates", async (req, res) => {
+    try {
+      const parsed = insertPromptTemplateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const template = await storage.createPromptTemplate(parsed.data);
+      res.status(201).json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  app.patch("/api/prompt-templates/:id", async (req, res) => {
+    try {
+      const parsed = updatePromptTemplateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+      const template = await storage.updatePromptTemplate(req.params.id, parsed.data);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  app.post("/api/prompt-templates/:id/set-default", async (req, res) => {
+    try {
+      const template = await storage.setDefaultPromptTemplate(req.params.id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to set default template" });
+    }
+  });
+
+  app.delete("/api/prompt-templates/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deletePromptTemplate(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete template" });
     }
   });
 

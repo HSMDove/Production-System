@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Sparkles, Loader2, Check } from "lucide-react";
 import {
   Dialog,
@@ -18,12 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import type { PromptTemplate } from "@shared/schema";
 
 interface GenerateIdeasDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   folderName: string;
-  onGenerate: (days: number) => void;
+  onGenerate: (days: number, templateId?: string) => void;
   isGenerating: boolean;
   progress: number;
   generatedCount: number;
@@ -39,9 +41,39 @@ export function GenerateIdeasDialog({
   generatedCount,
 }: GenerateIdeasDialogProps) {
   const [days, setDays] = useState("3");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("builtin");
+
+  const { data: templates } = useQuery<PromptTemplate[]>({
+    queryKey: ["/api/prompt-templates"],
+  });
+
+  // Set initial template to user's default if one exists
+  // Also reset to builtin if the selected template no longer exists
+  useEffect(() => {
+    if (templates) {
+      // Check if current selection still exists (unless it's builtin)
+      if (selectedTemplateId !== "builtin") {
+        const stillExists = templates.find((t) => t.id === selectedTemplateId);
+        if (!stillExists) {
+          // Reset to default or builtin
+          const defaultTemplate = templates.find((t) => t.isDefault);
+          setSelectedTemplateId(defaultTemplate?.id ?? "builtin");
+          return;
+        }
+      }
+      // On first load, select user's default if available
+      if (selectedTemplateId === "builtin") {
+        const defaultTemplate = templates.find((t) => t.isDefault);
+        if (defaultTemplate) {
+          setSelectedTemplateId(defaultTemplate.id);
+        }
+      }
+    }
+  }, [templates, selectedTemplateId]);
 
   const handleGenerate = () => {
-    onGenerate(parseInt(days));
+    // Pass the selectedTemplateId directly - "builtin" will be recognized by the API
+    onGenerate(parseInt(days), selectedTemplateId);
   };
 
   return (
@@ -72,6 +104,23 @@ export function GenerateIdeasDialog({
                     <SelectItem value="7">أسبوع</SelectItem>
                     <SelectItem value="14">أسبوعين</SelectItem>
                     <SelectItem value="30">شهر</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>قالب التوليد</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger data-testid="select-prompt-template">
+                    <SelectValue placeholder="اختر قالب التوليد" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="builtin">القالب المدمج (Tech Voice)</SelectItem>
+                    {templates?.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                        {template.isDefault && " (افتراضي)"}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

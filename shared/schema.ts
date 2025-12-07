@@ -151,6 +151,34 @@ export type Idea = typeof ideas.$inferSelect;
 export type InsertIdea = z.infer<typeof insertIdeaSchema>;
 export type UpdateIdea = z.infer<typeof updateIdeaSchema>;
 
+// Prompt Templates - custom AI prompt templates for idea generation
+export const promptTemplates = pgTable("prompt_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  promptContent: text("prompt_content").notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
+  id: true,
+  isDefault: true, // Default status can only be changed via set-default endpoint
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updatePromptTemplateSchema = createInsertSchema(promptTemplates).omit({
+  id: true,
+  isDefault: true, // Default status can only be changed via set-default endpoint
+  createdAt: true,
+}).partial();
+
+export type PromptTemplate = typeof promptTemplates.$inferSelect;
+export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
+export type UpdatePromptTemplate = z.infer<typeof updatePromptTemplateSchema>;
+
 // Keep users table for compatibility
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -133,8 +133,8 @@ export default function FolderDetail() {
   });
 
   const generateIdeasMutation = useMutation({
-    mutationFn: async (days: number) => {
-      return apiRequest("POST", `/api/folders/${id}/generate-ideas`, { days });
+    mutationFn: async ({ days, templateId }: { days: number; templateId?: string }) => {
+      return apiRequest("POST", `/api/folders/${id}/generate-ideas`, { days, templateId });
     },
     onSuccess: (data: { ideas: any[] }) => {
       setGenerateProgress(100);
@@ -172,10 +172,10 @@ export default function FolderDetail() {
     }
   };
 
-  const handleGenerateIdeas = (days: number) => {
+  const handleGenerateIdeas = (days: number, templateId?: string) => {
     setIsGenerating(true);
     setGenerateProgress(30);
-    generateIdeasMutation.mutate(days);
+    generateIdeasMutation.mutate({ days, templateId });
   };
 
   if (folderLoading) {

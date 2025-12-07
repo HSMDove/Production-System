@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon, Monitor, Check, Sparkles, Database, Rss } from "lucide-react";
+import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
@@ -86,6 +87,8 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        <PromptTemplatesList />
 
         <Card>
           <CardHeader>

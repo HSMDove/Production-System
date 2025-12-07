@@ -6,6 +6,7 @@ import {
   content,
   ideas,
   users,
+  promptTemplates,
   type Folder,
   type InsertFolder,
   type Source,
@@ -17,6 +18,9 @@ import {
   type UpdateIdea,
   type User,
   type InsertUser,
+  type PromptTemplate,
+  type InsertPromptTemplate,
+  type UpdatePromptTemplate,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -48,6 +52,14 @@ export interface IStorage {
   createIdea(idea: InsertIdea): Promise<Idea>;
   updateIdea(id: string, idea: UpdateIdea): Promise<Idea | undefined>;
   deleteIdea(id: string): Promise<boolean>;
+  
+  getAllPromptTemplates(): Promise<PromptTemplate[]>;
+  getPromptTemplateById(id: string): Promise<PromptTemplate | undefined>;
+  getDefaultPromptTemplate(): Promise<PromptTemplate | undefined>;
+  createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate>;
+  updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined>;
+  deletePromptTemplate(id: string): Promise<boolean>;
+  setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -172,6 +184,47 @@ export class DatabaseStorage implements IStorage {
   async deleteIdea(id: string): Promise<boolean> {
     const deleted = await db.delete(ideas).where(eq(ideas.id, id)).returning();
     return deleted.length > 0;
+  }
+
+  async getAllPromptTemplates(): Promise<PromptTemplate[]> {
+    return db.select().from(promptTemplates).orderBy(promptTemplates.createdAt);
+  }
+
+  async getPromptTemplateById(id: string): Promise<PromptTemplate | undefined> {
+    const [template] = await db.select().from(promptTemplates).where(eq(promptTemplates.id, id));
+    return template;
+  }
+
+  async getDefaultPromptTemplate(): Promise<PromptTemplate | undefined> {
+    const [template] = await db.select().from(promptTemplates).where(eq(promptTemplates.isDefault, true));
+    return template;
+  }
+
+  async createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate> {
+    const [created] = await db.insert(promptTemplates).values(template).returning();
+    return created;
+  }
+
+  async updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined> {
+    const [updated] = await db.update(promptTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(promptTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePromptTemplate(id: string): Promise<boolean> {
+    const deleted = await db.delete(promptTemplates).where(eq(promptTemplates.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  async setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined> {
+    await db.update(promptTemplates).set({ isDefault: false }).where(eq(promptTemplates.isDefault, true));
+    const [updated] = await db.update(promptTemplates)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(promptTemplates.id, id))
+      .returning();
+    return updated;
   }
 }
 

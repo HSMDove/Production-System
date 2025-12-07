@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { Content, IdeaCategory, InsertIdea } from "@shared/schema";
+import type { Content, IdeaCategory, InsertIdea, PromptTemplate } from "@shared/schema";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -14,25 +14,11 @@ interface GeneratedIdea {
   targetAudience: string;
 }
 
-export async function generateIdeasFromContent(
-  contentItems: Content[],
-  folderName: string,
-  folderId: string
-): Promise<InsertIdea[]> {
-  if (contentItems.length === 0) {
-    return [];
-  }
+const DEFAULT_PROMPT = `أنت منتج محتوى تقني عربي متخصص في إنشاء أفكار فيديوهات لقناة يوتيوب تقنية عربية تُدعى "Tech Voice".
 
-  const contentSummary = contentItems
-    .slice(0, 10)
-    .map((item, i) => `${i + 1}. ${item.title}${item.summary ? `: ${item.summary}` : ""}`)
-    .join("\n");
+بناءً على الأخبار التقنية التالية في مجال "{{FOLDER_NAME}}":
 
-  const prompt = `أنت منتج محتوى تقني عربي متخصص في إنشاء أفكار فيديوهات لقناة يوتيوب تقنية عربية تُدعى "Tech Voice".
-
-بناءً على الأخبار التقنية التالية في مجال "${folderName}":
-
-${contentSummary}
+{{CONTENT_SUMMARY}}
 
 قم بإنشاء 3-5 أفكار فيديو مبتكرة. لكل فكرة، قدم:
 - عنوان جذاب بالعربية
@@ -53,6 +39,30 @@ ${contentSummary}
     }
   ]
 }`;
+
+export function getDefaultPromptContent(): string {
+  return DEFAULT_PROMPT;
+}
+
+export async function generateIdeasFromContent(
+  contentItems: Content[],
+  folderName: string,
+  folderId: string,
+  customTemplate?: PromptTemplate | null
+): Promise<InsertIdea[]> {
+  if (contentItems.length === 0) {
+    return [];
+  }
+
+  const contentSummary = contentItems
+    .slice(0, 10)
+    .map((item, i) => `${i + 1}. ${item.title}${item.summary ? `: ${item.summary}` : ""}`)
+    .join("\n");
+
+  const promptTemplate = customTemplate?.promptContent || DEFAULT_PROMPT;
+  const prompt = promptTemplate
+    .replace("{{FOLDER_NAME}}", folderName)
+    .replace("{{CONTENT_SUMMARY}}", contentSummary);
 
   try {
     const response = await openai.chat.completions.create({
