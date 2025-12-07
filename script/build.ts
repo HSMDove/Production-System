@@ -21,15 +21,26 @@ const allowlist = [
   "nanoid",
   "nodemailer",
   "openai",
+  "p-limit",
+  "p-retry",
   "passport",
   "passport-local",
   "pg",
+  "rss-parser",
   "stripe",
   "uuid",
   "ws",
   "xlsx",
   "zod",
   "zod-validation-error",
+];
+
+// Packages that should always be external (dev-only or cause issues when bundled)
+const forceExternal = [
+  "vite",
+  "./vite",
+  "./vite.js",
+  "./vite.ts",
 ];
 
 async function buildAll() {
@@ -44,7 +55,10 @@ async function buildAll() {
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
   ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
+  const externals = [
+    ...allDeps.filter((dep) => !allowlist.includes(dep)),
+    ...forceExternal,
+  ];
 
   await esbuild({
     entryPoints: ["server/index.ts"],
