@@ -42,6 +42,9 @@ export const sourcesRelations = relations(sources, ({ one, many }) => ({
 }));
 
 // Content - fetched news/articles from sources
+export const sentimentTypes = ["positive", "negative", "neutral"] as const;
+export type SentimentType = typeof sentimentTypes[number];
+
 export const content = pgTable("content", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   folderId: varchar("folder_id").notNull().references(() => folders.id, { onDelete: "cascade" }),
@@ -52,6 +55,9 @@ export const content = pgTable("content", {
   imageUrl: text("image_url"),
   publishedAt: timestamp("published_at"),
   fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+  sentiment: text("sentiment").$type<SentimentType>(),
+  sentimentScore: integer("sentiment_score"),
+  keywords: text("keywords").array(),
 });
 
 export const contentRelations = relations(content, ({ one }) => ({

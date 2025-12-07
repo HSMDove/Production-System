@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   folders,
@@ -27,6 +27,7 @@ import {
   type InsertIdeaComment,
   type IdeaAssignment,
   type InsertIdeaAssignment,
+  type SentimentType,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -49,9 +50,12 @@ export interface IStorage {
   getAllContent(): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
+  getContentById(id: string): Promise<Content | undefined>;
   createContent(contentItem: InsertContent): Promise<Content>;
   createContentIfNotExists(contentItem: InsertContent): Promise<Content | null>;
   deleteContentBySourceId(sourceId: string): Promise<boolean>;
+  updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined>;
+  getUnanalyzedContent(limit?: number): Promise<Content[]>;
   
   getAllSources(): Promise<Source[]>;
   
@@ -181,6 +185,34 @@ export class DatabaseStorage implements IStorage {
   async deleteContentBySourceId(sourceId: string): Promise<boolean> {
     const deleted = await db.delete(content).where(eq(content.sourceId, sourceId)).returning();
     return deleted.length > 0;
+  }
+
+  async getContentById(id: string): Promise<Content | undefined> {
+    const [item] = await db.select().from(content).where(eq(content.id, id));
+    return item;
+  }
+
+  async updateContentSentiment(
+    id: string,
+    sentiment: SentimentType,
+    sentimentScore: number,
+    keywords: string[]
+  ): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ sentiment, sentimentScore, keywords })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getUnanalyzedContent(limit: number = 20): Promise<Content[]> {
+    return db
+      .select()
+      .from(content)
+      .where(isNull(content.sentiment))
+      .orderBy(desc(content.fetchedAt))
+      .limit(limit);
   }
 
   async getAllIdeas(): Promise<Idea[]> {

@@ -9,6 +9,7 @@ import FolderDetail from "@/pages/folder-detail";
 import Ideas from "@/pages/ideas";
 import ContentCalendar from "@/pages/calendar";
 import Analytics from "@/pages/analytics";
+import Trends from "@/pages/trends";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/ideas" component={Ideas} />
       <Route path="/calendar" component={ContentCalendar} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/trends" component={Trends} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

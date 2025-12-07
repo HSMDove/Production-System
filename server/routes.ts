@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent } from "./openai";
+import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics } from "./openai";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -627,6 +627,139 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Analytics error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Content Analysis endpoints
+  app.post("/api/content/analyze", async (req, res) => {
+    try {
+      const contentItems = await storage.getUnanalyzedContent(20);
+      
+      if (contentItems.length === 0) {
+        return res.json({ success: true, analyzed: 0, message: "No unanalyzed content found" });
+      }
+
+      const analyses = await analyzeContentSentiment(contentItems);
+      
+      let analyzedCount = 0;
+      for (const [id, analysis] of analyses) {
+        await storage.updateContentSentiment(
+          id,
+          analysis.sentiment,
+          analysis.sentimentScore,
+          analysis.keywords
+        );
+        analyzedCount++;
+      }
+
+      res.json({ success: true, analyzed: analyzedCount });
+    } catch (error) {
+      console.error("Content analysis error:", error);
+      res.status(500).json({ error: "Failed to analyze content" });
+    }
+  });
+
+  app.post("/api/folders/:id/content/analyze", async (req, res) => {
+    try {
+      const folderContent = await storage.getContentByFolderId(req.params.id);
+      const unanalyzedContent = folderContent.filter(c => !c.sentiment);
+      
+      if (unanalyzedContent.length === 0) {
+        return res.json({ success: true, analyzed: 0, message: "No unanalyzed content in folder" });
+      }
+
+      const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20));
+      
+      let analyzedCount = 0;
+      for (const [id, analysis] of analyses) {
+        await storage.updateContentSentiment(
+          id,
+          analysis.sentiment,
+          analysis.sentimentScore,
+          analysis.keywords
+        );
+        analyzedCount++;
+      }
+
+      res.json({ success: true, analyzed: analyzedCount });
+    } catch (error) {
+      console.error("Folder content analysis error:", error);
+      res.status(500).json({ error: "Failed to analyze folder content" });
+    }
+  });
+
+  app.get("/api/trending-topics", async (req, res) => {
+    try {
+      const allContent = await storage.getAllContent();
+      
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const recentContent = allContent.filter(c => {
+        if (!c.fetchedAt) return false;
+        const fetchedDate = new Date(c.fetchedAt);
+        return !isNaN(fetchedDate.getTime()) && fetchedDate >= sevenDaysAgo;
+      });
+
+      if (recentContent.length === 0) {
+        return res.json({ topics: [], message: "No recent content to analyze" });
+      }
+
+      const topics = await detectTrendingTopics(recentContent);
+      res.json({ topics });
+    } catch (error) {
+      console.error("Trending topics error:", error);
+      res.status(500).json({ error: "Failed to detect trending topics" });
+    }
+  });
+
+  app.get("/api/folders/:id/trending-topics", async (req, res) => {
+    try {
+      const folderContent = await storage.getContentByFolderId(req.params.id);
+      
+      if (folderContent.length === 0) {
+        return res.json({ topics: [], message: "No content in folder" });
+      }
+
+      const topics = await detectTrendingTopics(folderContent);
+      res.json({ topics });
+    } catch (error) {
+      console.error("Folder trending topics error:", error);
+      res.status(500).json({ error: "Failed to detect folder trending topics" });
+    }
+  });
+
+  app.get("/api/content/sentiment-stats", async (req, res) => {
+    try {
+      const allContent = await storage.getAllContent();
+      
+      const analyzed = allContent.filter(c => c.sentiment);
+      const positive = analyzed.filter(c => c.sentiment === "positive").length;
+      const negative = analyzed.filter(c => c.sentiment === "negative").length;
+      const neutral = analyzed.filter(c => c.sentiment === "neutral").length;
+      
+      const allKeywords: Record<string, number> = {};
+      for (const item of analyzed) {
+        if (item.keywords) {
+          for (const keyword of item.keywords) {
+            allKeywords[keyword] = (allKeywords[keyword] || 0) + 1;
+          }
+        }
+      }
+      
+      const topKeywords = Object.entries(allKeywords)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([keyword, count]) => ({ keyword, count }));
+
+      res.json({
+        total: allContent.length,
+        analyzed: analyzed.length,
+        unanalyzed: allContent.length - analyzed.length,
+        sentimentBreakdown: { positive, negative, neutral },
+        topKeywords,
+      });
+    } catch (error) {
+      console.error("Sentiment stats error:", error);
+      res.status(500).json({ error: "Failed to fetch sentiment stats" });
     }
   });
 
