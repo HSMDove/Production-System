@@ -92,8 +92,19 @@ export async function registerRoutes(
 
   app.get("/api/folders/:id/content", async (req, res) => {
     try {
-      const content = await storage.getContentByFolderId(req.params.id);
-      res.json(content);
+      const contentItems = await storage.getContentByFolderId(req.params.id);
+      const allSources = await storage.getSourcesByFolderId(req.params.id);
+      
+      // Create a map for quick source lookup
+      const sourcesMap = new Map(allSources.map(s => [s.id, s]));
+      
+      // Attach source info to each content item
+      const contentWithSources = contentItems.map(item => ({
+        ...item,
+        source: sourcesMap.get(item.sourceId) || null
+      }));
+      
+      res.json(contentWithSources);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch content" });
     }
