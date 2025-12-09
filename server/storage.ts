@@ -55,6 +55,7 @@ export interface IStorage {
   createContentIfNotExists(contentItem: InsertContent): Promise<Content | null>;
   deleteContentBySourceId(sourceId: string): Promise<boolean>;
   updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined>;
+  updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
   
   getAllSources(): Promise<Source[]>;
@@ -133,12 +134,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSource(source: InsertSource): Promise<Source> {
-    const [created] = await db.insert(sources).values(source).returning();
+    const [created] = await db.insert(sources).values(source as any).returning();
     return created;
   }
 
   async updateSource(id: string, source: Partial<InsertSource>): Promise<Source | undefined> {
-    const [updated] = await db.update(sources).set(source).where(eq(sources.id, id)).returning();
+    const [updated] = await db.update(sources).set(source as any).where(eq(sources.id, id)).returning();
     return updated;
   }
 
@@ -164,7 +165,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createContent(contentItem: InsertContent): Promise<Content> {
-    const [created] = await db.insert(content).values(contentItem).returning();
+    const [created] = await db.insert(content).values(contentItem as any).returning();
     return created;
   }
 
@@ -178,7 +179,7 @@ export class DatabaseStorage implements IStorage {
     if (existing) {
       return null;
     }
-    const [created] = await db.insert(content).values(contentItem).returning();
+    const [created] = await db.insert(content).values(contentItem as any).returning();
     return created;
   }
 
@@ -201,6 +202,15 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(content)
       .set({ sentiment, sentimentScore, keywords })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ arabicSummary })
       .where(eq(content.id, id))
       .returning();
     return updated;
@@ -229,12 +239,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createIdea(idea: InsertIdea): Promise<Idea> {
-    const [created] = await db.insert(ideas).values(idea).returning();
+    const [created] = await db.insert(ideas).values(idea as any).returning();
     return created;
   }
 
   async updateIdea(id: string, idea: UpdateIdea): Promise<Idea | undefined> {
-    const [updated] = await db.update(ideas).set({ ...idea, updatedAt: new Date() }).where(eq(ideas.id, id)).returning();
+    const [updated] = await db.update(ideas).set({ ...idea, updatedAt: new Date() } as any).where(eq(ideas.id, id)).returning();
     return updated;
   }
 

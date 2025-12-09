@@ -51,6 +51,7 @@ export const content = pgTable("content", {
   sourceId: varchar("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   summary: text("summary"),
+  arabicSummary: text("arabic_summary"),
   originalUrl: text("original_url").notNull(),
   imageUrl: text("image_url"),
   publishedAt: timestamp("published_at"),

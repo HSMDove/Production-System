@@ -14,6 +14,7 @@ export interface FolderWithSources extends Folder {
 
 export interface ContentWithSource extends Content {
   source: Source;
+  arabicSummary?: string | null;
 }
 
 export interface IdeaWithFolder extends Idea {

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics } from "./openai";
+import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary } from "./openai";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -107,6 +107,7 @@ export async function registerRoutes(
       let totalAdded = 0;
       let skipped = 0;
       const errors: string[] = [];
+      const newContentIds: string[] = [];
       
       for (const result of results) {
         if (result.error) {
@@ -119,6 +120,7 @@ export async function registerRoutes(
             const created = await storage.createContentIfNotExists(item);
             if (created) {
               totalAdded++;
+              newContentIds.push(created.id);
             } else {
               skipped++;
             }
@@ -128,6 +130,28 @@ export async function registerRoutes(
         }
         
         await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
+      }
+      
+      // Generate Arabic summaries for new content in the background
+      if (newContentIds.length > 0) {
+        (async () => {
+          for (const contentId of newContentIds) {
+            try {
+              const contentItem = await storage.getContentById(contentId);
+              if (contentItem && contentItem.title) {
+                const arabicSummary = await generateArabicSummary(
+                  contentItem.title,
+                  contentItem.summary || ""
+                );
+                if (arabicSummary) {
+                  await storage.updateContentArabicSummary(contentId, arabicSummary);
+                }
+              }
+            } catch (e) {
+              console.error("Error generating Arabic summary:", e);
+            }
+          }
+        })();
       }
       
       res.json({ 
@@ -265,11 +289,14 @@ export async function registerRoutes(
       
       let addedCount = 0;
       let skipped = 0;
+      const newContentIds: string[] = [];
+      
       for (const item of result.items) {
         try {
           const created = await storage.createContentIfNotExists(item);
           if (created) {
             addedCount++;
+            newContentIds.push(created.id);
           } else {
             skipped++;
           }
@@ -279,6 +306,28 @@ export async function registerRoutes(
       }
       
       await storage.updateSource(source.id, { lastFetched: new Date() } as any);
+      
+      // Generate Arabic summaries for new content in the background
+      if (newContentIds.length > 0) {
+        (async () => {
+          for (const contentId of newContentIds) {
+            try {
+              const contentItem = await storage.getContentById(contentId);
+              if (contentItem && contentItem.title) {
+                const arabicSummary = await generateArabicSummary(
+                  contentItem.title,
+                  contentItem.summary || ""
+                );
+                if (arabicSummary) {
+                  await storage.updateContentArabicSummary(contentId, arabicSummary);
+                }
+              }
+            } catch (e) {
+              console.error("Error generating Arabic summary:", e);
+            }
+          }
+        })();
+      }
       
       res.json({ success: true, itemsAdded: addedCount, skipped });
     } catch (error) {

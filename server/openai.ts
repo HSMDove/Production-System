@@ -197,6 +197,47 @@ export interface TrendingTopic {
   relatedKeywords: string[];
 }
 
+export async function generateArabicSummary(
+  title: string,
+  summary: string | null
+): Promise<string | null> {
+  if (!title && !summary) return null;
+  
+  const textToSummarize = summary || title;
+  
+  // Check if text is already primarily Arabic (more than 50% Arabic characters)
+  const arabicChars = textToSummarize.match(/[\u0600-\u06FF]/g) || [];
+  const totalChars = textToSummarize.replace(/\s/g, '').length;
+  const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
+  
+  if (arabicRatio > 0.5) {
+    return null; // Already in Arabic
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "أنت مترجم ومُلخص محترف. قم بترجمة وتلخيص المحتوى التقني إلى العربية بشكل موجز ومفهوم. أجب بالملخص العربي فقط بدون أي شرح إضافي."
+        },
+        {
+          role: "user",
+          content: `قم بترجمة وتلخيص هذا المحتوى التقني إلى العربية في 1-2 جملة:\n\nالعنوان: ${title}\n${summary ? `الملخص: ${summary}` : ''}`
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 200,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || null;
+  } catch (error) {
+    console.error("Error generating Arabic summary:", error);
+    return null;
+  }
+}
+
 export async function detectTrendingTopics(
   contentItems: Content[]
 ): Promise<TrendingTopic[]> {
