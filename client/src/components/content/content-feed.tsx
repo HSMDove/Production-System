@@ -65,7 +65,8 @@ function getSourceDisplayName(item: ContentWithSource): string {
 
 function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?: (item: ContentWithSource) => void }) {
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
-  const displaySummary = item.arabicSummary || item.summary;
+  const hasArabicSummary = !!item.arabicSummary;
+  const hasEnglishSummary = !!item.summary;
   
   return (
     <Card 
@@ -73,10 +74,11 @@ function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?:
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
-        <div className="flex flex-col sm:flex-row">
+        <div className="flex flex-col">
+          {/* Image Section */}
           {item.imageUrl && (
-            <div className="relative sm:w-40 md:w-48 lg:w-56 flex-shrink-0">
-              <div className="aspect-video sm:aspect-[4/3] sm:h-full w-full overflow-hidden bg-muted">
+            <div className="relative w-full">
+              <div className="aspect-video w-full overflow-hidden bg-muted">
                 <img 
                   src={item.imageUrl} 
                   alt={item.title}
@@ -88,76 +90,93 @@ function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?:
               </div>
               {isVideo && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90">
-                    <Play className="h-5 w-5 text-red-600 fill-red-600" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90">
+                    <Play className="h-6 w-6 text-red-600 fill-red-600" />
                   </div>
                 </div>
               )}
             </div>
           )}
           
-          <div className="flex-1 p-4 min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 
-                  className="text-base sm:text-lg font-semibold mb-2 leading-tight line-clamp-2" 
-                  data-testid={`text-content-title-${item.id}`}
-                >
-                  {item.title}
-                </h3>
-                
-                {displaySummary && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2 sm:line-clamp-3">
-                    {displaySummary}
-                  </p>
-                )}
-                
-                <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-                  <div className="flex items-center gap-1.5">
-                    {getSourceIcon(item.source?.type || "rss")}
-                    <span className="text-muted-foreground font-medium">
-                      {getSourceDisplayName(item)}
-                    </span>
-                  </div>
-                  
-                  <Badge variant="outline" className="text-xs">
-                    {sourceTypeLabels[item.source?.type || "rss"]}
-                  </Badge>
-                  
-                  {item.publishedAt && (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      {formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true, locale: ar })}
-                    </span>
-                  )}
+          {/* Content Section */}
+          <div className="p-4 space-y-3">
+            {/* Source & Date Row */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {getSourceIcon(item.source?.type || "rss")}
+                <span className="text-sm font-medium text-muted-foreground">
+                  {getSourceDisplayName(item)}
+                </span>
+                <Badge variant="outline" className="text-xs">
+                  {sourceTypeLabels[item.source?.type || "rss"]}
+                </Badge>
+              </div>
+              {item.publishedAt && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  {formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true, locale: ar })}
+                </span>
+              )}
+            </div>
+            
+            {/* English Title */}
+            <h3 
+              className="text-base font-semibold leading-tight line-clamp-2 text-foreground" 
+              dir="ltr"
+              data-testid={`text-content-title-${item.id}`}
+            >
+              {item.title}
+            </h3>
+            
+            {/* English Summary */}
+            {hasEnglishSummary && (
+              <p className="text-sm text-muted-foreground line-clamp-2" dir="ltr">
+                {item.summary}
+              </p>
+            )}
+            
+            {/* Arabic AI Summary */}
+            {hasArabicSummary && (
+              <div className="bg-muted/50 rounded-md p-3 border-r-2 border-primary">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-medium text-primary">ملخص بالعربية</span>
                 </div>
+                <p className="text-sm leading-relaxed" dir="rtl">
+                  {item.arabicSummary}
+                </p>
               </div>
+            )}
+            
+            {/* Actions Row */}
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => onExplain?.(item)}
+                data-testid={`button-explain-${item.id}`}
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>شرح مفصل</span>
+              </Button>
               
-              <div className="flex flex-col gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onExplain?.(item)}
-                  title="شرح بالعربية"
-                  data-testid={`button-explain-${item.id}`}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                asChild
+              >
+                <a
+                  href={item.originalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid={`link-content-external-${item.id}`}
                 >
-                  <Sparkles className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  asChild
-                >
-                  <a
-                    href={item.originalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid={`link-content-external-${item.id}`}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
-              </div>
+                  <ExternalLink className="h-4 w-4" />
+                  <span>المصدر</span>
+                </a>
+              </Button>
             </div>
           </div>
         </div>

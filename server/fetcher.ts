@@ -393,16 +393,27 @@ function extractImageUrl(item: Parser.Item): string | null {
 
 // Keywords to filter out promotional/deal content
 const EXCLUDED_KEYWORDS = [
-  // English keywords
+  // English deal/discount keywords
   'discount', 'offer', 'coupon', 'deal', 'sale', 'promo', 'promotion',
   'black friday', 'cyber monday', 'prime day', 'flash sale', 'limited time',
   'save money', 'save $', 'save %', 'off coupon', '% off', 'dollars off',
   'buy one get', 'bogo', 'clearance', 'doorbuster', 'lowest price',
   'best price', 'price drop', 'price cut', 'exclusive offer', 'special offer',
   'gift guide', 'gift ideas', 'best gifts', 'holiday deals', 'holiday sale',
+  'sponsored', 'advertisement', 'ad:', '[ad]', 'affiliate', 'paid partnership',
+  // Price-related patterns
+  'under $', 'for just $', 'only $', 'starting at $', 'as low as',
+  'cheap', 'cheapest', 'budget', 'save up to', 'grab this',
+  'hurry', 'ends soon', 'last chance', 'don\'t miss', 'act now',
+  'giveaway', 'win a', 'enter to win', 'sweepstakes', 'free trial',
+  // Amazon/store specific
+  'amazon deal', 'best buy deal', 'walmart deal', 'target deal',
+  'lightning deal', 'daily deal', 'deal of the day', 'today only',
   // Arabic keywords
   'خصم', 'عرض', 'كوبون', 'تخفيض', 'صفقة', 'تنزيلات', 'عروض',
-  'الجمعة البيضاء', 'الجمعة السوداء', 'تخفيضات'
+  'الجمعة البيضاء', 'الجمعة السوداء', 'تخفيضات', 'سعر خاص',
+  'احصل على', 'اشتري الآن', 'فرصة محدودة', 'هدية مجانية',
+  'إعلان', 'ممول', 'مسابقة', 'اربح'
 ];
 
 // Check if content should be filtered out
