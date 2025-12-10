@@ -187,19 +187,53 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source): Promise<FetchRes
       }
     );
 
-    const items: InsertContent[] = feed.items.slice(0, 20).map((item) => ({
-      folderId: source.folderId,
-      sourceId: source.id,
-      title: item.title || "Untitled",
-      summary: item.contentSnippet || item.content?.substring(0, 300) || null,
-      originalUrl: item.link || source.url,
-      imageUrl: extractImageUrl(item),
-      publishedAt: item.pubDate ? new Date(item.pubDate) : null,
-    }));
+    // Process items and filter out promotional content
+    const processedItems: InsertContent[] = [];
+    
+    for (const item of feed.items.slice(0, 30)) { // Fetch more to account for filtering
+      const title = item.title || "Untitled";
+      const summary = item.contentSnippet || item.content?.substring(0, 300) || null;
+      const originalUrl = item.link || source.url;
+      
+      // Filter out promotional content
+      if (shouldFilterContent(title, summary)) {
+        console.log(`Filtered out promotional content: ${title}`);
+        continue;
+      }
+      
+      // Get image URL with enhanced logic
+      let imageUrl = extractImageUrl(item);
+      
+      // For YouTube sources, try to get video thumbnail
+      if (source.type === "youtube" && originalUrl) {
+        const videoId = extractYouTubeVideoId(originalUrl);
+        if (videoId) {
+          imageUrl = getYouTubeThumbnail(videoId);
+        }
+      }
+      
+      // If still no image and we have a URL, try to fetch OG image
+      // (do this asynchronously in background to not slow down feed)
+      
+      processedItems.push({
+        folderId: source.folderId,
+        sourceId: source.id,
+        title,
+        summary,
+        originalUrl,
+        imageUrl,
+        publishedAt: item.pubDate ? new Date(item.pubDate) : null,
+      });
+      
+      // Limit to 20 items after filtering
+      if (processedItems.length >= 20) {
+        break;
+      }
+    }
 
     return {
       sourceId: source.id,
-      items,
+      items: processedItems,
     };
   } catch (error) {
     console.error(`Error fetching RSS from ${rssUrl}:`, error);
@@ -264,11 +298,90 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
   }
 }
 
+// Extract YouTube video ID from URL
+function extractYouTubeVideoId(url: string): string | null {
+  const patterns = [
+    /youtube\.com\/watch\?v=([^&]+)/,
+    /youtu\.be\/([^?]+)/,
+    /youtube\.com\/embed\/([^?]+)/,
+    /youtube\.com\/v\/([^?]+)/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+// Get YouTube thumbnail URL from video ID
+function getYouTubeThumbnail(videoId: string): string {
+  // Use maxresdefault, with fallback to hqdefault
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+}
+
+// Fetch OG image from a webpage
+async function fetchOGImage(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    
+    if (!response.ok) return null;
+    
+    const html = await response.text();
+    
+    // Try various meta image patterns
+    const patterns = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+      /<meta[^>]+name=["']thumbnail["'][^>]+content=["']([^"']+)["']/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        let imageUrl = match[1];
+        // Handle relative URLs
+        if (imageUrl.startsWith('/')) {
+          const baseUrl = new URL(url);
+          imageUrl = `${baseUrl.protocol}//${baseUrl.host}${imageUrl}`;
+        }
+        return imageUrl;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function extractImageUrl(item: Parser.Item): string | null {
+  // First check enclosure (common for podcasts and some RSS)
   if (item.enclosure?.url) {
     return item.enclosure.url;
   }
   
+  // Check media:thumbnail or media:content
+  const mediaContent = (item as any)["media:content"];
+  if (mediaContent?.$.url) {
+    return mediaContent.$.url;
+  }
+  
+  const mediaThumbnail = (item as any)["media:thumbnail"];
+  if (mediaThumbnail?.$.url) {
+    return mediaThumbnail.$.url;
+  }
+  
+  // Check for image in content
   const content = item.content || (item as any)["content:encoded"] || "";
   const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
   if (imgMatch) {
@@ -276,6 +389,33 @@ function extractImageUrl(item: Parser.Item): string | null {
   }
 
   return null;
+}
+
+// Keywords to filter out promotional/deal content
+const EXCLUDED_KEYWORDS = [
+  // English keywords
+  'discount', 'offer', 'coupon', 'deal', 'sale', 'promo', 'promotion',
+  'black friday', 'cyber monday', 'prime day', 'flash sale', 'limited time',
+  'save money', 'save $', 'save %', 'off coupon', '% off', 'dollars off',
+  'buy one get', 'bogo', 'clearance', 'doorbuster', 'lowest price',
+  'best price', 'price drop', 'price cut', 'exclusive offer', 'special offer',
+  'gift guide', 'gift ideas', 'best gifts', 'holiday deals', 'holiday sale',
+  // Arabic keywords
+  'خصم', 'عرض', 'كوبون', 'تخفيض', 'صفقة', 'تنزيلات', 'عروض',
+  'الجمعة البيضاء', 'الجمعة السوداء', 'تخفيضات'
+];
+
+// Check if content should be filtered out
+function shouldFilterContent(title: string, summary: string | null): boolean {
+  const textToCheck = `${title} ${summary || ''}`.toLowerCase();
+  
+  for (const keyword of EXCLUDED_KEYWORDS) {
+    if (textToCheck.includes(keyword.toLowerCase())) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 export async function fetchMultipleSources(sources: Source[]): Promise<FetchResult[]> {

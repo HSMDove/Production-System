@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ChevronLeft, Sparkles, RefreshCw } from "lucide-react";
@@ -148,6 +148,17 @@ export default function FolderDetail() {
       toast({ title: "حدث خطأ", description: "فشل في توليد الأفكار", variant: "destructive" });
     },
   });
+
+  // Auto-refresh content when entering the folder
+  const previousFolderId = useRef<string | null>(null);
+  
+  useEffect(() => {
+    // Only auto-refresh once per folder visit and when sources are loaded
+    if (id && id !== previousFolderId.current && sources && sources.length > 0) {
+      previousFolderId.current = id;
+      fetchAllSourcesMutation.mutate();
+    }
+  }, [id, sources]);
 
   const handleAddSource = () => {
     setSelectedSource(null);

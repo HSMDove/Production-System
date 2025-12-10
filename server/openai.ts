@@ -238,6 +238,45 @@ export async function generateArabicSummary(
   }
 }
 
+export async function generateDetailedArabicExplanation(
+  title: string,
+  summary: string | null,
+  url: string | null
+): Promise<string> {
+  const textToExplain = `${title}${summary ? `\n\n${summary}` : ''}`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `أنت صحفي تقني عربي محترف. مهمتك شرح الأخبار التقنية للقارئ العربي بطريقة واضحة ومفهومة.
+
+قواعد مهمة:
+- اشرح الخبر بالعربية الفصحى السلسة
+- قدم سياق للخبر (لماذا هذا مهم؟)
+- اشرح المصطلحات التقنية بشكل مبسط
+- اذكر التأثير المحتمل على المستخدم العربي
+- كن موضوعياً ومحايداً
+- اكتب بأسلوب صحفي جذاب`
+        },
+        {
+          role: "user",
+          content: `اشرح هذا الخبر التقني بالتفصيل للقارئ العربي:\n\n${textToExplain}`
+        }
+      ],
+      temperature: 0.6,
+      max_tokens: 800,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || "لم نتمكن من توليد الشرح";
+  } catch (error) {
+    console.error("Error generating detailed explanation:", error);
+    throw new Error("Failed to generate explanation");
+  }
+}
+
 export async function detectTrendingTopics(
   contentItems: Content[]
 ): Promise<TrendingTopic[]> {

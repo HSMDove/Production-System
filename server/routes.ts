@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary } from "./openai";
+import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation } from "./openai";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -745,6 +745,28 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Folder content analysis error:", error);
       res.status(500).json({ error: "Failed to analyze folder content" });
+    }
+  });
+
+  // Generate detailed Arabic explanation for a content item
+  app.post("/api/content/:id/explain", async (req, res) => {
+    try {
+      const contentItem = await storage.getContentById(req.params.id);
+      
+      if (!contentItem) {
+        return res.status(404).json({ error: "Content not found" });
+      }
+
+      const explanation = await generateDetailedArabicExplanation(
+        contentItem.title,
+        contentItem.summary,
+        contentItem.originalUrl
+      );
+      
+      res.json({ explanation });
+    } catch (error) {
+      console.error("Error generating explanation:", error);
+      res.status(500).json({ error: "Failed to generate explanation" });
     }
   });
 

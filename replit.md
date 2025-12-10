@@ -60,6 +60,15 @@ Preferred communication style: Simple, everyday language.
 - Structured prompts in Arabic for generating 3-5 ideas per request
 - Returns categorized ideas with titles, descriptions, duration estimates, and target audience
 - Configurable content window (last N days) for idea generation
+- Arabic summary generation for non-Arabic content during fetch
+- Detailed AI-powered Arabic explanations for individual news items via `/api/content/:id/explain`
+
+**Content Display Features**
+- Feedly-style horizontal content cards with thumbnails
+- News/Videos tab organization based on source types
+- Auto-refresh content when entering a folder (fetches latest from sources)
+- AI explanation popup for each content item with sparkles button
+- Keyword-based filtering to exclude promotional/discount content at fetch time
 
 ### Data Storage
 
