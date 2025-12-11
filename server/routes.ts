@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation } from "./openai";
+import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -143,13 +143,14 @@ export async function registerRoutes(
         await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
       }
       
-      // Generate Arabic summaries for new content in the background
+      // Generate Arabic translations for new content in the background
       if (newContentIds.length > 0) {
         (async () => {
           for (const contentId of newContentIds) {
             try {
               const contentItem = await storage.getContentById(contentId);
               if (contentItem && contentItem.title) {
+                // Generate short Arabic summary
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
                   contentItem.summary || ""
@@ -157,9 +158,22 @@ export async function registerRoutes(
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
                 }
+                
+                // Generate professional full translation
+                const translation = await generateProfessionalTranslation(
+                  contentItem.title,
+                  contentItem.summary || ""
+                );
+                if (translation) {
+                  await storage.updateContentTranslation(
+                    contentId,
+                    translation.arabicTitle,
+                    translation.arabicFullSummary
+                  );
+                }
               }
             } catch (e) {
-              console.error("Error generating Arabic summary:", e);
+              console.error("Error generating Arabic translations:", e);
             }
           }
         })();
@@ -318,13 +332,14 @@ export async function registerRoutes(
       
       await storage.updateSource(source.id, { lastFetched: new Date() } as any);
       
-      // Generate Arabic summaries for new content in the background
+      // Generate Arabic translations for new content in the background
       if (newContentIds.length > 0) {
         (async () => {
           for (const contentId of newContentIds) {
             try {
               const contentItem = await storage.getContentById(contentId);
               if (contentItem && contentItem.title) {
+                // Generate short Arabic summary
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
                   contentItem.summary || ""
@@ -332,9 +347,22 @@ export async function registerRoutes(
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
                 }
+                
+                // Generate professional full translation
+                const translation = await generateProfessionalTranslation(
+                  contentItem.title,
+                  contentItem.summary || ""
+                );
+                if (translation) {
+                  await storage.updateContentTranslation(
+                    contentId,
+                    translation.arabicTitle,
+                    translation.arabicFullSummary
+                  );
+                }
               }
             } catch (e) {
-              console.error("Error generating Arabic summary:", e);
+              console.error("Error generating Arabic translations:", e);
             }
           }
         })();

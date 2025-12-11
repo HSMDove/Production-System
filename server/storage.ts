@@ -56,6 +56,7 @@ export interface IStorage {
   deleteContentBySourceId(sourceId: string): Promise<boolean>;
   updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined>;
   updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
+  updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
   
   getAllSources(): Promise<Source[]>;
@@ -211,6 +212,15 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(content)
       .set({ arabicSummary })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ arabicTitle, arabicFullSummary })
       .where(eq(content.id, id))
       .returning();
     return updated;
