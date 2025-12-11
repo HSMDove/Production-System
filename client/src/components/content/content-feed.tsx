@@ -22,6 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 interface ContentFeedProps {
   content: ContentWithSource[];
   isLoading?: boolean;
+  showTranslation?: boolean;
 }
 
 function getSourceIcon(type: string) {
@@ -63,10 +64,15 @@ function getSourceDisplayName(item: ContentWithSource): string {
   }
 }
 
-function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?: (item: ContentWithSource) => void }) {
+function ContentCard({ item, onExplain, showTranslation }: { item: ContentWithSource; onExplain?: (item: ContentWithSource) => void; showTranslation?: boolean }) {
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
   const hasArabicSummary = !!item.arabicSummary;
-  const hasEnglishSummary = !!item.summary;
+  const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
+  
+  // Determine what to display based on translation mode
+  const displayTitle = (showTranslation && hasTranslation ? item.arabicTitle : item.title) || item.title;
+  const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary : item.summary;
+  const isArabicDisplay = showTranslation && hasTranslation;
   
   return (
     <Card 
@@ -81,7 +87,7 @@ function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?:
               <div className="aspect-video w-full overflow-hidden bg-muted">
                 <img 
                   src={item.imageUrl} 
-                  alt={item.title}
+                  alt={displayTitle}
                   className="h-full w-full object-cover"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
@@ -119,24 +125,27 @@ function ContentCard({ item, onExplain }: { item: ContentWithSource; onExplain?:
               )}
             </div>
             
-            {/* English Title */}
+            {/* Title - Arabic or English based on translation mode */}
             <h3 
               className="text-base font-semibold leading-tight line-clamp-2 text-foreground" 
-              dir="ltr"
+              dir={isArabicDisplay ? "rtl" : "ltr"}
               data-testid={`text-content-title-${item.id}`}
             >
-              {item.title}
+              {displayTitle}
             </h3>
             
-            {/* English Summary */}
-            {hasEnglishSummary && (
-              <p className="text-sm text-muted-foreground line-clamp-2" dir="ltr">
-                {item.summary}
+            {/* Summary - Arabic or English based on translation mode */}
+            {displaySummary && (
+              <p 
+                className="text-sm text-muted-foreground line-clamp-3" 
+                dir={isArabicDisplay ? "rtl" : "ltr"}
+              >
+                {displaySummary}
               </p>
             )}
             
-            {/* Arabic AI Summary */}
-            {hasArabicSummary && (
+            {/* Arabic AI Summary - Only show when NOT in translation mode */}
+            {!showTranslation && hasArabicSummary && (
               <div className="bg-muted/50 rounded-md p-3 border-r-2 border-primary">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -206,7 +215,7 @@ function ContentSkeleton() {
   );
 }
 
-export function ContentFeed({ content, isLoading }: ContentFeedProps) {
+export function ContentFeed({ content, isLoading, showTranslation }: ContentFeedProps) {
   const [selectedItem, setSelectedItem] = useState<ContentWithSource | null>(null);
   const [explanation, setExplanation] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -322,7 +331,7 @@ export function ContentFeed({ content, isLoading }: ContentFeedProps) {
         {ExplanationDialog}
         <div className="space-y-4">
           {videoContent.map((item) => (
-            <ContentCard key={item.id} item={item} onExplain={handleExplain} />
+            <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
           ))}
         </div>
       </>
@@ -335,7 +344,7 @@ export function ContentFeed({ content, isLoading }: ContentFeedProps) {
         {ExplanationDialog}
         <div className="space-y-4">
           {newsContent.map((item) => (
-            <ContentCard key={item.id} item={item} onExplain={handleExplain} />
+            <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
           ))}
         </div>
       </>
@@ -367,7 +376,7 @@ export function ContentFeed({ content, isLoading }: ContentFeedProps) {
         <TabsContent value="news" className="space-y-4">
           {newsContent.length > 0 ? (
             newsContent.map((item) => (
-              <ContentCard key={item.id} item={item} onExplain={handleExplain} />
+              <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
             ))
           ) : (
             <Card>
@@ -382,7 +391,7 @@ export function ContentFeed({ content, isLoading }: ContentFeedProps) {
         <TabsContent value="videos" className="space-y-4">
           {videoContent.length > 0 ? (
             videoContent.map((item) => (
-              <ContentCard key={item.id} item={item} onExplain={handleExplain} />
+              <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
             ))
           ) : (
             <Card>

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, Sparkles, RefreshCw } from "lucide-react";
+import { ChevronLeft, Sparkles, RefreshCw, Languages } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
@@ -29,6 +29,18 @@ export default function FolderDetail() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState(0);
   const [generatedCount, setGeneratedCount] = useState(0);
+  
+  // Translation toggle - persist in localStorage
+  const [showTranslation, setShowTranslation] = useState(() => {
+    const saved = localStorage.getItem('techvoice-show-translation');
+    return saved === 'true';
+  });
+  
+  const handleTranslationToggle = () => {
+    const newValue = !showTranslation;
+    setShowTranslation(newValue);
+    localStorage.setItem('techvoice-show-translation', String(newValue));
+  };
 
   const { data: folder, isLoading: folderLoading } = useQuery<Folder>({
     queryKey: ["/api/folders", id],
@@ -232,6 +244,15 @@ export default function FolderDetail() {
           </div>
           <div className="flex items-center gap-2">
             <Button
+              variant={showTranslation ? "default" : "outline"}
+              onClick={handleTranslationToggle}
+              data-testid="button-toggle-translation"
+              className="gap-2"
+            >
+              <Languages className="h-4 w-4" />
+              <span className="hidden sm:inline">{showTranslation ? "عربي" : "إنجليزي"}</span>
+            </Button>
+            <Button
               variant="outline"
               onClick={() => fetchAllSourcesMutation.mutate()}
               disabled={fetchAllSourcesMutation.isPending}
@@ -260,7 +281,7 @@ export default function FolderDetail() {
               sortOrder={sortOrder}
               onSortOrderChange={setSortOrder}
             />
-            <ContentFeed content={filteredContent} isLoading={contentLoading} />
+            <ContentFeed content={filteredContent} isLoading={contentLoading} showTranslation={showTranslation} />
           </TabsContent>
 
           <TabsContent value="sources">
