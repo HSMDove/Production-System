@@ -52,6 +52,8 @@ export const content = pgTable("content", {
   title: text("title").notNull(),
   summary: text("summary"),
   arabicSummary: text("arabic_summary"),
+  arabicTitle: text("arabic_title"),
+  arabicFullSummary: text("arabic_full_summary"),
   originalUrl: text("original_url").notNull(),
   imageUrl: text("image_url"),
   publishedAt: timestamp("published_at"),

@@ -277,6 +277,75 @@ export async function generateDetailedArabicExplanation(
   }
 }
 
+export interface ProfessionalTranslation {
+  arabicTitle: string;
+  arabicFullSummary: string;
+}
+
+export async function generateProfessionalTranslation(
+  title: string,
+  summary: string | null
+): Promise<ProfessionalTranslation | null> {
+  if (!title) return null;
+  
+  // Check if content is already primarily Arabic
+  const textToCheck = `${title} ${summary || ''}`;
+  const arabicChars = textToCheck.match(/[\u0600-\u06FF]/g) || [];
+  const totalChars = textToCheck.replace(/\s/g, '').length;
+  const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
+  
+  if (arabicRatio > 0.5) {
+    return null; // Already in Arabic
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `أنت مترجم صحفي تقني محترف. مهمتك ترجمة الأخبار التقنية إلى العربية بطريقة احترافية.
+
+قواعد الترجمة:
+- استخدم العربية الفصحى السلسة والمفهومة
+- حافظ على المعنى الأصلي للخبر بدقة
+- ترجم المصطلحات التقنية ترجمة صحيحة (يمكن الإبقاء على بعض المصطلحات الإنجليزية الشائعة)
+- اجعل الترجمة طبيعية وليست حرفية
+- العنوان يجب أن يكون جذاباً ومختصراً
+- الملخص يجب أن يوضح الخبر بشكل كامل ومفهوم
+
+أجب بصيغة JSON فقط.`
+        },
+        {
+          role: "user",
+          content: `ترجم هذا الخبر التقني إلى العربية:
+
+العنوان: ${title}
+${summary ? `الملخص: ${summary}` : ''}
+
+أجب بهذه الصيغة:
+{
+  "arabicTitle": "العنوان المترجم",
+  "arabicFullSummary": "الملخص المترجم بشكل كامل ومفهوم"
+}`
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+      max_tokens: 500,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content) as ProfessionalTranslation;
+    return parsed;
+  } catch (error) {
+    console.error("Error generating professional translation:", error);
+    return null;
+  }
+}
+
 export async function detectTrendingTopics(
   contentItems: Content[]
 ): Promise<TrendingTopic[]> {
