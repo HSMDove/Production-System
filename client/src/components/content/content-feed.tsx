@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2 } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff } from "lucide-react";
 import { SiYoutube, SiX } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { ContentWithSource } from "@/lib/types";
 import { sourceTypeLabels } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
@@ -65,115 +70,152 @@ function getSourceDisplayName(item: ContentWithSource): string {
 }
 
 function ContentCard({ item, onExplain, showTranslation }: { item: ContentWithSource; onExplain?: (item: ContentWithSource) => void; showTranslation?: boolean }) {
+  const [imageError, setImageError] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
   const hasArabicSummary = !!item.arabicSummary;
   const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
   
   // Determine what to display based on translation mode
-  const displayTitle = (showTranslation && hasTranslation ? item.arabicTitle : item.title) || item.title;
-  const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary : item.summary;
+  // When translation is ON: show Arabic content ONLY if available, else keep English
+  // When translation is OFF: always show English original
+  const displayTitle = showTranslation && hasTranslation ? item.arabicTitle! : item.title;
+  const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary! : item.summary;
   const isArabicDisplay = showTranslation && hasTranslation;
+  
+  // Check if we have a valid image
+  const hasValidImage = item.imageUrl && !imageError;
   
   return (
     <Card 
-      className="transition-all duration-200 hover:border-primary/30 overflow-hidden"
+      className="transition-all duration-200 hover:border-primary/30"
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
-        <div className="flex flex-col">
-          {/* Image Section */}
-          {item.imageUrl && (
-            <div className="relative w-full">
-              <div className="aspect-video w-full overflow-hidden bg-muted">
-                <img 
-                  src={item.imageUrl} 
-                  alt={displayTitle}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              </div>
-              {isVideo && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90">
-                    <Play className="h-6 w-6 text-red-600 fill-red-600" />
-                  </div>
+        {/* Feedly-style horizontal layout */}
+        <div className="flex flex-row gap-3 p-3">
+          {/* Thumbnail - Fixed size on the right (RTL) */}
+          <div className="flex-shrink-0 relative">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
+              {hasValidImage ? (
+                <>
+                  <img 
+                    src={item.imageUrl!} 
+                    alt={displayTitle}
+                    className="w-full h-full object-cover"
+                    onError={() => setImageError(true)}
+                  />
+                  {isVideo && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <Play className="h-6 w-6 text-white fill-white" />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-muted-foreground">
+                  {isVideo ? (
+                    <Play className="h-6 w-6" />
+                  ) : (
+                    <ImageOff className="h-6 w-6" />
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
           
-          {/* Content Section */}
-          <div className="p-4 space-y-3">
-            {/* Source & Date Row */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {getSourceIcon(item.source?.type || "rss")}
-                <span className="text-sm font-medium text-muted-foreground">
-                  {getSourceDisplayName(item)}
-                </span>
-                <Badge variant="outline" className="text-xs">
-                  {sourceTypeLabels[item.source?.type || "rss"]}
-                </Badge>
+          {/* Content - Flexible */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between">
+            {/* Top section */}
+            <div className="space-y-1.5">
+              {/* Source & Date Row */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  {getSourceIcon(item.source?.type || "rss")}
+                  <span className="font-medium truncate max-w-[120px]">
+                    {getSourceDisplayName(item)}
+                  </span>
+                </div>
+                {item.publishedAt && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true, locale: ar })}
+                  </span>
+                )}
               </div>
-              {item.publishedAt && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  {formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true, locale: ar })}
-                </span>
+              
+              {/* Title */}
+              <h3 
+                className="text-sm sm:text-base font-semibold leading-tight line-clamp-2 text-foreground" 
+                dir={isArabicDisplay ? "rtl" : "ltr"}
+                style={{ textAlign: isArabicDisplay ? "right" : "left" }}
+                data-testid={`text-content-title-${item.id}`}
+              >
+                {displayTitle}
+              </h3>
+              
+              {/* Summary - Only on larger screens */}
+              {displaySummary && (
+                <p 
+                  className="hidden sm:block text-xs text-muted-foreground line-clamp-2" 
+                  dir={isArabicDisplay ? "rtl" : "ltr"}
+                  style={{ textAlign: isArabicDisplay ? "right" : "left" }}
+                >
+                  {displaySummary}
+                </p>
               )}
             </div>
-            
-            {/* Title - Arabic or English based on translation mode */}
-            <h3 
-              className="text-base font-semibold leading-tight line-clamp-2 text-foreground" 
-              dir={isArabicDisplay ? "rtl" : "ltr"}
-              data-testid={`text-content-title-${item.id}`}
-            >
-              {displayTitle}
-            </h3>
-            
-            {/* Summary - Arabic or English based on translation mode */}
-            {displaySummary && (
-              <p 
-                className="text-sm text-muted-foreground line-clamp-3" 
-                dir={isArabicDisplay ? "rtl" : "ltr"}
-              >
-                {displaySummary}
-              </p>
-            )}
-            
-            {/* Arabic AI Summary - Only show when NOT in translation mode */}
-            {!showTranslation && hasArabicSummary && (
-              <div className="bg-muted/50 rounded-md p-3 border-r-2 border-primary">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-medium text-primary">ملخص بالعربية</span>
-                </div>
-                <p className="text-sm leading-relaxed" dir="rtl">
-                  {item.arabicSummary}
-                </p>
-              </div>
-            )}
             
             {/* Actions Row */}
-            <div className="flex items-center justify-between pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => onExplain?.(item)}
-                data-testid={`button-explain-${item.id}`}
-              >
-                <Sparkles className="h-4 w-4" />
-                <span>شرح مفصل</span>
-              </Button>
+            <div className="flex items-center gap-1 mt-2 flex-wrap">
+              {/* Quick Summary Button - Shows popover with Arabic summary */}
+              {hasArabicSummary && (
+                <Popover open={summaryOpen} onOpenChange={setSummaryOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 gap-1 text-xs"
+                      data-testid={`button-summary-${item.id}`}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">ملخص</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-72 sm:w-80" 
+                    align="start"
+                    side="bottom"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-medium">ملخص سريع</span>
+                      </div>
+                      <p className="text-sm leading-relaxed" dir="rtl">
+                        {item.arabicSummary}
+                      </p>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
               
+              {/* Detailed Explanation Button */}
               <Button
                 variant="ghost"
                 size="sm"
-                className="gap-2"
+                className="h-7 px-2 gap-1 text-xs"
+                onClick={() => onExplain?.(item)}
+                data-testid={`button-explain-${item.id}`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">شرح مفصل</span>
+              </Button>
+              
+              {/* External Link */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 gap-1 text-xs"
                 asChild
               >
                 <a
@@ -182,8 +224,8 @@ function ContentCard({ item, onExplain, showTranslation }: { item: ContentWithSo
                   rel="noopener noreferrer"
                   data-testid={`link-content-external-${item.id}`}
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  <span>المصدر</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">المصدر</span>
                 </a>
               </Button>
             </div>
@@ -198,15 +240,15 @@ function ContentSkeleton() {
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex flex-col sm:flex-row">
-          <Skeleton className="h-40 sm:h-32 sm:w-48 flex-shrink-0" />
-          <div className="flex-1 p-4">
-            <Skeleton className="h-5 w-3/4 mb-3" />
-            <Skeleton className="h-4 w-full mb-2" />
-            <Skeleton className="h-4 w-2/3 mb-4" />
-            <div className="flex gap-2">
-              <Skeleton className="h-5 w-16" />
-              <Skeleton className="h-5 w-24" />
+        <div className="flex flex-row gap-3 p-3">
+          <Skeleton className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-md" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <div className="flex gap-2 pt-1">
+              <Skeleton className="h-6 w-14" />
+              <Skeleton className="h-6 w-14" />
             </div>
           </div>
         </div>

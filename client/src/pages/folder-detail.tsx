@@ -242,28 +242,31 @@ export default function FolderDetail() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <Button
               variant={showTranslation ? "default" : "outline"}
               onClick={handleTranslationToggle}
               data-testid="button-toggle-translation"
-              className="gap-2"
+              size="sm"
+              className="gap-1.5"
             >
               <Languages className="h-4 w-4" />
-              <span className="hidden sm:inline">{showTranslation ? "عربي" : "إنجليزي"}</span>
+              <span className="hidden xs:inline">{showTranslation ? "عربي" : "إنجليزي"}</span>
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => fetchAllSourcesMutation.mutate()}
               disabled={fetchAllSourcesMutation.isPending}
               data-testid="button-refresh-all"
+              className="gap-1.5"
             >
-              <RefreshCw className={`ml-2 h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
-              تحديث الكل
+              <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">تحديث</span>
             </Button>
-            <Button onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-ideas">
-              <Sparkles className="ml-2 h-4 w-4" />
-              توليد أفكار
+            <Button size="sm" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-ideas" className="gap-1.5">
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">أفكار</span>
             </Button>
           </div>
         </div>
