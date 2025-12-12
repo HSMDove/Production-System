@@ -798,6 +798,134 @@ export async function registerRoutes(
     }
   });
 
+  // Generate Arabic translation for a content item on demand
+  app.post("/api/content/:id/translate", async (req, res) => {
+    try {
+      const contentItem = await storage.getContentById(req.params.id);
+      
+      if (!contentItem) {
+        return res.status(404).json({ error: "Content not found" });
+      }
+
+      // Check if already translated
+      if (contentItem.arabicTitle && contentItem.arabicFullSummary && contentItem.arabicSummary) {
+        return res.json({ 
+          success: true, 
+          alreadyTranslated: true,
+          arabicTitle: contentItem.arabicTitle,
+          arabicSummary: contentItem.arabicSummary,
+          arabicFullSummary: contentItem.arabicFullSummary
+        });
+      }
+
+      // Generate short Arabic summary if missing
+      let arabicSummary = contentItem.arabicSummary;
+      if (!arabicSummary) {
+        arabicSummary = await generateArabicSummary(
+          contentItem.title,
+          contentItem.summary || ""
+        );
+        if (arabicSummary) {
+          await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
+        }
+      }
+
+      // Generate professional full translation if missing
+      let arabicTitle = contentItem.arabicTitle;
+      let arabicFullSummary = contentItem.arabicFullSummary;
+      if (!arabicTitle || !arabicFullSummary) {
+        const translation = await generateProfessionalTranslation(
+          contentItem.title,
+          contentItem.summary || ""
+        );
+        if (translation) {
+          arabicTitle = translation.arabicTitle;
+          arabicFullSummary = translation.arabicFullSummary;
+          await storage.updateContentTranslation(
+            contentItem.id,
+            translation.arabicTitle,
+            translation.arabicFullSummary
+          );
+        }
+      }
+      
+      res.json({ 
+        success: true,
+        arabicTitle,
+        arabicSummary,
+        arabicFullSummary
+      });
+    } catch (error) {
+      console.error("Error generating translation:", error);
+      res.status(500).json({ error: "Failed to generate translation" });
+    }
+  });
+
+  // Backfill translations for all content items missing translations
+  app.post("/api/content/backfill-translations", async (req, res) => {
+    try {
+      const allContent = await storage.getAllContent();
+      
+      // Filter content that needs translation
+      const needsTranslation = allContent.filter(
+        c => !c.arabicTitle || !c.arabicSummary || !c.arabicFullSummary
+      );
+
+      const limit = Math.min(needsTranslation.length, req.body.limit || 10);
+      const toTranslate = needsTranslation.slice(0, limit);
+      
+      // Start background translation
+      const translatedIds: string[] = [];
+      
+      (async () => {
+        for (const contentItem of toTranslate) {
+          try {
+            // Generate short Arabic summary if missing
+            if (!contentItem.arabicSummary) {
+              const arabicSummary = await generateArabicSummary(
+                contentItem.title,
+                contentItem.summary || ""
+              );
+              if (arabicSummary) {
+                await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
+              }
+            }
+
+            // Generate professional full translation if missing
+            if (!contentItem.arabicTitle || !contentItem.arabicFullSummary) {
+              const translation = await generateProfessionalTranslation(
+                contentItem.title,
+                contentItem.summary || ""
+              );
+              if (translation) {
+                await storage.updateContentTranslation(
+                  contentItem.id,
+                  translation.arabicTitle,
+                  translation.arabicFullSummary
+                );
+              }
+            }
+            
+            translatedIds.push(contentItem.id);
+          } catch (e) {
+            console.error("Error translating content:", e);
+          }
+        }
+        console.log(`Backfill complete: Translated ${translatedIds.length} items`);
+      })();
+      
+      res.json({ 
+        success: true,
+        message: `Started translating ${toTranslate.length} items in background`,
+        totalNeedingTranslation: needsTranslation.length,
+        startedTranslating: toTranslate.length
+      });
+    } catch (error) {
+      console.error("Error starting backfill:", error);
+      res.status(500).json({ error: "Failed to start translation backfill" });
+    }
+  });
+
   app.get("/api/trending-topics", async (req, res) => {
     try {
       const allContent = await storage.getAllContent();

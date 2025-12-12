@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw } from "lucide-react";
 import { SiYoutube, SiX } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -69,12 +69,19 @@ function getSourceDisplayName(item: ContentWithSource): string {
   }
 }
 
-function ContentCard({ item, onExplain, showTranslation }: { item: ContentWithSource; onExplain?: (item: ContentWithSource) => void; showTranslation?: boolean }) {
+function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslating }: { 
+  item: ContentWithSource; 
+  onExplain?: (item: ContentWithSource) => void; 
+  onTranslate?: (item: ContentWithSource) => void;
+  showTranslation?: boolean;
+  isTranslating?: boolean;
+}) {
   const [imageError, setImageError] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
   const hasArabicSummary = !!item.arabicSummary;
   const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
+  const needsTranslation = !hasArabicSummary || !hasTranslation;
   
   // Determine what to display based on translation mode
   // When translation is ON: show Arabic content ONLY if available, else keep English
@@ -167,6 +174,25 @@ function ContentCard({ item, onExplain, showTranslation }: { item: ContentWithSo
             
             {/* Actions Row */}
             <div className="flex items-center gap-1 mt-2 flex-wrap">
+              {/* Generate Translation Button - Only shows if translation is missing */}
+              {needsTranslation && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 gap-1 text-xs text-primary"
+                  onClick={() => onTranslate?.(item)}
+                  disabled={isTranslating}
+                  data-testid={`button-translate-${item.id}`}
+                >
+                  {isTranslating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Languages className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">{isTranslating ? "جاري الترجمة..." : "ترجم"}</span>
+                </Button>
+              )}
+              
               {/* Quick Summary Button - Shows popover with Arabic summary */}
               {hasArabicSummary && (
                 <Popover open={summaryOpen} onOpenChange={setSummaryOpen}>
@@ -261,6 +287,7 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
   const [selectedItem, setSelectedItem] = useState<ContentWithSource | null>(null);
   const [explanation, setExplanation] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
 
   const explainMutation = useMutation({
     mutationFn: async (contentId: string) => {
@@ -272,11 +299,38 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
     },
   });
 
+  const translateMutation = useMutation({
+    mutationFn: async (contentId: string) => {
+      const response = await apiRequest("POST", `/api/content/${contentId}/translate`);
+      return response as { success: boolean; arabicTitle?: string; arabicSummary?: string; arabicFullSummary?: string };
+    },
+    onMutate: (contentId) => {
+      setTranslatingIds(prev => new Set(prev).add(contentId));
+    },
+    onSettled: (_, __, contentId) => {
+      setTranslatingIds(prev => {
+        const next = new Set(prev);
+        next.delete(contentId);
+        return next;
+      });
+    },
+    onSuccess: () => {
+      // Invalidate to refresh the content list
+      import("@/lib/queryClient").then(({ queryClient }) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      });
+    },
+  });
+
   const handleExplain = (item: ContentWithSource) => {
     setSelectedItem(item);
     setExplanation("");
     setDialogOpen(true);
     explainMutation.mutate(item.id);
+  };
+
+  const handleTranslate = (item: ContentWithSource) => {
+    translateMutation.mutate(item.id);
   };
 
   if (isLoading) {
@@ -373,7 +427,14 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
         {ExplanationDialog}
         <div className="space-y-4">
           {videoContent.map((item) => (
-            <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
+            <ContentCard 
+              key={item.id} 
+              item={item} 
+              onExplain={handleExplain} 
+              onTranslate={handleTranslate}
+              showTranslation={showTranslation} 
+              isTranslating={translatingIds.has(item.id)}
+            />
           ))}
         </div>
       </>
@@ -386,7 +447,14 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
         {ExplanationDialog}
         <div className="space-y-4">
           {newsContent.map((item) => (
-            <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
+            <ContentCard 
+              key={item.id} 
+              item={item} 
+              onExplain={handleExplain} 
+              onTranslate={handleTranslate}
+              showTranslation={showTranslation} 
+              isTranslating={translatingIds.has(item.id)}
+            />
           ))}
         </div>
       </>
@@ -418,7 +486,14 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
         <TabsContent value="news" className="space-y-4">
           {newsContent.length > 0 ? (
             newsContent.map((item) => (
-              <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
+              <ContentCard 
+                key={item.id} 
+                item={item} 
+                onExplain={handleExplain} 
+                onTranslate={handleTranslate}
+                showTranslation={showTranslation} 
+                isTranslating={translatingIds.has(item.id)}
+              />
             ))
           ) : (
             <Card>
@@ -433,7 +508,14 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
         <TabsContent value="videos" className="space-y-4">
           {videoContent.length > 0 ? (
             videoContent.map((item) => (
-              <ContentCard key={item.id} item={item} onExplain={handleExplain} showTranslation={showTranslation} />
+              <ContentCard 
+                key={item.id} 
+                item={item} 
+                onExplain={handleExplain} 
+                onTranslate={handleTranslate}
+                showTranslation={showTranslation} 
+                isTranslating={translatingIds.has(item.id)}
+              />
             ))
           ) : (
             <Card>
