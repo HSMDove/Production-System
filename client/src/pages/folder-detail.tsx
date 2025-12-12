@@ -284,7 +284,7 @@ export default function FolderDetail() {
               sortOrder={sortOrder}
               onSortOrderChange={setSortOrder}
             />
-            <ContentFeed content={filteredContent} isLoading={contentLoading} showTranslation={showTranslation} />
+            <ContentFeed content={filteredContent} isLoading={contentLoading} showTranslation={showTranslation} folderId={id} />
           </TabsContent>
 
           <TabsContent value="sources">

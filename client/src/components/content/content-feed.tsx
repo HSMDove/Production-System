@@ -28,6 +28,7 @@ interface ContentFeedProps {
   content: ContentWithSource[];
   isLoading?: boolean;
   showTranslation?: boolean;
+  folderId?: string;
 }
 
 function getSourceIcon(type: string) {
@@ -283,11 +284,14 @@ function ContentSkeleton() {
   );
 }
 
-export function ContentFeed({ content, isLoading, showTranslation }: ContentFeedProps) {
+export function ContentFeed({ content, isLoading, showTranslation, folderId }: ContentFeedProps) {
   const [selectedItem, setSelectedItem] = useState<ContentWithSource | null>(null);
   const [explanation, setExplanation] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  
+  // Extract folderId from content if not provided
+  const effectiveFolderId = folderId || content[0]?.folderId;
 
   const explainMutation = useMutation({
     mutationFn: async (contentId: string) => {
@@ -317,7 +321,11 @@ export function ContentFeed({ content, isLoading, showTranslation }: ContentFeed
     onSuccess: () => {
       // Invalidate to refresh the content list
       import("@/lib/queryClient").then(({ queryClient }) => {
-        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+        if (effectiveFolderId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/folders", effectiveFolderId, "content"] });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+        }
       });
     },
   });
