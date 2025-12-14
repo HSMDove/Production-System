@@ -154,7 +154,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
-    return db.select().from(content).where(eq(content.folderId, folderId)).orderBy(content.fetchedAt);
+    return db.select().from(content).where(eq(content.folderId, folderId)).orderBy(desc(content.publishedAt), desc(content.fetchedAt));
   }
 
   async getAllSources(): Promise<Source[]> {
