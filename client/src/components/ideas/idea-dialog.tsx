@@ -258,14 +258,17 @@ export function IdeaDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>المجلد</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <Select 
+                      onValueChange={(val) => field.onChange(val === "none" ? null : val)} 
+                      value={field.value || "none"}
+                    >
                       <FormControl>
                         <SelectTrigger data-testid="select-idea-folder">
                           <SelectValue placeholder="اختر المجلد (اختياري)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">بدون مجلد</SelectItem>
+                        <SelectItem value="none">بدون مجلد</SelectItem>
                         {folders.map((folder) => (
                           <SelectItem key={folder.id} value={folder.id}>
                             {folder.name}

@@ -175,25 +175,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
             
             {/* Actions Row */}
             <div className="flex items-center gap-1 mt-2 flex-wrap">
-              {/* Generate Translation Button - Only shows if translation is missing */}
-              {needsTranslation && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 gap-1 text-xs text-primary"
-                  onClick={() => onTranslate?.(item)}
-                  disabled={isTranslating}
-                  data-testid={`button-translate-${item.id}`}
-                >
-                  {isTranslating ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Languages className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">{isTranslating ? "جاري الترجمة..." : "ترجم"}</span>
-                </Button>
-              )}
-              
               {/* Quick Summary Button - Shows popover with Arabic summary */}
               {hasArabicSummary && (
                 <Popover open={summaryOpen} onOpenChange={setSummaryOpen}>
