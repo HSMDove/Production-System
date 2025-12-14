@@ -213,7 +213,13 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source): Promise<FetchRes
       }
       
       // If still no image and we have a URL, try to fetch OG image
-      // (do this asynchronously in background to not slow down feed)
+      if (!imageUrl && originalUrl) {
+        try {
+          imageUrl = await fetchOGImage(originalUrl);
+        } catch (e) {
+          // Ignore errors, just continue without image
+        }
+      }
       
       processedItems.push({
         folderId: source.folderId,
