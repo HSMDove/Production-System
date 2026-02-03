@@ -5,7 +5,9 @@ import { ChevronLeft, Sparkles, RefreshCw, Languages } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
+import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
+import { GroupedContentFeed } from "@/components/content/grouped-content-feed";
 import { ContentFilters } from "@/components/content/content-filters";
 import { GenerateIdeasDialog } from "@/components/ideas/generate-ideas-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
@@ -15,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Folder, Source, ContentWithSource } from "@/lib/types";
+import { isToday, isYesterday } from "date-fns";
 
 export default function FolderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +29,7 @@ export default function FolderDetail() {
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [selectedFilterSourceId, setSelectedFilterSourceId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState(0);
   const [generatedCount, setGeneratedCount] = useState(0);
@@ -58,6 +62,17 @@ export default function FolderDetail() {
     if (!content) return [];
     let filtered = [...content];
     
+    // Filter by selected source
+    if (selectedFilterSourceId) {
+      filtered = filtered.filter((item) => item.sourceId === selectedFilterSourceId);
+    } else {
+      // "View All" mode: only show last 2 days (today and yesterday)
+      filtered = filtered.filter((item) => {
+        const date = new Date(item.publishedAt || item.fetchedAt);
+        return isToday(date) || isYesterday(date);
+      });
+    }
+    
     if (sourceTypeFilter !== "all") {
       filtered = filtered.filter((item) => item.source?.type === sourceTypeFilter);
     }
@@ -69,7 +84,7 @@ export default function FolderDetail() {
     });
     
     return filtered;
-  }, [content, sourceTypeFilter, sortOrder]);
+  }, [content, sourceTypeFilter, sortOrder, selectedFilterSourceId]);
 
   const createSourceMutation = useMutation({
     mutationFn: async (data: { name: string; url: string; type: string; folderId: string }) => {
@@ -278,13 +293,41 @@ export default function FolderDetail() {
           </TabsList>
 
           <TabsContent value="feed" className="space-y-4">
-            <ContentFilters
-              sourceType={sourceTypeFilter}
-              onSourceTypeChange={setSourceTypeFilter}
-              sortOrder={sortOrder}
-              onSortOrderChange={setSortOrder}
-            />
-            <ContentFeed content={filteredContent} isLoading={contentLoading} showTranslation={showTranslation} folderId={id} />
+            <div className="flex gap-4">
+              {/* Sources sidebar */}
+              <SourcesSidebar
+                sources={sources || []}
+                selectedSourceId={selectedFilterSourceId}
+                onSourceSelect={setSelectedFilterSourceId}
+              />
+              
+              {/* Content area */}
+              <div className="flex-1 min-w-0 space-y-4">
+                <ContentFilters
+                  sourceType={sourceTypeFilter}
+                  onSourceTypeChange={setSourceTypeFilter}
+                  sortOrder={sortOrder}
+                  onSortOrderChange={setSortOrder}
+                />
+                
+                {selectedFilterSourceId ? (
+                  <GroupedContentFeed 
+                    content={filteredContent} 
+                    isLoading={contentLoading} 
+                    showTranslation={showTranslation} 
+                    folderId={id}
+                    sortOrder={sortOrder}
+                  />
+                ) : (
+                  <ContentFeed 
+                    content={filteredContent} 
+                    isLoading={contentLoading} 
+                    showTranslation={showTranslation} 
+                    folderId={id} 
+                  />
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="sources">

@@ -176,14 +176,13 @@ async function discoverWebsiteRSS(url: string): Promise<string | null> {
   }
 }
 
-// Freshness threshold: 4 hours in milliseconds
-const FRESHNESS_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+// Freshness threshold: 30 days in milliseconds (for single source view)
+const FRESHNESS_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Check if content is fresh enough (published within last 4 hours)
-// Strictly reject items without valid publish date
+// Check if content is within last 30 days and has valid publish date
 function isContentFresh(publishedAt: Date | null): boolean {
   if (!publishedAt || isNaN(publishedAt.getTime())) {
-    return false; // Strictly reject items without valid publish date
+    return false; // Reject items without valid publish date
   }
   const now = new Date();
   const age = now.getTime() - publishedAt.getTime();
@@ -217,9 +216,9 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number 
       const originalUrl = item.link || source.url;
       const publishedAt = item.pubDate ? new Date(item.pubDate) : null;
       
-      // Filter out content older than 4 hours
+      // Filter out content older than 30 days
       if (!isContentFresh(publishedAt)) {
-        console.log(`Skipped old content (>4h): ${title}`);
+        console.log(`Skipped old content (>30d): ${title}`);
         continue;
       }
       
@@ -321,8 +320,8 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         throw new Error(`Unsupported source type: ${source.type}`);
     }
 
-    // YouTube: limit to 1 latest video only (ignore pinned/old content)
-    const maxItems = source.type === "youtube" ? 1 : 20;
+    // YouTube: limit to 10 latest videos (RSS usually has 15)
+    const maxItems = source.type === "youtube" ? 10 : 20;
     return await fetchFromRSSUrl(rssUrl, source, maxItems);
   } catch (error) {
     console.error(`Error fetching from ${source.type} source ${source.url}:`, error);
