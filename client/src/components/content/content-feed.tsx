@@ -18,10 +18,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { LiveTimeAgo } from "@/components/ui/live-time-ago";
 import type { ContentWithSource } from "@/lib/types";
 import { sourceTypeLabels } from "@/lib/types";
-import { formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ContentFeedProps {
@@ -146,7 +145,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 {item.publishedAt && (
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
-                    {formatDistanceToNow(new Date(item.publishedAt), { addSuffix: true, locale: ar })}
+                    <LiveTimeAgo timestamp={item.publishedAt} />
                   </span>
                 )}
               </div>

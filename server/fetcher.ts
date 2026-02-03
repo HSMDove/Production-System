@@ -176,8 +176,22 @@ async function discoverWebsiteRSS(url: string): Promise<string | null> {
   }
 }
 
+// Freshness threshold: 4 hours in milliseconds
+const FRESHNESS_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+
+// Check if content is fresh enough (published within last 4 hours)
+// Strictly reject items without valid publish date
+function isContentFresh(publishedAt: Date | null): boolean {
+  if (!publishedAt || isNaN(publishedAt.getTime())) {
+    return false; // Strictly reject items without valid publish date
+  }
+  const now = new Date();
+  const age = now.getTime() - publishedAt.getTime();
+  return age <= FRESHNESS_THRESHOLD_MS;
+}
+
 // Generic RSS feed fetcher
-async function fetchFromRSSUrl(rssUrl: string, source: Source): Promise<FetchResult> {
+async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number = 20): Promise<FetchResult> {
   try {
     const feed = await pRetry(
       () => parser.parseURL(rssUrl),
@@ -190,10 +204,24 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source): Promise<FetchRes
     // Process items and filter out promotional content
     const processedItems: InsertContent[] = [];
     
-    for (const item of feed.items.slice(0, 30)) { // Fetch more to account for filtering
+    // Sort by publish date (newest first) before processing
+    const sortedItems = [...feed.items].sort((a, b) => {
+      const dateA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+      const dateB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+      return dateB - dateA;
+    });
+    
+    for (const item of sortedItems.slice(0, 30)) { // Fetch more to account for filtering
       const title = item.title || "Untitled";
       const summary = item.contentSnippet || item.content?.substring(0, 300) || null;
       const originalUrl = item.link || source.url;
+      const publishedAt = item.pubDate ? new Date(item.pubDate) : null;
+      
+      // Filter out content older than 4 hours
+      if (!isContentFresh(publishedAt)) {
+        console.log(`Skipped old content (>4h): ${title}`);
+        continue;
+      }
       
       // Filter out promotional content
       if (shouldFilterContent(title, summary)) {
@@ -228,11 +256,11 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source): Promise<FetchRes
         summary,
         originalUrl,
         imageUrl,
-        publishedAt: item.pubDate ? new Date(item.pubDate) : null,
+        publishedAt,
       });
       
-      // Limit to 20 items after filtering
-      if (processedItems.length >= 20) {
+      // Limit to maxItems after filtering
+      if (processedItems.length >= maxItems) {
         break;
       }
     }
@@ -293,7 +321,9 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         throw new Error(`Unsupported source type: ${source.type}`);
     }
 
-    return await fetchFromRSSUrl(rssUrl, source);
+    // YouTube: limit to 1 latest video only (ignore pinned/old content)
+    const maxItems = source.type === "youtube" ? 1 : 20;
+    return await fetchFromRSSUrl(rssUrl, source, maxItems);
   } catch (error) {
     console.error(`Error fetching from ${source.type} source ${source.url}:`, error);
     return {
