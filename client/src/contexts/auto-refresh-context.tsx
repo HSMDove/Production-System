@@ -101,15 +101,22 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
     const timer = window.setInterval(() => {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
-          triggerRefresh();
-          return interval * 60;
+          return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [isPaused, interval, triggerRefresh]);
+  }, [isPaused, interval]);
+
+  // Trigger refresh when countdown reaches 0
+  useEffect(() => {
+    if (remainingSeconds === 0 && !isPaused) {
+      triggerRefresh();
+      setRemainingSeconds(interval * 60);
+    }
+  }, [remainingSeconds, isPaused, interval, triggerRefresh]);
 
   const setInterval = useCallback((newInterval: RefreshInterval) => {
     setIntervalState(newInterval);
