@@ -64,7 +64,7 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
       return { total: folders.length, successful };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries();
+      queryClient.refetchQueries({ type: "active" });
       toast({
         title: "تم التحديث",
         description: `تم جلب المحتوى من ${data.successful}/${data.total} مجلد`,
