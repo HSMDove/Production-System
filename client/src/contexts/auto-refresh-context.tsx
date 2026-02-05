@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-export type RefreshInterval = 10 | 30 | 60;
+export type RefreshInterval = 0.25 | 10 | 30 | 60; // 0.25 = 15 seconds for testing
 
 interface AutoRefreshContextType {
   interval: RefreshInterval;
@@ -24,9 +24,9 @@ function getStoredInterval(): RefreshInterval {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      const parsed = parseInt(stored, 10);
-      if (parsed === 10 || parsed === 30 || parsed === 60) {
-        return parsed;
+      const parsed = parseFloat(stored);
+      if (parsed === 0.25 || parsed === 10 || parsed === 30 || parsed === 60) {
+        return parsed as RefreshInterval;
       }
     }
   } catch {}

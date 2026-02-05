@@ -27,6 +27,7 @@ function formatTime(seconds: number): string {
 }
 
 const intervalOptions: { value: RefreshInterval; label: string }[] = [
+  { value: 0.25, label: "15 ثانية" },
   { value: 10, label: "10 دقائق" },
   { value: 30, label: "30 دقيقة" },
   { value: 60, label: "ساعة" },
@@ -59,7 +60,7 @@ export function CountdownTimer({
 
       <Select
         value={String(interval)}
-        onValueChange={(v) => onIntervalChange(parseInt(v, 10) as RefreshInterval)}
+        onValueChange={(v) => onIntervalChange(parseFloat(v) as RefreshInterval)}
       >
         <SelectTrigger 
           className="w-[100px] text-xs"
