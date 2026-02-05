@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, X } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CountdownTimer } from "@/components/auto-refresh/countdown-timer";
+import { useAutoRefreshContext } from "@/contexts/auto-refresh-context";
 import {
   Sheet,
   SheetContent,
@@ -22,6 +24,7 @@ const navItems = [
 export function Header() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const autoRefresh = useAutoRefreshContext();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -32,6 +35,20 @@ export function Header() {
           </div>
           <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">Tech Voice</span>
         </Link>
+
+        {/* Countdown Timer - Desktop */}
+        <div className="hidden lg:block">
+          <CountdownTimer
+            remainingSeconds={autoRefresh.remainingSeconds}
+            interval={autoRefresh.interval}
+            isPaused={autoRefresh.isPaused}
+            isRefreshing={autoRefresh.isRefreshing}
+            onIntervalChange={autoRefresh.setInterval}
+            onPause={autoRefresh.pause}
+            onResume={autoRefresh.resume}
+            onRefreshNow={autoRefresh.triggerNow}
+          />
+        </div>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">

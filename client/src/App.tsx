@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AutoRefreshProvider } from "@/contexts/auto-refresh-context";
 import Dashboard from "@/pages/dashboard";
 import FolderDetail from "@/pages/folder-detail";
 import Ideas from "@/pages/ideas";
@@ -33,8 +34,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="tech-voice-theme">
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <AutoRefreshProvider>
+            <Toaster />
+            <Router />
+          </AutoRefreshProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
