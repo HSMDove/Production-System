@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { RefreshInterval } from "@/hooks/use-auto-refresh";
+import type { RefreshInterval } from "@/contexts/auto-refresh-context";
 
 interface CountdownTimerProps {
   remainingSeconds: number;
@@ -62,7 +62,7 @@ export function CountdownTimer({
         onValueChange={(v) => onIntervalChange(parseInt(v, 10) as RefreshInterval)}
       >
         <SelectTrigger 
-          className="h-7 w-[100px] text-xs"
+          className="w-[100px] text-xs"
           data-testid="select-interval"
         >
           <SelectValue />
@@ -83,26 +83,24 @@ export function CountdownTimer({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7"
         onClick={isPaused ? onResume : onPause}
         data-testid="button-pause-resume"
       >
         {isPaused ? (
-          <Play className="h-3.5 w-3.5" />
+          <Play className="h-4 w-4" />
         ) : (
-          <Pause className="h-3.5 w-3.5" />
+          <Pause className="h-4 w-4" />
         )}
       </Button>
 
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7"
         onClick={onRefreshNow}
         disabled={isRefreshing}
         data-testid="button-refresh-now"
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+        <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
       </Button>
     </div>
   );

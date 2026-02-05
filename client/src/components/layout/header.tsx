@@ -36,8 +36,8 @@ export function Header() {
           <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">Tech Voice</span>
         </Link>
 
-        {/* Countdown Timer - Desktop */}
-        <div className="hidden lg:block">
+        {/* Countdown Timer */}
+        <div className="hidden sm:block">
           <CountdownTimer
             remainingSeconds={autoRefresh.remainingSeconds}
             interval={autoRefresh.interval}

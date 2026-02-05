@@ -29,12 +29,15 @@ Preferred communication style: Simple, everyday language.
 - React Hook Form with Zod validation for form state and validation
 - Local component state with React hooks for UI interactions
 - Context API for theme management (light/dark/system modes)
+- AutoRefreshProvider context for managing automatic content updates
 
 **Key Features**
 - Drag-and-drop Kanban board using @dnd-kit for idea workflow management
 - RTL-aware layouts with mirrored navigation and content flow
 - Responsive design with mobile-first breakpoints
 - Real-time progress tracking for AI idea generation
+- Auto-refresh system with configurable intervals (10/30/60 minutes)
+- Feedly-style sources sidebar with date-grouped content feed
 
 ### Backend Architecture
 

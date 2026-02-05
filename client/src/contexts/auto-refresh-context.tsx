@@ -52,8 +52,7 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
 
   const refreshAllMutation = useMutation({
     mutationFn: async () => {
-      const foldersRes = await fetch("/api/folders");
-      const folders = await foldersRes.json();
+      const folders = await apiRequest("GET", "/api/folders");
       
       const results = await Promise.allSettled(
         folders.map((folder: { id: string }) =>
@@ -65,8 +64,7 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
       return { total: folders.length, successful };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+      queryClient.invalidateQueries();
       toast({
         title: "تم التحديث",
         description: `تم جلب المحتوى من ${data.successful}/${data.total} مجلد`,
