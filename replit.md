@@ -2,7 +2,7 @@
 
 ## Overview
 
-Tech Voice is an Arabic-first content management platform designed for a YouTube tech channel. The application helps organize content sources (RSS feeds, websites, YouTube channels, Twitter accounts) into topic-based folders, automatically fetch and display the latest news, and use AI to generate video ideas from aggregated content. The platform features a clean, Linear-inspired design with full RTL (right-to-left) support for Arabic content.
+Tech Voice is a private internal tool for the Tech Voice media company. It aggregates bilingual tech news from RSS feeds, translates/rewrites to Arabic using AI with a custom "Casual Saudi Tech" persona, and auto-posts to Telegram/Slack. Features a Feedly-style interface with sources sidebar, auto-refresh system, and focus on speed, reliability, and automation for exclusive content publishing. Full RTL (right-to-left) support for Arabic content.
 
 ## User Preferences
 
@@ -107,6 +107,11 @@ Preferred communication style: Simple, everyday language.
 - Optional folder association for organization
 - scheduledDate field for content calendar integration
 
+*Settings Table*
+- Key-value configuration store for all platform settings
+- Fields: key (primary key), value (text), updatedAt
+- Stores: notification config (Telegram/Slack tokens, URLs, toggles), AI provider config, system prompt
+
 *Prompt Templates Table*
 - Custom AI prompt templates for idea generation
 - Fields: id, name, description, promptContent, isDefault, timestamps
@@ -124,10 +129,22 @@ Preferred communication style: Simple, everyday language.
 
 ### External Dependencies
 
-**AI Services**
-- OpenAI API for video idea generation
-- Configurable base URL and API key via environment variables (AI_INTEGRATIONS_OPENAI_BASE_URL, AI_INTEGRATIONS_OPENAI_API_KEY)
+**AI Services (Provider-Agnostic)**
+- Provider-agnostic AI engine via `getAIClient()` in `server/openai.ts`
+- Supports two modes: "Replit/OpenAI" (default, uses Replit AI Integrations) or "Custom/Local" (Ollama, LM Studio, etc.)
+- Custom mode configurable via Settings page: Base URL, optional API Key, Model Name
+- All AI functions dynamically create OpenAI SDK client based on settings from database
+- `rewriteContent()` function for "Tech Voice" style rewriting with custom system prompts
 - Uses GPT models for Arabic content understanding and generation
+
+**Notification Pipeline**
+- `server/notifier.ts` handles automated notifications to Telegram and Slack
+- Post-fetch pipeline: new content → AI rewrite → send to channels → mark as notified
+- `notifiedAt` column on content table prevents duplicate notifications
+- `rewrittenContent` column stores AI-rewritten text for reference
+- Telegram: Bot API with HTML formatting
+- Slack: Webhook integration with Markdown formatting
+- Test functions for verifying connections from Settings page
 
 **Database**
 - PostgreSQL database (provisioned via DATABASE_URL environment variable)

@@ -61,6 +61,8 @@ export const content = pgTable("content", {
   sentiment: text("sentiment").$type<SentimentType>(),
   sentimentScore: integer("sentiment_score"),
   keywords: text("keywords").array(),
+  notifiedAt: timestamp("notified_at"),
+  rewrittenContent: text("rewritten_content"),
 });
 
 export const contentRelations = relations(content, ({ one }) => ({
@@ -168,6 +170,8 @@ export const insertSourceSchema = createInsertSchema(sources).omit({
 export const insertContentSchema = createInsertSchema(content).omit({
   id: true,
   fetchedAt: true,
+  notifiedAt: true,
+  rewrittenContent: true,
 });
 
 export const insertIdeaSchema = createInsertSchema(ideas).omit({
@@ -238,6 +242,17 @@ export const updatePromptTemplateSchema = createInsertSchema(promptTemplates).om
 export type PromptTemplate = typeof promptTemplates.$inferSelect;
 export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
 export type UpdatePromptTemplate = z.infer<typeof updatePromptTemplateSchema>;
+
+// Settings - key-value configuration store
+export const settings = pgTable("settings", {
+  key: varchar("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertSettingSchema = createInsertSchema(settings);
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = z.infer<typeof insertSettingSchema>;
 
 // Keep users table for compatibility
 export const users = pgTable("users", {

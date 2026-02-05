@@ -1,10 +1,52 @@
 import OpenAI from "openai";
 import type { Content, IdeaCategory, InsertIdea, PromptTemplate, SentimentType } from "@shared/schema";
+import { storage } from "./storage";
 
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-});
+async function getSettingsMap(): Promise<Map<string, string | null>> {
+  const allSettings = await storage.getAllSettings();
+  const map = new Map<string, string | null>();
+  for (const s of allSettings) {
+    map.set(s.key, s.value);
+  }
+  return map;
+}
+
+export async function getAIClient(): Promise<{ client: OpenAI; model: string; miniModel: string }> {
+  const settings = await getSettingsMap();
+  const provider = settings.get("ai_provider") || "replit";
+
+  if (provider === "custom") {
+    const baseURL = settings.get("ai_custom_base_url");
+    const apiKey = settings.get("ai_custom_api_key") || "not-needed";
+    const model = settings.get("ai_custom_model") || "llama3";
+
+    if (!baseURL) {
+      return {
+        client: new OpenAI({
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        }),
+        model: "gpt-4o",
+        miniModel: "gpt-4o-mini",
+      };
+    }
+
+    return {
+      client: new OpenAI({ baseURL, apiKey }),
+      model,
+      miniModel: model,
+    };
+  }
+
+  return {
+    client: new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+    }),
+    model: "gpt-4o",
+    miniModel: "gpt-4o-mini",
+  };
+}
 
 interface GeneratedIdea {
   title: string;
@@ -65,8 +107,9 @@ export async function generateIdeasFromContent(
     .replace("{{CONTENT_SUMMARY}}", contentSummary);
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
       messages: [
         {
           role: "system",
@@ -144,8 +187,9 @@ ${contentList}
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
       messages: [
         {
           role: "system",
@@ -205,18 +249,18 @@ export async function generateArabicSummary(
   
   const textToSummarize = summary || title;
   
-  // Check if text is already primarily Arabic (more than 50% Arabic characters)
   const arabicChars = textToSummarize.match(/[\u0600-\u06FF]/g) || [];
   const totalChars = textToSummarize.replace(/\s/g, '').length;
   const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
   
   if (arabicRatio > 0.5) {
-    return null; // Already in Arabic
+    return null;
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { client, miniModel } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model: miniModel,
       messages: [
         {
           role: "system",
@@ -246,8 +290,9 @@ export async function generateDetailedArabicExplanation(
   const textToExplain = `${title}${summary ? `\n\n${summary}` : ''}`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
       messages: [
         {
           role: "system",
@@ -288,19 +333,19 @@ export async function generateProfessionalTranslation(
 ): Promise<ProfessionalTranslation | null> {
   if (!title) return null;
   
-  // Check if content is already primarily Arabic
   const textToCheck = `${title} ${summary || ''}`;
   const arabicChars = textToCheck.match(/[\u0600-\u06FF]/g) || [];
   const totalChars = textToCheck.replace(/\s/g, '').length;
   const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
   
   if (arabicRatio > 0.5) {
-    return null; // Already in Arabic
+    return null;
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const { client, miniModel } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model: miniModel,
       messages: [
         {
           role: "system",
@@ -381,8 +426,9 @@ ${contentSummary}
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
       messages: [
         {
           role: "system",
@@ -407,5 +453,36 @@ ${contentSummary}
   } catch (error) {
     console.error("Error detecting trending topics:", error);
     throw new Error("Failed to detect trending topics");
+  }
+}
+
+export async function rewriteContent(
+  title: string,
+  summary: string | null,
+  systemPrompt?: string | null
+): Promise<string> {
+  const defaultPrompt = `أنت حسام من قناة Tech Voice. أسلوبك سعودي تقني كاجوال. أعد كتابة هذا الخبر التقني بأسلوبك الخاص كأنك تحكي لمتابعينك. ركز على المواصفات والتأثير الحقيقي. خلّها قصيرة ومباشرة مناسبة لتيليجرام. لا تضف أي مقدمات أو تحيات - ابدأ مباشرة بالخبر.`;
+
+  const prompt = systemPrompt || defaultPrompt;
+
+  try {
+    const { client, miniModel } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model: miniModel,
+      messages: [
+        { role: "system", content: prompt },
+        {
+          role: "user",
+          content: `أعد كتابة هذا الخبر التقني:\n\nالعنوان: ${title}\n${summary ? `الملخص: ${summary}` : ''}`,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || title;
+  } catch (error) {
+    console.error("Error rewriting content:", error);
+    return title;
   }
 }

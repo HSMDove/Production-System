@@ -1,14 +1,126 @@
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, Monitor, Check, Sparkles, Database, Rss } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { 
+  Sun, Moon, Monitor, Check, Sparkles, Database, 
+  Bell, Send, MessageSquare, Bot, Loader2, 
+  Server, Globe, Key, Cpu, Save, TestTube
+} from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
+
+type SettingsData = Record<string, string | null>;
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
+  const { toast } = useToast();
+  
+  const [localSettings, setLocalSettings] = useState<SettingsData>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const { data: settings, isLoading } = useQuery<SettingsData>({
+    queryKey: ["/api/settings"],
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
+    }
+  }, [settings]);
+
+  const updateSetting = (key: string, value: string | null) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
+    setHasChanges(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: SettingsData) => {
+      return apiRequest("PUT", "/api/settings", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      setHasChanges(false);
+      toast({ title: "تم الحفظ", description: "تم حفظ الإعدادات بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حفظ الإعدادات", variant: "destructive" });
+    },
+  });
+
+  const testTelegramMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-telegram", {
+        botToken: localSettings.telegram_bot_token,
+        chatId: localSettings.telegram_chat_id,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "نجاح", description: "تم إرسال رسالة اختبار إلى تيليجرام" });
+      } else {
+        toast({ title: "فشل", description: data.error || "فشل الاتصال بتيليجرام", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار تيليجرام", variant: "destructive" });
+    },
+  });
+
+  const testSlackMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-slack", {
+        webhookUrl: localSettings.slack_webhook_url,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "نجاح", description: "تم إرسال رسالة اختبار إلى Slack" });
+      } else {
+        toast({ title: "فشل", description: data.error || "فشل الاتصال بـ Slack", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار Slack", variant: "destructive" });
+    },
+  });
+
+  const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة وشريحة A18 Pro");
+  const [testAiResult, setTestAiResult] = useState("");
+  
+  const testAiMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-ai", {
+        title: testAiTitle,
+        systemPrompt: localSettings.ai_system_prompt,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        setTestAiResult(data.rewrittenContent);
+        toast({ title: "نجاح", description: "تم إعادة كتابة النص بنجاح" });
+      } else {
+        toast({ title: "فشل", description: data.error || "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate(localSettings);
+  };
 
   const themeOptions = [
     { value: "light", label: "فاتح", icon: Sun },
@@ -16,22 +128,51 @@ export default function Settings() {
     { value: "system", label: "تلقائي", icon: Monitor },
   ] as const;
 
+  const aiProvider = localSettings.ai_provider || "replit";
+  const notificationsEnabled = localSettings.notifications_enabled === "true";
+  const telegramEnabled = localSettings.telegram_enabled === "true";
+  const slackEnabled = localSettings.slack_enabled === "true";
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
-          <p className="text-muted-foreground mt-1">
-            تخصيص تجربة استخدام التطبيق
-          </p>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
+            <p className="text-muted-foreground mt-1">
+              إعدادات المنصة والإشعارات والذكاء الاصطناعي
+            </p>
+          </div>
+          {hasChanges && (
+            <Button 
+              onClick={handleSave} 
+              disabled={saveMutation.isPending}
+              data-testid="button-save-settings"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              <span className="mr-2">حفظ الإعدادات</span>
+            </Button>
+          )}
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>المظهر</CardTitle>
-            <CardDescription>
-              اختر المظهر المفضل لديك
-            </CardDescription>
+            <CardDescription>اختر المظهر المفضل لديك</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
@@ -59,31 +200,294 @@ export default function Settings() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              الذكاء الاصطناعي
+              <Bell className="h-5 w-5 text-primary" />
+              الإشعارات التلقائية
             </CardTitle>
             <CardDescription>
-              إعدادات توليد الأفكار بالذكاء الاصطناعي
+              إرسال الأخبار الجديدة تلقائياً إلى تيليجرام و Slack
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-medium">تفعيل الإشعارات</Label>
+                <p className="text-sm text-muted-foreground">إرسال الأخبار الجديدة تلقائياً عند جلبها</p>
+              </div>
+              <Switch
+                checked={notificationsEnabled}
+                onCheckedChange={(checked) => updateSetting("notifications_enabled", checked ? "true" : "false")}
+                data-testid="switch-notifications-enabled"
+              />
+            </div>
+            
+            {notificationsEnabled && (
+              <>
+                <Separator />
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4 w-4 text-blue-500" />
+                      <Label className="text-base font-medium">تيليجرام</Label>
+                    </div>
+                    <Switch
+                      checked={telegramEnabled}
+                      onCheckedChange={(checked) => updateSetting("telegram_enabled", checked ? "true" : "false")}
+                      data-testid="switch-telegram-enabled"
+                    />
+                  </div>
+                  
+                  {telegramEnabled && (
+                    <div className="space-y-3 pr-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="telegram-token">Bot Token</Label>
+                        <Input
+                          id="telegram-token"
+                          type="password"
+                          placeholder="123456:ABC-DEF..."
+                          value={localSettings.telegram_bot_token || ""}
+                          onChange={(e) => updateSetting("telegram_bot_token", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-telegram-token"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="telegram-chat-id">Chat ID</Label>
+                        <Input
+                          id="telegram-chat-id"
+                          placeholder="-1001234567890"
+                          value={localSettings.telegram_chat_id || ""}
+                          onChange={(e) => updateSetting("telegram_chat_id", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-telegram-chat-id"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testTelegramMutation.mutate()}
+                        disabled={testTelegramMutation.isPending || !localSettings.telegram_bot_token || !localSettings.telegram_chat_id}
+                        data-testid="button-test-telegram"
+                      >
+                        {testTelegramMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <TestTube className="h-4 w-4" />
+                        )}
+                        <span className="mr-2">اختبار الاتصال</span>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-purple-500" />
+                      <Label className="text-base font-medium">Slack</Label>
+                    </div>
+                    <Switch
+                      checked={slackEnabled}
+                      onCheckedChange={(checked) => updateSetting("slack_enabled", checked ? "true" : "false")}
+                      data-testid="switch-slack-enabled"
+                    />
+                  </div>
+                  
+                  {slackEnabled && (
+                    <div className="space-y-3 pr-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-webhook">Webhook URL</Label>
+                        <Input
+                          id="slack-webhook"
+                          type="password"
+                          placeholder="https://hooks.slack.com/services/..."
+                          value={localSettings.slack_webhook_url || ""}
+                          onChange={(e) => updateSetting("slack_webhook_url", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-webhook"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testSlackMutation.mutate()}
+                        disabled={testSlackMutation.isPending || !localSettings.slack_webhook_url}
+                        data-testid="button-test-slack"
+                      >
+                        {testSlackMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <TestTube className="h-4 w-4" />
+                        )}
+                        <span className="mr-2">اختبار الاتصال</span>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              مزود الذكاء الاصطناعي
+            </CardTitle>
+            <CardDescription>
+              اختر بين خدمة OpenAI المدمجة أو خادمك المحلي
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">حالة الاتصال</p>
-                <p className="text-sm text-muted-foreground">
-                  يستخدم التطبيق Replit AI Integrations
-                </p>
-              </div>
-              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                متصل
-              </Badge>
+            <div className="space-y-2">
+              <Label>المزود</Label>
+              <Select 
+                value={aiProvider} 
+                onValueChange={(value) => updateSetting("ai_provider", value)}
+              >
+                <SelectTrigger data-testid="select-ai-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="replit">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      <span>Replit / OpenAI (الافتراضي)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      <span>خادم محلي / مخصص (Ollama)</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Separator />
-            <div className="rounded-md border p-4 bg-muted/30">
-              <p className="text-sm text-muted-foreground">
-                يستخدم هذا التطبيق خدمة Replit AI Integrations للوصول إلى OpenAI. 
-                لا تحتاج إلى مفتاح API خاص بك - يتم خصم التكاليف من رصيد حسابك في Replit.
+
+            {aiProvider === "replit" && (
+              <div className="rounded-md border p-4 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    يستخدم Replit AI Integrations - لا حاجة لمفتاح API خاص
+                  </p>
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
+                    متصل
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {aiProvider === "custom" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="ai-base-url" className="flex items-center gap-2">
+                    <Globe className="h-3 w-3" />
+                    Base URL
+                  </Label>
+                  <Input
+                    id="ai-base-url"
+                    placeholder="https://my-server.ngrok.io/v1"
+                    value={localSettings.ai_custom_base_url || ""}
+                    onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-base-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ai-api-key" className="flex items-center gap-2">
+                    <Key className="h-3 w-3" />
+                    API Key (اختياري)
+                  </Label>
+                  <Input
+                    id="ai-api-key"
+                    type="password"
+                    placeholder="اتركه فارغاً إذا لم يكن مطلوباً"
+                    value={localSettings.ai_custom_api_key || ""}
+                    onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-api-key"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ai-model" className="flex items-center gap-2">
+                    <Cpu className="h-3 w-3" />
+                    Model Name
+                  </Label>
+                  <Input
+                    id="ai-model"
+                    placeholder="llama3, mistral, etc."
+                    value={localSettings.ai_custom_model || ""}
+                    onChange={(e) => updateSetting("ai_custom_model", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-model"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              أسلوب Tech Voice
+            </CardTitle>
+            <CardDescription>
+              حدد شخصية الكتابة - كيف يعيد الذكاء الاصطناعي صياغة الأخبار
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="system-prompt">System Prompt</Label>
+              <Textarea
+                id="system-prompt"
+                className="min-h-[150px] text-sm"
+                placeholder="أنت حسام من قناة Tech Voice. أسلوبك سعودي تقني كاجوال..."
+                value={localSettings.ai_system_prompt || ""}
+                onChange={(e) => updateSetting("ai_system_prompt", e.target.value)}
+                data-testid="textarea-system-prompt"
+              />
+              <p className="text-xs text-muted-foreground">
+                هذا النص يحدد شخصية الذكاء الاصطناعي عند إعادة كتابة الأخبار للنشر
               </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">اختبار الأسلوب</Label>
+              <Input
+                placeholder="أدخل عنوان خبر للاختبار..."
+                value={testAiTitle}
+                onChange={(e) => setTestAiTitle(e.target.value)}
+                dir="auto"
+                data-testid="input-test-ai-title"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testAiMutation.mutate()}
+                disabled={testAiMutation.isPending || !testAiTitle}
+                data-testid="button-test-ai"
+              >
+                {testAiMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                <span className="mr-2">اختبار إعادة الكتابة</span>
+              </Button>
+              {testAiResult && (
+                <div className="rounded-md border p-4 bg-muted/30">
+                  <p className="text-sm font-medium mb-2">النتيجة:</p>
+                  <p className="text-sm whitespace-pre-wrap" data-testid="text-ai-test-result">{testAiResult}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -96,46 +500,17 @@ export default function Settings() {
               <Database className="h-5 w-5 text-primary" />
               قاعدة البيانات
             </CardTitle>
-            <CardDescription>
-              حالة تخزين البيانات
-            </CardDescription>
+            <CardDescription>حالة تخزين البيانات</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">PostgreSQL</p>
-                <p className="text-sm text-muted-foreground">
-                  قاعدة بيانات مُدارة من Replit
-                </p>
+                <p className="text-sm text-muted-foreground">قاعدة بيانات مُدارة من Replit</p>
               </div>
-              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
                 متصل
               </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Rss className="h-5 w-5 text-primary" />
-              جلب المحتوى
-            </CardTitle>
-            <CardDescription>
-              إعدادات مصادر الأخبار
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border p-4 bg-muted/30">
-              <p className="text-sm text-muted-foreground mb-2">
-                <strong>أنواع المصادر المدعومة:</strong>
-              </p>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• <strong>RSS:</strong> يتم جلب المحتوى تلقائياً من خلاصات RSS</li>
-                <li>• <strong>مواقع:</strong> تحليل الصفحات وجلب المحتوى الرئيسي</li>
-                <li>• <strong>يوتيوب:</strong> جلب عناوين الفيديوهات الأخيرة</li>
-                <li>• <strong>تويتر/X:</strong> يتطلب جلب يدوي</li>
-              </ul>
             </div>
           </CardContent>
         </Card>

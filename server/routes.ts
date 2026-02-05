@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
+import { processNewContentNotifications, testTelegramConnection, testSlackConnection } from "./notifier";
+import { getAIClient, rewriteContent } from "./openai";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -175,6 +177,12 @@ export async function registerRoutes(
             } catch (e) {
               console.error("Error generating Arabic translations:", e);
             }
+          }
+          // After translations done, process notifications
+          try {
+            await processNewContentNotifications(newContentIds);
+          } catch (e) {
+            console.error("Error processing notifications:", e);
           }
         })();
       }
@@ -364,6 +372,12 @@ export async function registerRoutes(
             } catch (e) {
               console.error("Error generating Arabic translations:", e);
             }
+          }
+          // After translations done, process notifications
+          try {
+            await processNewContentNotifications(newContentIds);
+          } catch (e) {
+            console.error("Error processing notifications:", e);
           }
         })();
       }
@@ -998,6 +1012,77 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Sentiment stats error:", error);
       res.status(500).json({ error: "Failed to fetch sentiment stats" });
+    }
+  });
+
+  // Settings routes
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const allSettings = await storage.getAllSettings();
+      const settingsObj: Record<string, string | null> = {};
+      for (const s of allSettings) {
+        settingsObj[s.key] = s.value;
+      }
+      res.json(settingsObj);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.put("/api/settings", async (req, res) => {
+    try {
+      const entries = req.body as Record<string, string | null>;
+      if (!entries || typeof entries !== "object") {
+        return res.status(400).json({ error: "Invalid settings data" });
+      }
+      await storage.upsertSettings(entries);
+      const allSettings = await storage.getAllSettings();
+      const settingsObj: Record<string, string | null> = {};
+      for (const s of allSettings) {
+        settingsObj[s.key] = s.value;
+      }
+      res.json(settingsObj);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  app.post("/api/settings/test-telegram", async (req, res) => {
+    try {
+      const { botToken, chatId } = req.body;
+      if (!botToken || !chatId) {
+        return res.status(400).json({ error: "Bot token and chat ID are required" });
+      }
+      const result = await testTelegramConnection(botToken, chatId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to test Telegram connection" });
+    }
+  });
+
+  app.post("/api/settings/test-slack", async (req, res) => {
+    try {
+      const { webhookUrl } = req.body;
+      if (!webhookUrl) {
+        return res.status(400).json({ error: "Webhook URL is required" });
+      }
+      const result = await testSlackConnection(webhookUrl);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to test Slack connection" });
+    }
+  });
+
+  app.post("/api/settings/test-ai", async (req, res) => {
+    try {
+      const { title, summary, systemPrompt } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "Title is required for testing" });
+      }
+      const rewritten = await rewriteContent(title, summary || null, systemPrompt || null);
+      res.json({ success: true, rewrittenContent: rewritten });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });
     }
   });
 

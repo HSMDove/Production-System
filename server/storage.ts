@@ -28,6 +28,9 @@ import {
   type IdeaAssignment,
   type InsertIdeaAssignment,
   type SentimentType,
+  settings,
+  type Setting,
+  type InsertSetting,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -83,6 +86,15 @@ export interface IStorage {
   getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
   createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
   deleteAssignment(id: string): Promise<boolean>;
+
+  getSetting(key: string): Promise<Setting | undefined>;
+  getAllSettings(): Promise<Setting[]>;
+  upsertSetting(key: string, value: string | null): Promise<Setting>;
+  upsertSettings(entries: Record<string, string | null>): Promise<Setting[]>;
+
+  getUnnotifiedContent(): Promise<Content[]>;
+  markContentNotified(id: string): Promise<Content | undefined>;
+  updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -330,6 +342,62 @@ export class DatabaseStorage implements IStorage {
   async deleteAssignment(id: string): Promise<boolean> {
     const deleted = await db.delete(ideaAssignments).where(eq(ideaAssignments.id, id)).returning();
     return deleted.length > 0;
+  }
+
+  async getSetting(key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting;
+  }
+
+  async getAllSettings(): Promise<Setting[]> {
+    return db.select().from(settings);
+  }
+
+  async upsertSetting(key: string, value: string | null): Promise<Setting> {
+    const [result] = await db
+      .insert(settings)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      })
+      .returning();
+    return result;
+  }
+
+  async upsertSettings(entries: Record<string, string | null>): Promise<Setting[]> {
+    const results: Setting[] = [];
+    for (const [key, value] of Object.entries(entries)) {
+      const result = await this.upsertSetting(key, value);
+      results.push(result);
+    }
+    return results;
+  }
+
+  async getUnnotifiedContent(): Promise<Content[]> {
+    return db
+      .select()
+      .from(content)
+      .where(isNull(content.notifiedAt))
+      .orderBy(desc(content.fetchedAt));
+  }
+
+  async markContentNotified(id: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ notifiedAt: new Date() })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ rewrittenContent })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
   }
 }
 
