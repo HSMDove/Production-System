@@ -1,7 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 export type RefreshInterval = 0.25 | 10 | 30 | 60; // 0.25 = 15 seconds for testing
 
@@ -44,51 +41,23 @@ interface AutoRefreshProviderProps {
 }
 
 export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
-  const { toast } = useToast();
   const [interval, setIntervalState] = useState<RefreshInterval>(getStoredInterval);
   const [remainingSeconds, setRemainingSeconds] = useState<number>(interval * 60);
   const [isPaused, setIsPaused] = useState(false);
-  const isRefreshingRef = useRef(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const refreshAllMutation = useMutation({
-    mutationFn: async () => {
-      const folders = await apiRequest("GET", "/api/folders");
-      
-      const results = await Promise.allSettled(
-        folders.map((folder: { id: string }) =>
-          apiRequest("POST", `/api/folders/${folder.id}/fetch`)
-        )
-      );
-      
-      const successful = results.filter((r) => r.status === "fulfilled").length;
-      return { total: folders.length, successful };
-    },
-    onSuccess: (data) => {
-      queryClient.refetchQueries({ type: "active" });
-      toast({
-        title: "تم التحديث",
-        description: `تم جلب المحتوى من ${data.successful}/${data.total} مجلد`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "خطأ في التحديث",
-        description: "حدث خطأ أثناء جلب المحتوى الجديد",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const triggerRefresh = useCallback(() => {
-    if (!isRefreshingRef.current) {
-      isRefreshingRef.current = true;
-      refreshAllMutation.mutate(undefined, {
-        onSettled: () => {
-          isRefreshingRef.current = false;
-        },
-      });
-    }
-  }, [refreshAllMutation]);
+  // Listen for refresh completion from folder-detail
+  useEffect(() => {
+    const handleRefreshStart = () => setIsRefreshing(true);
+    const handleRefreshEnd = () => setIsRefreshing(false);
+    
+    window.addEventListener("refresh-started", handleRefreshStart);
+    window.addEventListener("refresh-ended", handleRefreshEnd);
+    return () => {
+      window.removeEventListener("refresh-started", handleRefreshStart);
+      window.removeEventListener("refresh-ended", handleRefreshEnd);
+    };
+  }, []);
 
   useEffect(() => {
     setRemainingSeconds(interval * 60);
@@ -110,13 +79,14 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
     return () => window.clearInterval(timer);
   }, [isPaused, interval]);
 
-  // Trigger refresh when countdown reaches 0
+  // Trigger refresh when countdown reaches 0 - dispatch event for pages to handle
   useEffect(() => {
     if (remainingSeconds === 0 && !isPaused) {
-      triggerRefresh();
+      // Dispatch custom event - folder-detail page will catch this and use its own refresh
+      window.dispatchEvent(new CustomEvent("auto-refresh-trigger"));
       setRemainingSeconds(interval * 60);
     }
-  }, [remainingSeconds, isPaused, interval, triggerRefresh]);
+  }, [remainingSeconds, isPaused, interval]);
 
   const setInterval = useCallback((newInterval: RefreshInterval) => {
     setIntervalState(newInterval);
@@ -131,9 +101,10 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
   }, []);
 
   const triggerNow = useCallback(() => {
-    triggerRefresh();
+    // Dispatch the same event that folder-detail listens for
+    window.dispatchEvent(new CustomEvent("auto-refresh-trigger"));
     setRemainingSeconds(interval * 60);
-  }, [interval, triggerRefresh]);
+  }, [interval]);
 
   return (
     <AutoRefreshContext.Provider
@@ -141,7 +112,7 @@ export function AutoRefreshProvider({ children }: AutoRefreshProviderProps) {
         interval,
         remainingSeconds,
         isPaused,
-        isRefreshing: refreshAllMutation.isPending,
+        isRefreshing,
         setInterval,
         pause,
         resume,
