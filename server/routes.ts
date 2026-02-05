@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
-import { processNewContentNotifications, testTelegramConnection, testSlackConnection } from "./notifier";
+import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent } from "./openai";
 import {
   insertFolderSchema,
@@ -1044,6 +1044,20 @@ export async function registerRoutes(
       res.json(settingsObj);
     } catch (error) {
       res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  app.post("/api/content/:id/broadcast", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await broadcastSingleContent(id);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, channels: [], error: error.message || "فشل البث" });
     }
   });
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check } from "lucide-react";
 import { SiYoutube, SiX } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { LiveTimeAgo } from "@/components/ui/live-time-ago";
+import { useToast } from "@/hooks/use-toast";
 import type { ContentWithSource } from "@/lib/types";
 import { sourceTypeLabels } from "@/lib/types";
 import { apiRequest } from "@/lib/queryClient";
@@ -78,6 +84,25 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
 }) {
   const [imageError, setImageError] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState(false);
+  const { toast } = useToast();
+
+  const broadcastMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/content/${item.id}/broadcast`);
+      return response as { success: boolean; channels: string[]; error?: string };
+    },
+    onSuccess: (data) => {
+      setBroadcastSuccess(true);
+      const channelNames = data.channels.map((c: string) => c === "telegram" ? "تيليجرام" : "سلاك").join(" و ");
+      toast({ title: "تم البث بنجاح", description: `تم الإرسال إلى ${channelNames}` });
+      setTimeout(() => setBroadcastSuccess(false), 3000);
+    },
+    onError: (error: any) => {
+      const message = error?.error || error?.message || "فشل البث - تحقق من إعدادات القنوات";
+      toast({ title: "فشل البث", description: message, variant: "destructive" });
+    },
+  });
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
   const hasArabicSummary = !!item.arabicSummary;
   const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
@@ -235,6 +260,34 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                   <span className="hidden sm:inline">المصدر</span>
                 </a>
               </Button>
+
+              {/* Broadcast to Channels */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => broadcastMutation.mutate()}
+                    disabled={broadcastMutation.isPending || broadcastSuccess}
+                    data-testid={`button-broadcast-${item.id}`}
+                  >
+                    {broadcastMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : broadcastSuccess ? (
+                      <Check className="h-3.5 w-3.5 text-green-500" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {broadcastMutation.isPending ? "جاري الإرسال..." : broadcastSuccess ? "تم الإرسال" : "بث"}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>بث إلى القنوات</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </div>
