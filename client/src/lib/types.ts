@@ -46,6 +46,7 @@ export const sourceTypeLabels: Record<string, string> = {
   website: "موقع",
   youtube: "يوتيوب",
   twitter: "تويتر/X",
+  tiktok: "تيك توك",
 };
 
 // Status colors

@@ -46,6 +46,9 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
   if (newContentIds.length > 0) {
     (async () => {
       const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+      if (aiSystemPrompt) {
+        console.log(`[Folder Fetcher] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
+      }
       for (const contentId of newContentIds) {
         try {
           const contentItem = await storage.getContentById(contentId);

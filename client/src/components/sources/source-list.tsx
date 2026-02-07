@@ -1,4 +1,4 @@
-import { Rss, Globe, Youtube, Twitter, MoreVertical, Pencil, Trash2, Plus, RefreshCw } from "lucide-react";
+import { Rss, Globe, Youtube, Twitter, Music, MoreVertical, Pencil, Trash2, Plus, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,11 +22,12 @@ interface SourceListProps {
   isFetching?: boolean;
 }
 
-const sourceIcons = {
+const sourceIcons: Record<string, typeof Rss> = {
   rss: Rss,
   website: Globe,
   youtube: Youtube,
   twitter: Twitter,
+  tiktok: Music,
 };
 
 export function SourceList({ sources, onAdd, onEdit, onDelete, onFetch, isFetching }: SourceListProps) {

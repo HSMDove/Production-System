@@ -31,7 +31,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Folder, Source, ContentWithSource } from "@/lib/types";
-import { isToday, isYesterday } from "date-fns";
 
 export default function FolderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -80,10 +79,12 @@ export default function FolderDetail() {
     if (selectedFilterSourceId) {
       filtered = filtered.filter((item) => item.sourceId === selectedFilterSourceId);
     } else {
-      // "View All" mode: only show last 2 days (today and yesterday)
+      // "View All" mode: show content from the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       filtered = filtered.filter((item) => {
         const date = new Date(item.publishedAt || item.fetchedAt);
-        return isToday(date) || isYesterday(date);
+        return date >= sevenDaysAgo;
       });
     }
     

@@ -83,23 +83,18 @@ async function extractYouTubeChannelId(url: string): Promise<string | null> {
   }
 }
 
-// Convert Twitter/X username to RSS feed URL using xcancel.com
-function getTwitterRSSUrl(url: string): string | null {
+function extractTwitterUsername(url: string): string | null {
   try {
-    // Extract username from various Twitter URL formats
     const patterns = [
       /(?:twitter|x)\.com\/@?([\w]+)/i,
-      /^@?([\w]+)$/,  // Just username
+      /^@?([\w]+)$/,
     ];
-
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match) {
-        const username = match[1];
-        return `https://xcancel.com/${username}/rss`;
+        return match[1];
       }
     }
-    
     return null;
   } catch (error) {
     console.error("Error parsing Twitter URL:", error);
@@ -176,8 +171,8 @@ async function discoverWebsiteRSS(url: string): Promise<string | null> {
   }
 }
 
-// Freshness threshold: 30 days in milliseconds (for single source view)
-const FRESHNESS_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;
+// Freshness threshold: 14 days in milliseconds (for single source view)
+const FRESHNESS_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Check if content is within last 30 days and has valid publish date
 function isContentFresh(publishedAt: Date | null): boolean {
@@ -216,9 +211,9 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number 
       const originalUrl = item.link || source.url;
       const publishedAt = item.pubDate ? new Date(item.pubDate) : null;
       
-      // Filter out content older than 30 days
+      // Filter out content older than 14 days
       if (!isContentFresh(publishedAt)) {
-        console.log(`Skipped old content (>30d): ${title}`);
+        console.log(`Skipped old content (>14d): ${title}`);
         continue;
       }
       
@@ -274,6 +269,102 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number 
   }
 }
 
+const NITTER_INSTANCES = [
+  "https://xcancel.com",
+  "https://nitter.poast.org", 
+  "https://nitter.privacyredirect.com",
+  "https://lightbrd.com",
+];
+
+async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
+  const username = extractTwitterUsername(source.url);
+  if (!username) {
+    throw new Error("Could not extract Twitter/X username. Use format: twitter.com/username or x.com/username or just @username");
+  }
+
+  const errors: string[] = [];
+  
+  for (const instance of NITTER_INSTANCES) {
+    const rssUrl = `${instance}/${username}/rss`;
+    try {
+      console.log(`[Twitter] Trying ${instance} for @${username}...`);
+      const result = await fetchFromRSSUrl(rssUrl, source, 15);
+      if (result.items.length > 0) {
+        console.log(`[Twitter] Success: ${result.items.length} tweets from ${instance}`);
+        return result;
+      }
+      console.log(`[Twitter] ${instance} returned 0 items, trying next...`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[Twitter] ${instance} failed: ${msg}`);
+      errors.push(`${instance}: ${msg}`);
+    }
+  }
+  
+  return {
+    sourceId: source.id,
+    items: [],
+    error: `All Nitter instances failed for @${username}. Errors: ${errors.join("; ")}`,
+  };
+}
+
+function extractTikTokUsername(url: string): string | null {
+  try {
+    const patterns = [
+      /tiktok\.com\/@([\w.]+)/i,
+      /^@([\w.]+)$/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error("Error parsing TikTok URL:", error);
+    return null;
+  }
+}
+
+const TIKTOK_RSS_BRIDGES = [
+  (username: string) => `https://rsshub.app/tiktok/user/@${username}`,
+  (username: string) => `https://proxitok.pabloferreiro.es/@${username}/rss`,
+  (username: string) => `https://feedmirror.com/tiktok/@${username}`,
+];
+
+async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
+  const username = extractTikTokUsername(source.url);
+  if (!username) {
+    throw new Error("Could not extract TikTok username. Use format: tiktok.com/@username or @username");
+  }
+
+  const errors: string[] = [];
+  
+  for (const getBridgeUrl of TIKTOK_RSS_BRIDGES) {
+    const rssUrl = getBridgeUrl(username);
+    try {
+      console.log(`[TikTok] Trying ${rssUrl}...`);
+      const result = await fetchFromRSSUrl(rssUrl, source, 10);
+      if (result.items.length > 0) {
+        console.log(`[TikTok] Success: ${result.items.length} videos from ${rssUrl}`);
+        return result;
+      }
+      console.log(`[TikTok] ${rssUrl} returned 0 items, trying next...`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log(`[TikTok] ${rssUrl} failed: ${msg}`);
+      errors.push(msg);
+    }
+  }
+  
+  return {
+    sourceId: source.id,
+    items: [],
+    error: `All TikTok RSS bridges failed for @${username}. You may need to check the username or try again later. Errors: ${errors.join("; ")}`,
+  };
+}
+
 export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
   try {
     let rssUrl: string | null = null;
@@ -301,12 +392,10 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         break;
 
       case "twitter":
-        rssUrl = getTwitterRSSUrl(source.url);
-        
-        if (!rssUrl) {
-          throw new Error("Could not extract Twitter username from URL. Please use a format like twitter.com/username or x.com/username");
-        }
-        break;
+        return await fetchTwitterFeed(source);
+
+      case "tiktok":
+        return await fetchTikTokFeed(source);
 
       case "website":
         rssUrl = await discoverWebsiteRSS(source.url);

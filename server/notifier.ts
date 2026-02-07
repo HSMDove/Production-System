@@ -118,6 +118,9 @@ export async function processNewContentNotifications(newContentIds: string[]): P
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
   const systemPrompt = settingsMap.get("ai_system_prompt");
+  if (systemPrompt) {
+    console.log(`[Notifier] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
+  }
 
   let processed = 0;
   let notified = 0;
@@ -193,6 +196,9 @@ export async function broadcastSingleContent(contentId: string): Promise<{
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
   const systemPrompt = settingsMap.get("ai_system_prompt");
+  if (systemPrompt) {
+    console.log(`[Broadcast] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
+  }
 
   if (!telegramEnabled && !slackEnabled) {
     return { success: false, channels: [], error: "لا توجد قنوات مفعّلة - فعّل تيليجرام أو سلاك من الإعدادات" };
@@ -270,6 +276,9 @@ export async function processNewContentNotificationsForFolder(
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
   const systemPrompt = settingsMap.get("ai_system_prompt");
+  if (systemPrompt) {
+    console.log(`[Notifier Folder] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
+  }
 
   let processed = 0;
   let notified = 0;

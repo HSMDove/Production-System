@@ -291,9 +291,28 @@ export async function generateArabicSummary(
 export async function generateDetailedArabicExplanation(
   title: string,
   summary: string | null,
-  url: string | null
+  url: string | null,
+  customSystemPrompt?: string | null
 ): Promise<string> {
   const textToExplain = `${title}${summary ? `\n\n${summary}` : ''}`;
+
+  const defaultExplanationPrompt = `أنت صحفي تقني عربي محترف. مهمتك شرح الأخبار التقنية للقارئ العربي بطريقة واضحة ومفهومة.
+
+قواعد مهمة:
+- اشرح الخبر بالعربية الفصحى السلسة
+- قدم سياق للخبر (لماذا هذا مهم؟)
+- اشرح المصطلحات التقنية بشكل مبسط
+- اذكر التأثير المحتمل على المستخدم العربي
+- كن موضوعياً ومحايداً
+- اكتب بأسلوب صحفي جذاب`;
+
+  const systemMsg = customSystemPrompt
+    ? `${customSystemPrompt}\n\n${defaultExplanationPrompt}`
+    : defaultExplanationPrompt;
+
+  if (customSystemPrompt) {
+    console.log(`[AI Explain] Using custom system prompt: "${customSystemPrompt.substring(0, 50)}${customSystemPrompt.length > 50 ? '...' : ''}"`);
+  }
 
   try {
     const { client, model } = await getAIClient();
@@ -302,15 +321,7 @@ export async function generateDetailedArabicExplanation(
       messages: [
         {
           role: "system",
-          content: `أنت صحفي تقني عربي محترف. مهمتك شرح الأخبار التقنية للقارئ العربي بطريقة واضحة ومفهومة.
-
-قواعد مهمة:
-- اشرح الخبر بالعربية الفصحى السلسة
-- قدم سياق للخبر (لماذا هذا مهم؟)
-- اشرح المصطلحات التقنية بشكل مبسط
-- اذكر التأثير المحتمل على المستخدم العربي
-- كن موضوعياً ومحايداً
-- اكتب بأسلوب صحفي جذاب`
+          content: systemMsg
         },
         {
           role: "user",
@@ -477,6 +488,10 @@ export async function rewriteContent(
   const defaultPrompt = `أنت حسام من قناة Tech Voice. أسلوبك سعودي تقني كاجوال. أعد كتابة هذا الخبر التقني بأسلوبك الخاص كأنك تحكي لمتابعينك. ركز على المواصفات والتأثير الحقيقي. خلّها قصيرة ومباشرة مناسبة لتيليجرام. لا تضف أي مقدمات أو تحيات - ابدأ مباشرة بالخبر.`;
 
   const prompt = systemPrompt || defaultPrompt;
+
+  if (systemPrompt) {
+    console.log(`[AI Rewrite] Using custom system prompt: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
+  }
 
   try {
     const { client, miniModel } = await getAIClient();

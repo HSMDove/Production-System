@@ -1,5 +1,5 @@
 import { Rss, Globe, Layers } from "lucide-react";
-import { SiYoutube, SiX } from "react-icons/si";
+import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import type { Source } from "@/lib/types";
 
@@ -15,6 +15,8 @@ function getSourceIcon(type: string) {
       return <SiYoutube className="h-4 w-4 text-red-500 flex-shrink-0" />;
     case "twitter":
       return <SiX className="h-4 w-4 flex-shrink-0" />;
+    case "tiktok":
+      return <SiTiktok className="h-4 w-4 flex-shrink-0" />;
     case "website":
       return <Globe className="h-4 w-4 text-blue-500 flex-shrink-0" />;
     case "rss":

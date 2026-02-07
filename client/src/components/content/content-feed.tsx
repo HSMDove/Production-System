@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check } from "lucide-react";
-import { SiYoutube, SiX } from "react-icons/si";
+import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ function getSourceIcon(type: string) {
       return <SiYoutube className="h-4 w-4 text-red-500" />;
     case "twitter":
       return <SiX className="h-4 w-4" />;
+    case "tiktok":
+      return <SiTiktok className="h-4 w-4" />;
     case "website":
       return <Globe className="h-4 w-4 text-blue-500" />;
     case "rss":

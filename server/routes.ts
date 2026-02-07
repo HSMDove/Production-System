@@ -269,6 +269,9 @@ export async function registerRoutes(
       if (newContentIds.length > 0) {
         (async () => {
           const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+          if (aiSystemPrompt) {
+            console.log(`[Source Fetch] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
+          }
           for (const contentId of newContentIds) {
             try {
               const contentItem = await storage.getContentById(contentId);
@@ -669,7 +672,8 @@ export async function registerRoutes(
       const analyses = await analyzeContentSentiment(contentItems);
       
       let analyzedCount = 0;
-      for (const [id, analysis] of analyses) {
+      for (const entry of Array.from(analyses.entries())) {
+        const [id, analysis] = entry;
         await storage.updateContentSentiment(
           id,
           analysis.sentiment,
@@ -698,7 +702,8 @@ export async function registerRoutes(
       const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20));
       
       let analyzedCount = 0;
-      for (const [id, analysis] of analyses) {
+      for (const entry of Array.from(analyses.entries())) {
+        const [id, analysis] = entry;
         await storage.updateContentSentiment(
           id,
           analysis.sentiment,
@@ -724,10 +729,17 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Content not found" });
       }
 
+      const aiSystemPromptSetting = await storage.getSetting("ai_system_prompt");
+      const aiSystemPrompt = aiSystemPromptSetting?.value || null;
+      if (aiSystemPrompt) {
+        console.log(`[Explain Route] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
+      }
+
       const explanation = await generateDetailedArabicExplanation(
         contentItem.title,
         contentItem.summary,
-        contentItem.originalUrl
+        contentItem.originalUrl,
+        aiSystemPrompt
       );
       
       res.json({ explanation });

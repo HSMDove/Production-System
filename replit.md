@@ -57,9 +57,15 @@ Preferred communication style: Simple, everyday language.
 - p-limit for concurrent request limiting (3 parallel requests)
 - p-retry for fault tolerance (2 retries with exponential backoff)
 - Automatic deduplication of content items by URL
+- Content freshness filter: 14-day threshold for all sources
+- Twitter/X: Multi-instance Nitter fallback (xcancel, nitter.poast.org, nitter.privacyredirect.com, lightbrd.com)
+- TikTok: Multi-bridge RSS fallback (rsshub.app, proxitok, feedmirror.com)
+- YouTube: Standard Atom RSS feed with channel ID extraction
+- "View All" folder filter: Shows content from last 7 days across all sources
 
 **AI Integration**
 - OpenAI API integration for generating video ideas from content
+- Custom AI persona from Settings (`ai_system_prompt` key) applied to ALL AI functions: rewrite, summary, translation, and explanation
 - Structured prompts in Arabic for generating 3-5 ideas per request
 - Returns categorized ideas with titles, descriptions, duration estimates, and target audience
 - Configurable content window (last N days) for idea generation
@@ -89,7 +95,7 @@ Preferred communication style: Simple, everyday language.
 
 *Sources Table*
 - Represents external content sources within folders
-- Types: RSS, website, YouTube, Twitter/X
+- Types: RSS, website, YouTube, Twitter/X, TikTok
 - Fields: id, folderId, name, url, type, isActive, lastFetched, timestamps
 - Cascade delete when parent folder is removed
 

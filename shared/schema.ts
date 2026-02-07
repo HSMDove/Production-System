@@ -23,7 +23,7 @@ export const foldersRelations = relations(folders, ({ many }) => ({
 }));
 
 // Sources - news websites, YouTube channels, X accounts, RSS feeds within folders
-export const sourceTypes = ["rss", "website", "youtube", "twitter"] as const;
+export const sourceTypes = ["rss", "website", "youtube", "twitter", "tiktok"] as const;
 export type SourceType = typeof sourceTypes[number];
 
 export const sources = pgTable("sources", {

@@ -32,7 +32,7 @@ import { sourceTypeLabels } from "@/lib/types";
 const sourceFormSchema = z.object({
   name: z.string().min(1, "اسم المصدر مطلوب"),
   url: z.string().url("الرابط غير صحيح"),
-  type: z.enum(["rss", "website", "youtube", "twitter"]),
+  type: z.enum(["rss", "website", "youtube", "twitter", "tiktok"]),
 });
 
 type SourceFormValues = z.infer<typeof sourceFormSchema>;
