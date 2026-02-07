@@ -6,6 +6,7 @@ import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent } from "./openai";
 import { getSchedulerStatus } from "./scheduler";
+import { fetchFolderContent } from "./folder-fetcher";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -115,85 +116,8 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/fetch-all", async (req, res) => {
     try {
-      const sources = await storage.getSourcesByFolderId(req.params.id);
-      const results = await fetchMultipleSources(sources);
-      
-      let totalAdded = 0;
-      let skipped = 0;
-      const errors: string[] = [];
-      const newContentIds: string[] = [];
-      
-      for (const result of results) {
-        if (result.error) {
-          errors.push(`Source ${result.sourceId}: ${result.error}`);
-          continue;
-        }
-        
-        for (const item of result.items) {
-          try {
-            const created = await storage.createContentIfNotExists(item);
-            if (created) {
-              totalAdded++;
-              newContentIds.push(created.id);
-            } else {
-              skipped++;
-            }
-          } catch (e) {
-            console.error("Error creating content:", e);
-          }
-        }
-        
-        await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
-      }
-      
-      // Generate Arabic translations for new content in the background
-      if (newContentIds.length > 0) {
-        (async () => {
-          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
-          for (const contentId of newContentIds) {
-            try {
-              const contentItem = await storage.getContentById(contentId);
-              if (contentItem && contentItem.title) {
-                const arabicSummary = await generateArabicSummary(
-                  contentItem.title,
-                  contentItem.summary || "",
-                  aiSystemPrompt
-                );
-                if (arabicSummary) {
-                  await storage.updateContentArabicSummary(contentId, arabicSummary);
-                }
-                
-                const translation = await generateProfessionalTranslation(
-                  contentItem.title,
-                  contentItem.summary || "",
-                  aiSystemPrompt
-                );
-                if (translation) {
-                  await storage.updateContentTranslation(
-                    contentId,
-                    translation.arabicTitle,
-                    translation.arabicFullSummary
-                  );
-                }
-              }
-            } catch (e) {
-              console.error("Error generating Arabic translations:", e);
-            }
-          }
-          try {
-            await processNewContentNotifications(newContentIds);
-          } catch (e) {
-            console.error("Error processing notifications:", e);
-          }
-        })();
-      }
-      
-      res.json({ 
-        success: true, 
-        itemsAdded: totalAdded,
-        skipped,
-        errors: errors.length > 0 ? errors : undefined 
-      });
+      const result = await fetchFolderContent(req.params.id);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch content from sources" });
     }

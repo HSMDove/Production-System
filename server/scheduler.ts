@@ -1,7 +1,5 @@
 import { storage } from "./storage";
-import { fetchMultipleSources } from "./fetcher";
-import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
-import { processNewContentNotificationsForFolder } from "./notifier";
+import { fetchFolderContent } from "./folder-fetcher";
 import { log } from "./index";
 
 const folderLastRun = new Map<string, number>();
@@ -21,65 +19,10 @@ async function runFolderFetch(folderId: string) {
 
     log(`[Scheduler] Fetching folder: ${folder.name}`, "scheduler");
 
-    const results = await fetchMultipleSources(sources);
-    const newContentIds: string[] = [];
+    const result = await fetchFolderContent(folderId, folder);
 
-    for (const result of results) {
-      if (result.error) continue;
-      for (const item of result.items) {
-        try {
-          const created = await storage.createContentIfNotExists(item);
-          if (created) {
-            newContentIds.push(created.id);
-          }
-        } catch (e) {
-          // skip duplicates
-        }
-      }
-      await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
-    }
-
-    if (newContentIds.length > 0) {
-      log(`[Scheduler] ${folder.name}: ${newContentIds.length} new items`, "scheduler");
-
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
-
-      for (const contentId of newContentIds) {
-        try {
-          const contentItem = await storage.getContentById(contentId);
-          if (contentItem && contentItem.title) {
-            const arabicSummary = await generateArabicSummary(
-              contentItem.title,
-              contentItem.summary || "",
-              aiSystemPrompt
-            );
-            if (arabicSummary) {
-              await storage.updateContentArabicSummary(contentId, arabicSummary);
-            }
-
-            const translation = await generateProfessionalTranslation(
-              contentItem.title,
-              contentItem.summary || "",
-              aiSystemPrompt
-            );
-            if (translation) {
-              await storage.updateContentTranslation(
-                contentId,
-                translation.arabicTitle,
-                translation.arabicFullSummary
-              );
-            }
-          }
-        } catch (e) {
-          console.error("Scheduler: translation error", e);
-        }
-      }
-
-      try {
-        await processNewContentNotificationsForFolder(newContentIds, folder);
-      } catch (e) {
-        console.error("Scheduler: notification error", e);
-      }
+    if (result.itemsAdded > 0) {
+      log(`[Scheduler] ${folder.name}: ${result.itemsAdded} new items`, "scheduler");
     } else {
       log(`[Scheduler] ${folder.name}: no new items`, "scheduler");
     }

@@ -211,23 +211,6 @@ export default function FolderDetail() {
     }
   }, [id, sources]);
 
-  // Listen for auto-refresh timer event and trigger the existing refresh button
-  useEffect(() => {
-    const handleAutoRefresh = () => {
-      if (sources && sources.length > 0 && !fetchAllSourcesMutation.isPending) {
-        window.dispatchEvent(new CustomEvent("refresh-started"));
-        fetchAllSourcesMutation.mutate(undefined, {
-          onSettled: () => {
-            window.dispatchEvent(new CustomEvent("refresh-ended"));
-          }
-        });
-      }
-    };
-    
-    window.addEventListener("auto-refresh-trigger", handleAutoRefresh);
-    return () => window.removeEventListener("auto-refresh-trigger", handleAutoRefresh);
-  }, [sources, fetchAllSourcesMutation]);
-
   const handleAddSource = () => {
     setSelectedSource(null);
     setSourceDialogOpen(true);
