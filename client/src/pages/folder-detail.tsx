@@ -75,17 +75,8 @@ export default function FolderDetail() {
     if (!content) return [];
     let filtered = [...content];
     
-    // Filter by selected source
     if (selectedFilterSourceId) {
       filtered = filtered.filter((item) => item.sourceId === selectedFilterSourceId);
-    } else {
-      // "View All" mode: show content from the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      filtered = filtered.filter((item) => {
-        const date = new Date(item.publishedAt || item.fetchedAt);
-        return date >= sevenDaysAgo;
-      });
     }
     
     if (sourceTypeFilter !== "all") {

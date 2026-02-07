@@ -185,7 +185,7 @@ function isContentFresh(publishedAt: Date | null): boolean {
 }
 
 // Generic RSS feed fetcher
-async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number = 20): Promise<FetchResult> {
+async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number = 20, skipFreshnessFilter: boolean = false): Promise<FetchResult> {
   try {
     const feed = await pRetry(
       () => parser.parseURL(rssUrl),
@@ -211,8 +211,8 @@ async function fetchFromRSSUrl(rssUrl: string, source: Source, maxItems: number 
       const originalUrl = item.link || source.url;
       const publishedAt = item.pubDate ? new Date(item.pubDate) : null;
       
-      // Filter out content older than 14 days
-      if (!isContentFresh(publishedAt)) {
+      // Filter out content older than 14 days (skip for YouTube/TikTok - their feeds are already limited)
+      if (!skipFreshnessFilter && !isContentFresh(publishedAt)) {
         console.log(`Skipped old content (>14d): ${title}`);
         continue;
       }
@@ -330,8 +330,130 @@ function extractTikTokUsername(url: string): string | null {
 const TIKTOK_RSS_BRIDGES = [
   (username: string) => `https://rsshub.app/tiktok/user/@${username}`,
   (username: string) => `https://proxitok.pabloferreiro.es/@${username}/rss`,
-  (username: string) => `https://feedmirror.com/tiktok/@${username}`,
 ];
+
+async function fetchTikTokFromPage(source: Source, username: string): Promise<FetchResult> {
+  console.log(`[TikTok] Trying direct page scrape for @${username}...`);
+  
+  try {
+    const response = await fetch(`https://www.tiktok.com/@${username}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`TikTok page returned ${response.status}`);
+    }
+
+    const html = await response.text();
+    
+    // Extract JSON data from __UNIVERSAL_DATA_FOR_REHYDRATION__
+    const jsonMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([^<]+)<\/script>/);
+    if (!jsonMatch) {
+      throw new Error("Could not find embedded data in TikTok page");
+    }
+
+    const pageData = JSON.parse(jsonMatch[1]);
+    const defaultScope = pageData['__DEFAULT_SCOPE__'] || {};
+    const userDetail = defaultScope['webapp.user-detail'] || {};
+    const userInfo = userDetail.userInfo || {};
+    const user = userInfo.user || {};
+    
+    if (!user.uniqueId) {
+      throw new Error("TikTok user not found");
+    }
+    
+    console.log(`[TikTok] Found user: ${user.nickname || user.uniqueId} (${userInfo.stats?.videoCount || 0} videos)`);
+    
+    // Try to get video data from the page's itemList (TikTok sometimes includes it)
+    const itemList = userDetail.itemList || userInfo.itemList || [];
+    
+    if (itemList.length > 0) {
+      console.log(`[TikTok] Found ${itemList.length} videos in page data`);
+      const items: InsertContent[] = [];
+      
+      for (const video of itemList.slice(0, 10)) {
+        const createTime = video.createTime ? new Date(parseInt(video.createTime) * 1000) : new Date();
+        const videoUrl = `https://www.tiktok.com/@${username}/video/${video.id}`;
+        const coverUrl = video.video?.cover || video.video?.originCover || null;
+        
+        items.push({
+          folderId: source.folderId,
+          sourceId: source.id,
+          title: video.desc || `TikTok video by @${username}`,
+          summary: video.desc || null,
+          originalUrl: videoUrl,
+          imageUrl: coverUrl,
+          publishedAt: createTime,
+        });
+      }
+      
+      return { sourceId: source.id, items };
+    }
+    
+    // If itemList is empty (common - TikTok lazy-loads videos),
+    // extract any video IDs from page HTML/scripts
+    const videoIdPattern = /"id"\s*:\s*"(\d{15,})"[^}]*"desc"\s*:\s*"([^"]*)"[^}]*"createTime"\s*:\s*"(\d+)"/g;
+    const items: InsertContent[] = [];
+    let match;
+    
+    while ((match = videoIdPattern.exec(html)) !== null && items.length < 10) {
+      const videoId = match[1];
+      const desc = match[2];
+      const createTime = new Date(parseInt(match[3]) * 1000);
+      
+      items.push({
+        folderId: source.folderId,
+        sourceId: source.id,
+        title: desc || `TikTok video by @${username}`,
+        summary: desc || null,
+        originalUrl: `https://www.tiktok.com/@${username}/video/${videoId}`,
+        imageUrl: null,
+        publishedAt: createTime,
+      });
+    }
+    
+    if (items.length > 0) {
+      console.log(`[TikTok] Extracted ${items.length} videos from page HTML`);
+      return { sourceId: source.id, items };
+    }
+    
+    // Last resort: create a link to the profile so the user at least knows the source exists
+    // Check if we can find ANY video links in the page
+    const videoLinkPattern = /\/@[\w.]+\/video\/(\d+)/g;
+    const videoIds = new Set<string>();
+    let linkMatch;
+    while ((linkMatch = videoLinkPattern.exec(html)) !== null) {
+      videoIds.add(linkMatch[1]);
+    }
+    
+    if (videoIds.size > 0) {
+      console.log(`[TikTok] Found ${videoIds.size} video links in page HTML`);
+      for (const vid of Array.from(videoIds).slice(0, 10)) {
+        items.push({
+          folderId: source.folderId,
+          sourceId: source.id,
+          title: `TikTok video by @${username}`,
+          summary: null,
+          originalUrl: `https://www.tiktok.com/@${username}/video/${vid}`,
+          imageUrl: null,
+          publishedAt: new Date(),
+        });
+      }
+      return { sourceId: source.id, items };
+    }
+    
+    throw new Error(`TikTok page loaded for @${username} but no videos found in server-rendered HTML. TikTok loads videos via JavaScript which cannot be accessed from a server.`);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[TikTok] Page scrape failed for @${username}: ${msg}`);
+    throw error;
+  }
+}
 
 async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
   const username = extractTikTokUsername(source.url);
@@ -341,27 +463,36 @@ async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
 
   const errors: string[] = [];
   
+  // First try RSS bridges
   for (const getBridgeUrl of TIKTOK_RSS_BRIDGES) {
     const rssUrl = getBridgeUrl(username);
     try {
-      console.log(`[TikTok] Trying ${rssUrl}...`);
-      const result = await fetchFromRSSUrl(rssUrl, source, 10);
+      console.log(`[TikTok] Trying RSS bridge: ${rssUrl}...`);
+      const result = await fetchFromRSSUrl(rssUrl, source, 10, true);
       if (result.items.length > 0) {
-        console.log(`[TikTok] Success: ${result.items.length} videos from ${rssUrl}`);
+        console.log(`[TikTok] RSS bridge success: ${result.items.length} videos from ${rssUrl}`);
         return result;
       }
       console.log(`[TikTok] ${rssUrl} returned 0 items, trying next...`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.log(`[TikTok] ${rssUrl} failed: ${msg}`);
-      errors.push(msg);
+      console.log(`[TikTok] RSS bridge ${rssUrl} failed: ${msg}`);
+      errors.push(`RSS: ${msg}`);
     }
+  }
+  
+  // Fallback: try direct page scraping
+  try {
+    return await fetchTikTokFromPage(source, username);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`Page scrape: ${msg}`);
   }
   
   return {
     sourceId: source.id,
     items: [],
-    error: `All TikTok RSS bridges failed for @${username}. You may need to check the username or try again later. Errors: ${errors.join("; ")}`,
+    error: `Could not fetch TikTok videos for @${username}. TikTok actively blocks RSS access and server-side scraping. The videos are loaded via JavaScript in the browser and cannot be accessed from a server. Consider using YouTube or Twitter/X as alternative sources. Details: ${errors.join("; ")}`,
   };
 }
 
@@ -409,9 +540,11 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         throw new Error(`Unsupported source type: ${source.type}`);
     }
 
-    // YouTube: limit to 10 latest videos (RSS usually has 15)
+    // YouTube: limit to 10 latest videos (RSS usually has 15), skip freshness filter
+    // YouTube RSS already returns only the latest ~15 videos, so no need for date filtering
     const maxItems = source.type === "youtube" ? 10 : 20;
-    return await fetchFromRSSUrl(rssUrl, source, maxItems);
+    const skipFreshness = source.type === "youtube";
+    return await fetchFromRSSUrl(rssUrl, source, maxItems, skipFreshness);
   } catch (error) {
     console.error(`Error fetching from ${source.type} source ${source.url}:`, error);
     return {
