@@ -243,7 +243,8 @@ export interface TrendingTopic {
 
 export async function generateArabicSummary(
   title: string,
-  summary: string | null
+  summary: string | null,
+  customSystemPrompt?: string | null
 ): Promise<string | null> {
   if (!title && !summary) return null;
   
@@ -257,6 +258,11 @@ export async function generateArabicSummary(
     return null;
   }
 
+  const defaultSystemMsg = "أنت مترجم ومُلخص محترف. قم بترجمة وتلخيص المحتوى التقني إلى العربية بشكل موجز ومفهوم. أجب بالملخص العربي فقط بدون أي شرح إضافي.";
+  const systemMsg = customSystemPrompt
+    ? `${customSystemPrompt}\n\nمهمتك الآن: ترجم ولخص المحتوى التقني التالي إلى العربية في 1-2 جملة. أجب بالملخص العربي فقط.`
+    : defaultSystemMsg;
+
   try {
     const { client, miniModel } = await getAIClient();
     const response = await client.chat.completions.create({
@@ -264,7 +270,7 @@ export async function generateArabicSummary(
       messages: [
         {
           role: "system",
-          content: "أنت مترجم ومُلخص محترف. قم بترجمة وتلخيص المحتوى التقني إلى العربية بشكل موجز ومفهوم. أجب بالملخص العربي فقط بدون أي شرح إضافي."
+          content: systemMsg
         },
         {
           role: "user",
@@ -329,7 +335,8 @@ export interface ProfessionalTranslation {
 
 export async function generateProfessionalTranslation(
   title: string,
-  summary: string | null
+  summary: string | null,
+  customSystemPrompt?: string | null
 ): Promise<ProfessionalTranslation | null> {
   if (!title) return null;
   
@@ -342,14 +349,7 @@ export async function generateProfessionalTranslation(
     return null;
   }
 
-  try {
-    const { client, miniModel } = await getAIClient();
-    const response = await client.chat.completions.create({
-      model: miniModel,
-      messages: [
-        {
-          role: "system",
-          content: `أنت مترجم صحفي تقني محترف. مهمتك ترجمة الأخبار التقنية إلى العربية بطريقة احترافية.
+  const defaultTranslationPrompt = `أنت مترجم صحفي تقني محترف. مهمتك ترجمة الأخبار التقنية إلى العربية بطريقة احترافية.
 
 قواعد الترجمة:
 - استخدم العربية الفصحى السلسة والمفهومة
@@ -359,7 +359,20 @@ export async function generateProfessionalTranslation(
 - العنوان يجب أن يكون جذاباً ومختصراً
 - الملخص يجب أن يوضح الخبر بشكل كامل ومفهوم
 
-أجب بصيغة JSON فقط.`
+أجب بصيغة JSON فقط.`;
+
+  const systemMsg = customSystemPrompt
+    ? `${customSystemPrompt}\n\nمهمتك الآن: ترجم الخبر التقني التالي إلى العربية بأسلوبك. العنوان يجب أن يكون جذاباً ومختصراً. الملخص يجب أن يوضح الخبر بشكل كامل. أجب بصيغة JSON فقط.`
+    : defaultTranslationPrompt;
+
+  try {
+    const { client, miniModel } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model: miniModel,
+      messages: [
+        {
+          role: "system",
+          content: systemMsg
         },
         {
           role: "user",

@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { rewriteContent } from "./openai";
-import type { Content } from "@shared/schema";
+import type { Content, Folder } from "@shared/schema";
 
 async function getSettingsMap(): Promise<Map<string, string | null>> {
   const allSettings = await storage.getAllSettings();
@@ -239,6 +239,92 @@ export async function broadcastSingleContent(contentId: string): Promise<{
   }
 
   return { success: false, channels: [], error: "فشل الإرسال لجميع القنوات" };
+}
+
+export async function processNewContentNotificationsForFolder(
+  newContentIds: string[],
+  folder: Folder
+): Promise<{ processed: number; notified: number; errors: string[] }> {
+  if (newContentIds.length === 0) {
+    return { processed: 0, notified: 0, errors: [] };
+  }
+
+  const settingsMap = await getSettingsMap();
+  const notificationsEnabled = settingsMap.get("notifications_enabled") === "true";
+
+  if (!notificationsEnabled) {
+    return { processed: 0, notified: 0, errors: [] };
+  }
+
+  const globalTelegramEnabled = settingsMap.get("telegram_enabled") === "true";
+  const globalSlackEnabled = settingsMap.get("slack_enabled") === "true";
+
+  const telegramEnabled = globalTelegramEnabled && folder.notifyTelegram;
+  const slackEnabled = globalSlackEnabled && folder.notifySlack;
+
+  if (!telegramEnabled && !slackEnabled) {
+    return { processed: 0, notified: 0, errors: [] };
+  }
+
+  const telegramToken = settingsMap.get("telegram_bot_token") || "";
+  const telegramChatId = settingsMap.get("telegram_chat_id") || "";
+  const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
+  const systemPrompt = settingsMap.get("ai_system_prompt");
+
+  let processed = 0;
+  let notified = 0;
+  const errors: string[] = [];
+
+  for (const contentId of newContentIds) {
+    try {
+      const contentItem = await storage.getContentById(contentId);
+      if (!contentItem || contentItem.notifiedAt) continue;
+
+      processed++;
+
+      const titleForRewrite = contentItem.arabicTitle || contentItem.title;
+      const summaryForRewrite = contentItem.arabicSummary || contentItem.summary;
+
+      let rewrittenText = "";
+      try {
+        rewrittenText = await rewriteContent(titleForRewrite, summaryForRewrite, systemPrompt);
+        if (rewrittenText) {
+          await storage.updateContentRewrite(contentId, rewrittenText);
+        }
+      } catch (e) {
+        console.error("AI rewrite failed for content:", contentId, e);
+        rewrittenText = contentItem.arabicSummary || contentItem.summary || contentItem.title;
+      }
+
+      let sent = false;
+
+      if (telegramEnabled && telegramToken && telegramChatId) {
+        const telegramMsg = formatTelegramMessage(contentItem, rewrittenText);
+        const telegramSent = await sendTelegramMessage(telegramToken, telegramChatId, telegramMsg);
+        if (telegramSent) sent = true;
+        else errors.push(`Telegram failed for: ${contentItem.title}`);
+      }
+
+      if (slackEnabled && slackWebhookUrl) {
+        const slackMsg = formatSlackMessage(contentItem, rewrittenText);
+        const slackSent = await sendSlackMessage(slackWebhookUrl, slackMsg);
+        if (slackSent) sent = true;
+        else errors.push(`Slack failed for: ${contentItem.title}`);
+      }
+
+      if (sent) {
+        await storage.markContentNotified(contentId);
+        notified++;
+      } else {
+        errors.push(`No channel sent for: ${contentItem.title}`);
+      }
+    } catch (error) {
+      console.error("Error processing notification for content:", contentId, error);
+      errors.push(`Error processing: ${contentId}`);
+    }
+  }
+
+  return { processed, notified, errors };
 }
 
 export async function testTelegramConnection(

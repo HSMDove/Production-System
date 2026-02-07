@@ -1,0 +1,129 @@
+import { storage } from "./storage";
+import { fetchMultipleSources } from "./fetcher";
+import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
+import { processNewContentNotificationsForFolder } from "./notifier";
+import { log } from "./index";
+
+const folderLastRun = new Map<string, number>();
+const folderInFlight = new Set<string>();
+
+const SCHEDULER_TICK_MS = 60 * 1000;
+
+async function runFolderFetch(folderId: string) {
+  if (folderInFlight.has(folderId)) return;
+  folderInFlight.add(folderId);
+  try {
+    const folder = await storage.getFolderById(folderId);
+    if (!folder || !folder.isBackgroundActive) return;
+
+    const sources = await storage.getSourcesByFolderId(folderId);
+    if (sources.length === 0) return;
+
+    log(`[Scheduler] Fetching folder: ${folder.name}`, "scheduler");
+
+    const results = await fetchMultipleSources(sources);
+    const newContentIds: string[] = [];
+
+    for (const result of results) {
+      if (result.error) continue;
+      for (const item of result.items) {
+        try {
+          const created = await storage.createContentIfNotExists(item);
+          if (created) {
+            newContentIds.push(created.id);
+          }
+        } catch (e) {
+          // skip duplicates
+        }
+      }
+      await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
+    }
+
+    if (newContentIds.length > 0) {
+      log(`[Scheduler] ${folder.name}: ${newContentIds.length} new items`, "scheduler");
+
+      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+
+      for (const contentId of newContentIds) {
+        try {
+          const contentItem = await storage.getContentById(contentId);
+          if (contentItem && contentItem.title) {
+            const arabicSummary = await generateArabicSummary(
+              contentItem.title,
+              contentItem.summary || "",
+              aiSystemPrompt
+            );
+            if (arabicSummary) {
+              await storage.updateContentArabicSummary(contentId, arabicSummary);
+            }
+
+            const translation = await generateProfessionalTranslation(
+              contentItem.title,
+              contentItem.summary || "",
+              aiSystemPrompt
+            );
+            if (translation) {
+              await storage.updateContentTranslation(
+                contentId,
+                translation.arabicTitle,
+                translation.arabicFullSummary
+              );
+            }
+          }
+        } catch (e) {
+          console.error("Scheduler: translation error", e);
+        }
+      }
+
+      try {
+        await processNewContentNotificationsForFolder(newContentIds, folder);
+      } catch (e) {
+        console.error("Scheduler: notification error", e);
+      }
+    } else {
+      log(`[Scheduler] ${folder.name}: no new items`, "scheduler");
+    }
+
+    folderLastRun.set(folderId, Date.now());
+  } catch (error) {
+    console.error(`Scheduler error for folder ${folderId}:`, error);
+  } finally {
+    folderInFlight.delete(folderId);
+  }
+}
+
+async function tick() {
+  try {
+    const allFolders = await storage.getAllFolders();
+    const activeFolders = allFolders.filter(f => f.isBackgroundActive);
+
+    for (const folder of activeFolders) {
+      const lastRun = folderLastRun.get(folder.id) || 0;
+      const intervalMs = (folder.refreshInterval || 60) * 60 * 1000;
+      const elapsed = Date.now() - lastRun;
+
+      if (elapsed >= intervalMs) {
+        runFolderFetch(folder.id);
+      }
+    }
+  } catch (error) {
+    console.error("Scheduler tick error:", error);
+  }
+}
+
+let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startScheduler() {
+  if (schedulerInterval) return;
+  log("Background scheduler started", "scheduler");
+  schedulerInterval = setInterval(tick, SCHEDULER_TICK_MS);
+  setTimeout(tick, 5000);
+}
+
+export function stopScheduler() {
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+    schedulerInterval = null;
+    log("Background scheduler stopped", "scheduler");
+  }
+}

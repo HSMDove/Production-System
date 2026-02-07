@@ -13,7 +13,7 @@ export interface FolderWithSources extends Folder {
 }
 
 export interface ContentWithSource extends Content {
-  source: Source;
+  source: Source | null;
 }
 
 export interface IdeaWithFolder extends Idea {

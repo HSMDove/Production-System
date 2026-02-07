@@ -12,6 +12,7 @@ import ContentCalendar from "@/pages/calendar";
 import Analytics from "@/pages/analytics";
 import Trends from "@/pages/trends";
 import Settings from "@/pages/settings";
+import SplitView from "@/pages/split-view";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/trends" component={Trends} />
       <Route path="/settings" component={Settings} />
+      <Route path="/split-view" component={SplitView} />
       <Route component={NotFound} />
     </Switch>
   );

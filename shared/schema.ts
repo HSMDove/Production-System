@@ -9,6 +9,10 @@ export const folders = pgTable("folders", {
   name: text("name").notNull(),
   description: text("description"),
   color: text("color").default("#3b82f6"),
+  isBackgroundActive: boolean("is_background_active").default(false).notNull(),
+  refreshInterval: integer("refresh_interval").default(60).notNull(),
+  notifySlack: boolean("notify_slack").default(true).notNull(),
+  notifyTelegram: boolean("notify_telegram").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

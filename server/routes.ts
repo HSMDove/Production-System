@@ -148,23 +148,24 @@ export async function registerRoutes(
       // Generate Arabic translations for new content in the background
       if (newContentIds.length > 0) {
         (async () => {
+          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
           for (const contentId of newContentIds) {
             try {
               const contentItem = await storage.getContentById(contentId);
               if (contentItem && contentItem.title) {
-                // Generate short Arabic summary
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
-                  contentItem.summary || ""
+                  contentItem.summary || "",
+                  aiSystemPrompt
                 );
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
                 }
                 
-                // Generate professional full translation
                 const translation = await generateProfessionalTranslation(
                   contentItem.title,
-                  contentItem.summary || ""
+                  contentItem.summary || "",
+                  aiSystemPrompt
                 );
                 if (translation) {
                   await storage.updateContentTranslation(
@@ -178,7 +179,6 @@ export async function registerRoutes(
               console.error("Error generating Arabic translations:", e);
             }
           }
-          // After translations done, process notifications
           try {
             await processNewContentNotifications(newContentIds);
           } catch (e) {
@@ -343,23 +343,24 @@ export async function registerRoutes(
       // Generate Arabic translations for new content in the background
       if (newContentIds.length > 0) {
         (async () => {
+          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
           for (const contentId of newContentIds) {
             try {
               const contentItem = await storage.getContentById(contentId);
               if (contentItem && contentItem.title) {
-                // Generate short Arabic summary
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
-                  contentItem.summary || ""
+                  contentItem.summary || "",
+                  aiSystemPrompt
                 );
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
                 }
                 
-                // Generate professional full translation
                 const translation = await generateProfessionalTranslation(
                   contentItem.title,
-                  contentItem.summary || ""
+                  contentItem.summary || "",
+                  aiSystemPrompt
                 );
                 if (translation) {
                   await storage.updateContentTranslation(
@@ -373,7 +374,6 @@ export async function registerRoutes(
               console.error("Error generating Arabic translations:", e);
             }
           }
-          // After translations done, process notifications
           try {
             await processNewContentNotifications(newContentIds);
           } catch (e) {

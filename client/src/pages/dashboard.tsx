@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Columns2 } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { FolderCard } from "@/components/folders/folder-card";
 import { AddFolderCard } from "@/components/folders/add-folder-card";
 import { FolderDialog } from "@/components/folders/folder-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -90,11 +93,19 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">المجلدات</h1>
-          <p className="text-muted-foreground mt-1">
-            نظّم مصادرك وأفكارك في مجلدات حسب الموضوع
-          </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">المجلدات</h1>
+            <p className="text-muted-foreground mt-1">
+              نظّم مصادرك وأفكارك في مجلدات حسب الموضوع
+            </p>
+          </div>
+          <Link href="/split-view">
+            <Button variant="outline" className="gap-2" data-testid="button-split-view">
+              <Columns2 className="h-4 w-4" />
+              عرض مقسم
+            </Button>
+          </Link>
         </div>
 
         {isLoading ? (
