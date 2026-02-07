@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -10,7 +10,7 @@ export const folders = pgTable("folders", {
   description: text("description"),
   color: text("color").default("#3b82f6"),
   isBackgroundActive: boolean("is_background_active").default(false).notNull(),
-  refreshInterval: integer("refresh_interval").default(60).notNull(),
+  refreshInterval: real("refresh_interval").default(60).notNull(),
   notifySlack: boolean("notify_slack").default(true).notNull(),
   notifyTelegram: boolean("notify_telegram").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

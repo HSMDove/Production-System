@@ -7,7 +7,7 @@ import { log } from "./index";
 const folderLastRun = new Map<string, number>();
 const folderInFlight = new Set<string>();
 
-const SCHEDULER_TICK_MS = 60 * 1000;
+const SCHEDULER_TICK_MS = 5 * 1000;
 
 async function runFolderFetch(folderId: string) {
   if (folderInFlight.has(folderId)) return;
@@ -118,6 +118,14 @@ export function startScheduler() {
   log("Background scheduler started", "scheduler");
   schedulerInterval = setInterval(tick, SCHEDULER_TICK_MS);
   setTimeout(tick, 5000);
+}
+
+export function getSchedulerStatus(): Record<string, { lastRun: number; inFlight: boolean }> {
+  const result: Record<string, { lastRun: number; inFlight: boolean }> = {};
+  folderLastRun.forEach((ts, folderId) => {
+    result[folderId] = { lastRun: ts, inFlight: folderInFlight.has(folderId) };
+  });
+  return result;
 }
 
 export function stopScheduler() {

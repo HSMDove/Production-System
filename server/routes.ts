@@ -5,6 +5,7 @@ import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent } from "./openai";
+import { getSchedulerStatus } from "./scheduler";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -1012,6 +1013,14 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Sentiment stats error:", error);
       res.status(500).json({ error: "Failed to fetch sentiment stats" });
+    }
+  });
+
+  app.get("/api/scheduler-status", async (req, res) => {
+    try {
+      res.json(getSchedulerStatus());
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get scheduler status" });
     }
   });
 

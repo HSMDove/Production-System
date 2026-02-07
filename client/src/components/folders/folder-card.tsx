@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Folder, MoreVertical, Pencil, Trash2, Rss, Power, Clock, MessageSquare } from "lucide-react";
+import { Folder, MoreVertical, Pencil, Trash2, Rss, Power, Clock, MessageSquare, Timer, Loader2 } from "lucide-react";
 import { SiTelegram, SiSlack } from "react-icons/si";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import {
 import type { Folder as FolderType } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface FolderCardProps {
@@ -34,7 +35,8 @@ interface FolderCardProps {
   onDelete: (folder: FolderType) => void;
 }
 
-const INTERVAL_OPTIONS = [
+export const INTERVAL_OPTIONS = [
+  { value: "0.25", label: "15 ثانية (تجربة)" },
   { value: "15", label: "15 دقيقة" },
   { value: "30", label: "30 دقيقة" },
   { value: "60", label: "ساعة" },
@@ -42,6 +44,63 @@ const INTERVAL_OPTIONS = [
   { value: "360", label: "6 ساعات" },
   { value: "720", label: "12 ساعة" },
 ];
+
+function formatCountdown(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "الآن...";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export function FolderCountdown({ folderId, refreshInterval }: { folderId: string; refreshInterval: number }) {
+  const { data: schedulerStatus } = useQuery<Record<string, { lastRun: number; inFlight: boolean }>>({
+    queryKey: ["/api/scheduler-status"],
+    refetchInterval: 3000,
+  });
+
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const folderStatus = schedulerStatus?.[folderId];
+  const lastRun = folderStatus?.lastRun || 0;
+  const inFlight = folderStatus?.inFlight || false;
+
+  if (inFlight) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`countdown-${folderId}`}>
+        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+        <span>جاري التحديث...</span>
+      </div>
+    );
+  }
+
+  const intervalMs = refreshInterval * 60 * 1000;
+  const nextRun = lastRun + intervalMs;
+  const remainingMs = Math.max(0, nextRun - now);
+  const remainingSec = Math.ceil(remainingMs / 1000);
+
+  if (lastRun === 0) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`countdown-${folderId}`}>
+        <Timer className="h-3 w-3" />
+        <span>في الانتظار...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`countdown-${folderId}`}>
+      <Timer className="h-3 w-3" />
+      <span className="tabular-nums" dir="ltr">{formatCountdown(remainingSec)}</span>
+    </div>
+  );
+}
 
 export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   const sourceCount = folder._count?.sources ?? 0;
@@ -63,7 +122,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   };
 
   const handleIntervalChange = (value: string) => {
-    updateMutation.mutate({ refreshInterval: parseInt(value) });
+    updateMutation.mutate({ refreshInterval: parseFloat(value) });
   };
 
   const handleToggleTelegram = (e: React.MouseEvent) => {
@@ -198,6 +257,10 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
                 </div>
               )}
             </div>
+
+            {folder.isBackgroundActive && (
+              <FolderCountdown folderId={folder.id} refreshInterval={folder.refreshInterval} />
+            )}
 
             <div className="flex items-center gap-1">
               <Tooltip>

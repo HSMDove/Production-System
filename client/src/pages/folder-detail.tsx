@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, Sparkles, RefreshCw, Languages } from "lucide-react";
+import { ChevronLeft, Sparkles, RefreshCw, Languages, Power, Clock } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
@@ -11,9 +11,23 @@ import { GroupedContentFeed } from "@/components/content/grouped-content-feed";
 import { ContentFilters } from "@/components/content/content-filters";
 import { GenerateIdeasDialog } from "@/components/ideas/generate-ideas-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
+import { FolderCountdown, INTERVAL_OPTIONS } from "@/components/folders/folder-card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Folder, Source, ContentWithSource } from "@/lib/types";
@@ -159,6 +173,16 @@ export default function FolderDetail() {
     },
   });
 
+  const updateFolderMutation = useMutation({
+    mutationFn: async (data: Partial<Folder>) => {
+      return apiRequest("PATCH", `/api/folders/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+    },
+  });
+
   const generateIdeasMutation = useMutation({
     mutationFn: async ({ days, templateId }: { days: number; templateId?: string }) => {
       return apiRequest("POST", `/api/folders/${id}/generate-ideas`, { days, templateId });
@@ -267,11 +291,57 @@ export default function FolderDetail() {
                 <ChevronLeft className="h-5 w-5 rtl-flip" />
               </Button>
             </Link>
-            <div>
+            <div className="space-y-2">
               <h1 className="text-2xl font-bold" data-testid="text-folder-title">{folder.name}</h1>
               {folder.description && (
                 <p className="text-muted-foreground text-sm">{folder.description}</p>
               )}
+              <div className="flex items-center gap-3 flex-wrap">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => updateFolderMutation.mutate({ isBackgroundActive: !folder.isBackgroundActive })}
+                      data-testid="toggle-folder-background"
+                    >
+                      <Power className={`h-3.5 w-3.5 ${folder.isBackgroundActive ? "text-green-500" : "text-muted-foreground"}`} />
+                      <Switch
+                        checked={folder.isBackgroundActive}
+                        className="scale-75 origin-right pointer-events-none"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {folder.isBackgroundActive ? "تلقائي" : "متوقف"}
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{folder.isBackgroundActive ? "إيقاف التحديث التلقائي" : "تفعيل التحديث التلقائي"}</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {folder.isBackgroundActive && (
+                  <>
+                    <Select
+                      value={String(folder.refreshInterval)}
+                      onValueChange={(v) => updateFolderMutation.mutate({ refreshInterval: parseFloat(v) })}
+                    >
+                      <SelectTrigger
+                        className="h-7 text-xs w-auto gap-1 min-w-0"
+                        data-testid="select-folder-interval"
+                      >
+                        <Clock className="h-3 w-3 flex-shrink-0" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INTERVAL_OPTIONS.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FolderCountdown folderId={folder.id} refreshInterval={folder.refreshInterval} />
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
