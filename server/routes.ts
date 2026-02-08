@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
+import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent } from "./openai";
 import { getSchedulerStatus } from "./scheduler";
@@ -176,6 +176,95 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating ideas:", error);
       res.status(500).json({ error: "Failed to generate ideas" });
+    }
+  });
+
+  app.post("/api/generate-smart-ideas", async (req, res) => {
+    try {
+      const { folderId, days, templates: templateRequests } = req.body as {
+        folderId: string;
+        days: number;
+        templates: Array<{ templateId: string; count: number }>;
+      };
+
+      if (!folderId || !templateRequests || templateRequests.length === 0) {
+        return res.status(400).json({ error: "folderId and templates are required" });
+      }
+
+      const folder = await storage.getFolderById(folderId);
+      if (!folder) {
+        return res.status(404).json({ error: "Folder not found" });
+      }
+
+      const allContent = await storage.getContentByFolderId(folderId);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - (days || 7));
+      const recentContent = allContent.filter((item) => {
+        const pubDate = item.publishedAt || item.fetchedAt;
+        return pubDate >= cutoffDate;
+      });
+
+      const contentToUse = recentContent.length > 0 ? recentContent : allContent.slice(0, 20);
+
+      if (contentToUse.length === 0) {
+        return res.status(400).json({ error: "No content available in this folder" });
+      }
+
+      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+
+      const allResults = [];
+
+      for (const templateReq of templateRequests) {
+        if (templateReq.count <= 0) continue;
+
+        const template = await storage.getPromptTemplateById(templateReq.templateId);
+        if (!template) continue;
+
+        const ideas = await generateSmartIdeasForTemplate(
+          contentToUse,
+          folder.name,
+          folderId,
+          template.id,
+          template.name,
+          template.promptContent,
+          templateReq.count,
+          aiSystemPrompt
+        );
+
+        for (const idea of ideas) {
+          const ideaData = {
+            folderId: idea.folderId,
+            title: idea.title,
+            description: idea.description,
+            category: idea.category,
+            status: "raw_idea" as const,
+            estimatedDuration: idea.estimatedDuration,
+            targetAudience: idea.targetAudience,
+            thumbnailText: idea.thumbnailText,
+            script: idea.script,
+            sourceContentIds: idea.sourceContentIds,
+            sourceContentTitles: idea.sourceContentTitles,
+            sourceContentUrls: idea.sourceContentUrls,
+            templateId: idea.templateId,
+          };
+
+          try {
+            const saved = await storage.createIdea(ideaData);
+            allResults.push(saved);
+          } catch (e) {
+            console.error("Error saving smart idea:", e);
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        ideas: allResults,
+        totalGenerated: allResults.length,
+      });
+    } catch (error) {
+      console.error("Error generating smart ideas:", error);
+      res.status(500).json({ error: "Failed to generate smart ideas" });
     }
   });
 

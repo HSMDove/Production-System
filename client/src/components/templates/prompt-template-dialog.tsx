@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -22,14 +23,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PromptTemplate } from "@shared/schema";
 
 const formSchema = z.object({
-  name: z.string().min(1, "الاسم مطلوب"),
+  name: z.string().min(1, "اسم السلسلة مطلوب"),
   description: z.string().optional(),
-  promptContent: z.string().min(1, "محتوى القالب مطلوب"),
+  promptContent: z.string().min(1, "تعليمات المحتوى مطلوبة"),
+  defaultCount: z.number().min(1).max(10).default(2),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -51,11 +60,32 @@ export function PromptTemplateDialog({
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: template?.name || "",
-      description: template?.description || "",
-      promptContent: template?.promptContent || getDefaultPromptTemplate(),
+      name: "",
+      description: "",
+      promptContent: "",
+      defaultCount: 2,
     },
   });
+
+  useEffect(() => {
+    if (open) {
+      if (template) {
+        form.reset({
+          name: template.name,
+          description: template.description || "",
+          promptContent: template.promptContent,
+          defaultCount: template.defaultCount ?? 2,
+        });
+      } else {
+        form.reset({
+          name: "",
+          description: "",
+          promptContent: "",
+          defaultCount: 2,
+        });
+      }
+    }
+  }, [open, template, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -101,12 +131,12 @@ export function PromptTemplateDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? "تعديل القالب" : "قالب جديد"}
+            {isEditing ? "تعديل سلسلة المحتوى" : "سلسلة محتوى جديدة"}
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "قم بتعديل محتوى قالب الأوامر"
-              : "أنشئ قالب أوامر مخصص لتوليد الأفكار"}
+              ? "عدّل اسم السلسلة وتعليمات الذكاء الاصطناعي"
+              : "أنشئ سلسلة محتوى جديدة مع تعليمات مخصصة للذكاء الاصطناعي"}
           </DialogDescription>
         </DialogHeader>
 
@@ -117,14 +147,17 @@ export function PromptTemplateDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>اسم القالب</FormLabel>
+                  <FormLabel>اسم السلسلة</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="مثال: قالب الأخبار السريعة"
+                      placeholder="مثال: ثلاثيات تقنية، أخبار سريعة، شورتس..."
                       {...field}
                       data-testid="input-template-name"
                     />
                   </FormControl>
+                  <FormDescription>
+                    اسم الفورمات أو السلسلة (مثل: ثلاثيات، أخبار يومية، شورتس)
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -135,10 +168,10 @@ export function PromptTemplateDialog({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>الوصف (اختياري)</FormLabel>
+                  <FormLabel>وصف مختصر (اختياري)</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="وصف مختصر للقالب"
+                      placeholder="وصف قصير يظهر في قائمة السلاسل"
                       {...field}
                       data-testid="input-template-description"
                     />
@@ -150,17 +183,49 @@ export function PromptTemplateDialog({
 
             <FormField
               control={form.control}
+              name="defaultCount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>العدد الافتراضي</FormLabel>
+                  <Select
+                    value={String(field.value)}
+                    onValueChange={(v) => field.onChange(parseInt(v))}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-default-count">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} {n === 1 ? "فكرة" : "أفكار"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    عدد الأفكار الافتراضي عند التوليد
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="promptContent"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>محتوى القالب</FormLabel>
+                  <FormLabel>تعليمات المحتوى</FormLabel>
                   <FormDescription>
-                    استخدم {"{{FOLDER_NAME}}"} لاسم المجلد و {"{{CONTENT_SUMMARY}}"} لملخص المحتوى
+                    اكتب التعليمات التي يتبعها الذكاء الاصطناعي عند توليد أفكار لهذه السلسلة.
+                    استخدم {"{{FOLDER_NAME}}"} لاسم المجلد و {"{{CONTENT_SUMMARY}}"} للأخبار الفعلية و {"{{COUNT}}"} لعدد الأفكار المطلوبة.
                   </FormDescription>
                   <FormControl>
                     <Textarea
-                      className="min-h-[300px] font-mono text-sm"
-                      placeholder="اكتب نص الأمر هنا..."
+                      className="min-h-[250px] font-mono text-sm"
+                      placeholder={`مثال: ابحث في الأخبار التالية عن {{COUNT}} أخبار متعلقة ببعض وادمجها في فيديو واحد بعنوان جذاب...\n\nأو: من الأخبار التالية، اختر {{COUNT}} أخبار مناسبة لفيديو شورتس قصير (أقل من دقيقة)...`}
                       {...field}
                       data-testid="input-template-content"
                     />
@@ -184,7 +249,7 @@ export function PromptTemplateDialog({
                 disabled={isPending}
                 data-testid="button-save-template"
               >
-                {isPending ? "جاري الحفظ..." : isEditing ? "حفظ التغييرات" : "إنشاء القالب"}
+                {isPending ? "جاري الحفظ..." : isEditing ? "حفظ التغييرات" : "إنشاء السلسلة"}
               </Button>
             </DialogFooter>
           </form>
@@ -192,32 +257,4 @@ export function PromptTemplateDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function getDefaultPromptTemplate(): string {
-  return `أنت منتج محتوى تقني عربي متخصص في إنشاء أفكار فيديوهات لقناة يوتيوب تقنية عربية تُدعى "Tech Voice".
-
-بناءً على الأخبار التقنية التالية في مجال "{{FOLDER_NAME}}":
-
-{{CONTENT_SUMMARY}}
-
-قم بإنشاء 3-5 أفكار فيديو مبتكرة. لكل فكرة، قدم:
-- عنوان جذاب بالعربية
-- وصف مختصر (2-3 جمل)
-- نوع الفيديو من القائمة التالية فقط: thalathiyat (ثلاثيات - فيديوهات قصيرة), leh (ليه - شرح أسباب), tech_i_use (تقنية أستخدمها), news_roundup (ملخص أخبار), deep_dive (تعمق), comparison (مقارنة), tutorial (شرح), other (أخرى)
-- المدة التقريبية (مثل: 5-8 دقائق)
-- الجمهور المستهدف
-
-أجب بصيغة JSON فقط بالشكل التالي:
-{
-  "ideas": [
-    {
-      "title": "العنوان",
-      "description": "الوصف",
-      "category": "نوع الفيديو",
-      "estimatedDuration": "المدة",
-      "targetAudience": "الجمهور"
-    }
-  ]
-}`;
 }

@@ -1,4 +1,4 @@
-import { GripVertical, MoreVertical, Pencil, Trash2, FileText, Clock } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2, FileText, Clock, Image, Link2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,12 +105,26 @@ export function IdeaCard({ idea, onEdit, onDelete, isDragging }: IdeaCardProps) 
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {idea.notes && (
-          <div className="mt-2 pt-2 border-t">
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <FileText className="h-3 w-3" />
-              <span className="line-clamp-1">{idea.notes}</span>
-            </div>
+        {(idea.thumbnailText || idea.sourceContentTitles?.length || idea.notes) && (
+          <div className="mt-2 pt-2 border-t space-y-1.5">
+            {idea.thumbnailText && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Image className="h-3 w-3 shrink-0" />
+                <span className="line-clamp-1" data-testid={`text-idea-thumbnail-${idea.id}`}>{idea.thumbnailText}</span>
+              </div>
+            )}
+            {idea.sourceContentTitles && idea.sourceContentTitles.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Link2 className="h-3 w-3 shrink-0" />
+                <span data-testid={`text-idea-sources-count-${idea.id}`}>{idea.sourceContentTitles.length} مصادر</span>
+              </div>
+            )}
+            {idea.notes && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <FileText className="h-3 w-3 shrink-0" />
+                <span className="line-clamp-1">{idea.notes}</span>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

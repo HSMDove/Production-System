@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { LayoutGrid, Table as TableIcon, Plus, Filter } from "lucide-react";
+import { LayoutGrid, Table as TableIcon, Plus, Filter, Sparkles } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { KanbanBoard } from "@/components/ideas/kanban-board";
 import { IdeasTable } from "@/components/ideas/ideas-table";
 import { IdeaDialog } from "@/components/ideas/idea-dialog";
+import { SmartGenerateDialog } from "@/components/ideas/smart-generate-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ export default function Ideas() {
   
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
+  const [smartGenerateOpen, setSmartGenerateOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedIdea, setSelectedIdea] = useState<IdeaWithFolder | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -175,10 +177,20 @@ export default function Ideas() {
               إدارة أفكار الفيديو ومتابعة سير العمل
             </p>
           </div>
-          <Button onClick={handleAddIdea} data-testid="button-add-idea">
-            <Plus className="ml-2 h-4 w-4" />
-            فكرة جديدة
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setSmartGenerateOpen(true)}
+              data-testid="button-smart-generate"
+            >
+              <Sparkles className="ml-2 h-4 w-4" />
+              توليد ذكي
+            </Button>
+            <Button onClick={handleAddIdea} data-testid="button-add-idea">
+              <Plus className="ml-2 h-4 w-4" />
+              فكرة جديدة
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -260,6 +272,11 @@ export default function Ideas() {
         folders={folders}
         onSubmit={handleIdeaSubmit}
         isLoading={createIdeaMutation.isPending || updateIdeaMutation.isPending}
+      />
+
+      <SmartGenerateDialog
+        open={smartGenerateOpen}
+        onOpenChange={setSmartGenerateOpen}
       />
 
       <DeleteDialog

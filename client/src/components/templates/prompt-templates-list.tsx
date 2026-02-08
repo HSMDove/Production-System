@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Star, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, Star, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { PromptTemplateDialog } from "./prompt-template-dialog";
@@ -40,11 +40,11 @@ export function PromptTemplatesList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/prompt-templates"] });
-      toast({ title: "تم حذف القالب" });
+      toast({ title: "تم حذف السلسلة" });
       setDeleteDialogOpen(false);
     },
     onError: () => {
-      toast({ title: "فشل في حذف القالب", variant: "destructive" });
+      toast({ title: "فشل في حذف السلسلة", variant: "destructive" });
     },
   });
 
@@ -68,8 +68,8 @@ export function PromptTemplatesList() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            قوالب الأوامر
+            <Film className="h-5 w-5 text-primary" />
+            سلاسل المحتوى
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -87,26 +87,26 @@ export function PromptTemplatesList() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                قوالب الأوامر
+                <Film className="h-5 w-5 text-primary" />
+                سلاسل المحتوى
               </CardTitle>
               <CardDescription>
-                قوالب مخصصة لتوليد الأفكار بالذكاء الاصطناعي
+                أنشئ فورمات المحتوى الخاصة بك (ثلاثيات، شورتس، أخبار يومية...) مع تعليمات مخصصة للذكاء الاصطناعي
               </CardDescription>
             </div>
             <Button onClick={handleNewTemplate} data-testid="button-new-template">
               <Plus className="h-4 w-4 ml-2" />
-              قالب جديد
+              سلسلة جديدة
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {!templates || templates.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>لا توجد قوالب مخصصة بعد</p>
+              <Film className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p>لا توجد سلاسل محتوى بعد</p>
               <p className="text-sm mt-1">
-                سيتم استخدام القالب الافتراضي لتوليد الأفكار
+                أنشئ سلسلة مثل "ثلاثيات تقنية" أو "شورتس" مع تعليمات مخصصة
               </p>
             </div>
           ) : (
@@ -126,6 +126,9 @@ export function PromptTemplatesList() {
                           افتراضي
                         </Badge>
                       )}
+                      <Badge variant="outline">
+                        {template.defaultCount ?? 2} {(template.defaultCount ?? 2) === 1 ? "فكرة" : "أفكار"}
+                      </Badge>
                     </div>
                     {template.description && (
                       <p className="text-sm text-muted-foreground mt-1 truncate">
@@ -178,7 +181,7 @@ export function PromptTemplatesList() {
       <DeleteDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="حذف القالب"
+        title="حذف السلسلة"
         description={`هل أنت متأكد من حذف "${selectedTemplate?.name}"؟ لا يمكن التراجع عن هذا الإجراء.`}
         onConfirm={() => selectedTemplate && deleteMutation.mutate(selectedTemplate.id)}
         isLoading={deleteMutation.isPending}

@@ -56,6 +56,31 @@ interface GeneratedIdea {
   targetAudience: string;
 }
 
+export interface SmartGeneratedIdea {
+  title: string;
+  thumbnailText: string;
+  script: string;
+  category: IdeaCategory;
+  estimatedDuration: string;
+  targetAudience: string;
+  sourceIndices: number[];
+}
+
+export interface SmartIdeaResult {
+  title: string;
+  thumbnailText: string;
+  script: string;
+  description: string;
+  category: IdeaCategory;
+  estimatedDuration: string;
+  targetAudience: string;
+  sourceContentIds: string[];
+  sourceContentTitles: string[];
+  sourceContentUrls: string[];
+  templateId: string;
+  folderId: string;
+}
+
 const DEFAULT_PROMPT = `أنت منتج محتوى تقني عربي متخصص في إنشاء أفكار فيديوهات لقناة يوتيوب تقنية عربية تُدعى "Tech Voice".
 
 بناءً على الأخبار التقنية التالية في مجال "{{FOLDER_NAME}}":
@@ -512,5 +537,128 @@ export async function rewriteContent(
   } catch (error) {
     console.error("Error rewriting content:", error);
     return title;
+  }
+}
+
+export async function generateSmartIdeasForTemplate(
+  contentItems: Content[],
+  folderName: string,
+  folderId: string,
+  templateId: string,
+  templateName: string,
+  templatePrompt: string,
+  count: number,
+  customSystemPrompt?: string | null
+): Promise<SmartIdeaResult[]> {
+  if (contentItems.length === 0) {
+    return [];
+  }
+
+  const numberedContent = contentItems
+    .slice(0, 20)
+    .map((item, i) => {
+      const title = item.arabicTitle || item.title;
+      const summary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
+      return `[${i + 1}] ${title}${summary ? `\n    ${summary}` : ""}\n    رابط: ${item.originalUrl}`;
+    })
+    .join("\n\n");
+
+  const hasUserTemplate = templatePrompt && templatePrompt.trim().length > 0;
+
+  let userPrompt: string;
+
+  if (hasUserTemplate) {
+    userPrompt = templatePrompt
+      .replace(/\{\{FOLDER_NAME\}\}/g, folderName)
+      .replace(/\{\{CONTENT_SUMMARY\}\}/g, numberedContent)
+      .replace(/\{\{COUNT\}\}/g, String(count));
+
+    userPrompt += `\n\nهذه هي الأخبار المتاحة (مرقمة):\n\n${numberedContent}\n\n`;
+  } else {
+    userPrompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
+
+سلسلة المحتوى: "${templateName}"
+المجلد: "${folderName}"
+عدد الأفكار المطلوبة: ${count}
+
+هذه هي الأخبار الحقيقية المتاحة (مرقمة):
+
+${numberedContent}
+
+`;
+  }
+
+  userPrompt += `
+مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
+
+قواعد مهمة جداً:
+1. يجب أن تستند كل فكرة إلى أخبار حقيقية من القائمة أعلاه فقط - لا تخترع أخباراً
+2. في حقل "sourceIndices" ضع أرقام الأخبار التي استخدمتها (مثل [1, 3, 5])
+3. اكتب عنوان فيديو جذاب بالعربية
+4. اكتب نص مصغّر (Thumbnail Text) - عبارة قصيرة جداً مناسبة لصورة مصغرة
+5. اكتب سكريبت/ملخص تفصيلي للفيديو (3-5 فقرات)
+6. حدد نوع الفيديو من: thalathiyat, leh, tech_i_use, news_roundup, deep_dive, comparison, tutorial, other
+
+أجب بصيغة JSON فقط:
+{
+  "ideas": [
+    {
+      "title": "عنوان الفيديو الجذاب",
+      "thumbnailText": "نص الصورة المصغرة",
+      "script": "السكريبت التفصيلي للفيديو...",
+      "category": "نوع الفيديو",
+      "estimatedDuration": "المدة التقريبية",
+      "targetAudience": "الجمهور المستهدف",
+      "sourceIndices": [1, 3]
+    }
+  ]
+}`;
+
+  const systemMessage = customSystemPrompt
+    ? `${customSystemPrompt}\n\nأنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم فقط الأخبار الحقيقية المقدمة. أجب دائماً بصيغة JSON صالحة.`
+    : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم فقط الأخبار الحقيقية المقدمة لإنشاء أفكار الفيديو. لا تخترع أخباراً. أجب دائماً بصيغة JSON صالحة.";
+
+  try {
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+    });
+
+    const responseContent = response.choices[0]?.message?.content;
+    if (!responseContent) {
+      return [];
+    }
+
+    const parsed = JSON.parse(responseContent) as { ideas: SmartGeneratedIdea[] };
+
+    return parsed.ideas.map((idea) => {
+      const usedContent = (idea.sourceIndices || [])
+        .filter((idx) => idx >= 1 && idx <= contentItems.length)
+        .map((idx) => contentItems[idx - 1]);
+
+      return {
+        title: idea.title,
+        thumbnailText: idea.thumbnailText || "",
+        script: idea.script || "",
+        description: idea.script ? idea.script.substring(0, 200) + "..." : "",
+        category: idea.category || "other",
+        estimatedDuration: idea.estimatedDuration || "",
+        targetAudience: idea.targetAudience || "",
+        sourceContentIds: usedContent.map((c) => c.id),
+        sourceContentTitles: usedContent.map((c) => c.arabicTitle || c.title),
+        sourceContentUrls: usedContent.map((c) => c.originalUrl),
+        templateId,
+        folderId,
+      };
+    });
+  } catch (error) {
+    console.error("Error generating smart ideas:", error);
+    throw new Error("Failed to generate smart ideas from AI");
   }
 }
