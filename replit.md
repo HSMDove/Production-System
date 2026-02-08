@@ -122,7 +122,7 @@ Preferred communication style: Simple, everyday language.
 *Prompt Templates Table*
 - Custom AI prompt templates for idea generation (renamed to "Content Templates" in UI)
 - Fields: id, name, description, promptContent, isDefault, defaultCount, timestamps
-- Supports placeholders: {{FOLDER_NAME}}, {{CONTENT_SUMMARY}}, {{COUNT}}
+- Template prompt content is plain text instructions (no placeholders needed) - the system auto-injects folder names, content, and count
 - defaultCount field sets the default number of ideas to generate per template (1-10)
 
 *Idea Comments Table*

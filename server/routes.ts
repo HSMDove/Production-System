@@ -181,22 +181,32 @@ export async function registerRoutes(
 
   app.post("/api/generate-smart-ideas", async (req, res) => {
     try {
-      const { folderId, days, templates: templateRequests } = req.body as {
-        folderId: string;
+      const { folderIds, days, templates: templateRequests } = req.body as {
+        folderIds: string[];
         days: number;
         templates: Array<{ templateId: string; count: number }>;
       };
 
-      if (!folderId || !templateRequests || templateRequests.length === 0) {
-        return res.status(400).json({ error: "folderId and templates are required" });
+      if (!folderIds || folderIds.length === 0 || !templateRequests || templateRequests.length === 0) {
+        return res.status(400).json({ error: "folderIds and templates are required" });
       }
 
-      const folder = await storage.getFolderById(folderId);
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
+      const folders = [];
+      const allContent: any[] = [];
+
+      for (const fId of folderIds) {
+        const folder = await storage.getFolderById(fId);
+        if (folder) {
+          folders.push(folder);
+          const content = await storage.getContentByFolderId(fId);
+          allContent.push(...content);
+        }
       }
 
-      const allContent = await storage.getContentByFolderId(folderId);
+      if (folders.length === 0) {
+        return res.status(404).json({ error: "No valid folders found" });
+      }
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - (days || 7));
       const recentContent = allContent.filter((item) => {
@@ -204,11 +214,14 @@ export async function registerRoutes(
         return pubDate >= cutoffDate;
       });
 
-      const contentToUse = recentContent.length > 0 ? recentContent : allContent.slice(0, 20);
+      const contentToUse = recentContent.length > 0 ? recentContent : allContent.slice(0, 30);
 
       if (contentToUse.length === 0) {
-        return res.status(400).json({ error: "No content available in this folder" });
+        return res.status(400).json({ error: "No content available in the selected folders" });
       }
+
+      const folderNames = folders.map((f) => f.name).join("، ");
+      const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
       const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
 
@@ -222,8 +235,8 @@ export async function registerRoutes(
 
         const ideas = await generateSmartIdeasForTemplate(
           contentToUse,
-          folder.name,
-          folderId,
+          folderNames,
+          primaryFolderId,
           template.id,
           template.name,
           template.promptContent,

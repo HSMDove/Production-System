@@ -78,7 +78,7 @@ export interface SmartIdeaResult {
   sourceContentTitles: string[];
   sourceContentUrls: string[];
   templateId: string;
-  folderId: string;
+  folderId: string | null;
 }
 
 const DEFAULT_PROMPT = `أنت منتج محتوى تقني عربي متخصص في إنشاء أفكار فيديوهات لقناة يوتيوب تقنية عربية تُدعى "Tech Voice".
@@ -542,8 +542,8 @@ export async function rewriteContent(
 
 export async function generateSmartIdeasForTemplate(
   contentItems: Content[],
-  folderName: string,
-  folderId: string,
+  folderNames: string,
+  folderId: string | null,
   templateId: string,
   templateName: string,
   templatePrompt: string,
@@ -555,7 +555,7 @@ export async function generateSmartIdeasForTemplate(
   }
 
   const numberedContent = contentItems
-    .slice(0, 20)
+    .slice(0, 30)
     .map((item, i) => {
       const title = item.arabicTitle || item.title;
       const summary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
@@ -563,22 +563,12 @@ export async function generateSmartIdeasForTemplate(
     })
     .join("\n\n");
 
-  const hasUserTemplate = templatePrompt && templatePrompt.trim().length > 0;
+  const hasUserInstructions = templatePrompt && templatePrompt.trim().length > 0;
 
-  let userPrompt: string;
-
-  if (hasUserTemplate) {
-    userPrompt = templatePrompt
-      .replace(/\{\{FOLDER_NAME\}\}/g, folderName)
-      .replace(/\{\{CONTENT_SUMMARY\}\}/g, numberedContent)
-      .replace(/\{\{COUNT\}\}/g, String(count));
-
-    userPrompt += `\n\nهذه هي الأخبار المتاحة (مرقمة):\n\n${numberedContent}\n\n`;
-  } else {
-    userPrompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
+  let userPrompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
 
 سلسلة المحتوى: "${templateName}"
-المجلد: "${folderName}"
+المجلدات: "${folderNames}"
 عدد الأفكار المطلوبة: ${count}
 
 هذه هي الأخبار الحقيقية المتاحة (مرقمة):
@@ -586,10 +576,15 @@ export async function generateSmartIdeasForTemplate(
 ${numberedContent}
 
 `;
+
+  if (hasUserInstructions) {
+    userPrompt += `تعليمات إضافية من المنتج لهذه السلسلة:
+${templatePrompt}
+
+`;
   }
 
-  userPrompt += `
-مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
+  userPrompt += `مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
 
 قواعد مهمة جداً:
 1. يجب أن تستند كل فكرة إلى أخبار حقيقية من القائمة أعلاه فقط - لا تخترع أخباراً

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, Sparkles, RefreshCw, Languages, Power, Clock } from "lucide-react";
+import { ChevronLeft, RefreshCw, Languages, Power, Clock } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
@@ -9,7 +9,6 @@ import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
 import { GroupedContentFeed } from "@/components/content/grouped-content-feed";
 import { ContentFilters } from "@/components/content/content-filters";
-import { GenerateIdeasDialog } from "@/components/ideas/generate-ideas-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { FolderCountdown, INTERVAL_OPTIONS } from "@/components/folders/folder-card";
 import { Button } from "@/components/ui/button";
@@ -38,14 +37,10 @@ export default function FolderDetail() {
   
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [selectedFilterSourceId, setSelectedFilterSourceId] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generateProgress, setGenerateProgress] = useState(0);
-  const [generatedCount, setGeneratedCount] = useState(0);
   
   // Translation toggle - persist in localStorage
   const [showTranslation, setShowTranslation] = useState(() => {
@@ -175,23 +170,6 @@ export default function FolderDetail() {
     },
   });
 
-  const generateIdeasMutation = useMutation({
-    mutationFn: async ({ days, templateId }: { days: number; templateId?: string }) => {
-      return apiRequest("POST", `/api/folders/${id}/generate-ideas`, { days, templateId });
-    },
-    onSuccess: (data: { ideas: any[] }) => {
-      setGenerateProgress(100);
-      setGeneratedCount(data.ideas?.length || 0);
-      queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
-      toast({ title: "تم توليد الأفكار بنجاح", description: `تم إنشاء ${data.ideas?.length || 0} فكرة جديدة` });
-    },
-    onError: () => {
-      setIsGenerating(false);
-      setGenerateDialogOpen(false);
-      toast({ title: "حدث خطأ", description: "فشل في توليد الأفكار", variant: "destructive" });
-    },
-  });
-
   // Auto-refresh content when entering the folder
   const previousFolderId = useRef<string | null>(null);
   
@@ -224,12 +202,6 @@ export default function FolderDetail() {
     } else {
       createSourceMutation.mutate(values);
     }
-  };
-
-  const handleGenerateIdeas = (days: number, templateId?: string) => {
-    setIsGenerating(true);
-    setGenerateProgress(30);
-    generateIdeasMutation.mutate({ days, templateId });
   };
 
   if (folderLoading) {
@@ -341,10 +313,6 @@ export default function FolderDetail() {
               <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">تحديث</span>
             </Button>
-            <Button size="sm" onClick={() => setGenerateDialogOpen(true)} data-testid="button-generate-ideas" className="gap-1.5">
-              <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">أفكار</span>
-            </Button>
           </div>
         </div>
 
@@ -423,24 +391,6 @@ export default function FolderDetail() {
         isLoading={deleteSourceMutation.isPending}
       />
 
-      <GenerateIdeasDialog
-        open={generateDialogOpen}
-        onOpenChange={(open) => {
-          if (!isGenerating || generateProgress >= 100) {
-            setGenerateDialogOpen(open);
-            if (!open) {
-              setIsGenerating(false);
-              setGenerateProgress(0);
-              setGeneratedCount(0);
-            }
-          }
-        }}
-        folderName={folder.name}
-        onGenerate={handleGenerateIdeas}
-        isGenerating={isGenerating}
-        progress={generateProgress}
-        generatedCount={generatedCount}
-      />
     </MainLayout>
   );
 }

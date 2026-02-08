@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Sparkles, Loader2, Check, Minus, Plus, ExternalLink, Image, FileText, Link2 } from "lucide-react";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -44,7 +45,7 @@ export function SmartGenerateDialog({
 }: SmartGenerateDialogProps) {
   const { toast } = useToast();
   const [days, setDays] = useState("7");
-  const [selectedFolderId, setSelectedFolderId] = useState<string>("");
+  const [selectedFolderIds, setSelectedFolderIds] = useState<string[]>([]);
   const [templateCounts, setTemplateCounts] = useState<TemplateCount[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -71,10 +72,28 @@ export function SmartGenerateDialog({
   }, [templates, templateCounts.length]);
 
   useEffect(() => {
-    if (folders && folders.length > 0 && !selectedFolderId) {
-      setSelectedFolderId(folders[0].id);
+    if (folders && folders.length > 0 && selectedFolderIds.length === 0) {
+      setSelectedFolderIds(folders.map((f) => f.id));
     }
-  }, [folders, selectedFolderId]);
+  }, [folders, selectedFolderIds.length]);
+
+  const allSelected = folders ? selectedFolderIds.length === folders.length : false;
+
+  const toggleAllFolders = () => {
+    if (allSelected) {
+      setSelectedFolderIds([]);
+    } else if (folders) {
+      setSelectedFolderIds(folders.map((f) => f.id));
+    }
+  };
+
+  const toggleFolder = (folderId: string) => {
+    setSelectedFolderIds((prev) =>
+      prev.includes(folderId)
+        ? prev.filter((id) => id !== folderId)
+        : [...prev, folderId]
+    );
+  };
 
   const updateCount = (templateId: string, delta: number) => {
     setTemplateCounts((prev) =>
@@ -86,19 +105,11 @@ export function SmartGenerateDialog({
     );
   };
 
-  const setCount = (templateId: string, count: number) => {
-    setTemplateCounts((prev) =>
-      prev.map((tc) =>
-        tc.templateId === templateId ? { ...tc, count } : tc
-      )
-    );
-  };
-
   const totalIdeas = templateCounts.reduce((sum, tc) => sum + tc.count, 0);
   const activeTemplates = templateCounts.filter((tc) => tc.count > 0);
 
   const handleGenerate = async () => {
-    if (!selectedFolderId || activeTemplates.length === 0) return;
+    if (selectedFolderIds.length === 0 || activeTemplates.length === 0) return;
 
     setIsGenerating(true);
     setProgress(10);
@@ -107,7 +118,7 @@ export function SmartGenerateDialog({
     try {
       setProgress(30);
       const response = await apiRequest("POST", "/api/generate-smart-ideas", {
-        folderId: selectedFolderId,
+        folderIds: selectedFolderIds,
         days: parseInt(days),
         templates: activeTemplates.map((tc) => ({
           templateId: tc.templateId,
@@ -118,7 +129,7 @@ export function SmartGenerateDialog({
       setProgress(90);
 
       const data = response as { success?: boolean; ideas?: Idea[]; totalGenerated?: number; error?: string };
-      
+
       if (data.error || !data.ideas) {
         throw new Error(data.error || "Invalid response from server");
       }
@@ -153,7 +164,10 @@ export function SmartGenerateDialog({
     }, 300);
   };
 
-  const selectedFolder = folders?.find((f) => f.id === selectedFolderId);
+  const selectedFolderNames = folders
+    ?.filter((f) => selectedFolderIds.includes(f.id))
+    .map((f) => f.name)
+    .join("، ") || "";
 
   if (showResults && generatedIdeas.length > 0) {
     return (
@@ -165,7 +179,7 @@ export function SmartGenerateDialog({
               تم توليد {generatedIdeas.length} فكرة
             </DialogTitle>
             <DialogDescription>
-              أفكار مبنية على الأخبار الحقيقية من مجلد "{selectedFolder?.name}"
+              أفكار مبنية على الأخبار الحقيقية من {selectedFolderIds.length > 1 ? "عدة مجلدات" : `مجلد "${selectedFolderNames}"`}
             </DialogDescription>
           </DialogHeader>
 
@@ -196,44 +210,73 @@ export function SmartGenerateDialog({
             توليد أفكار ذكية
           </DialogTitle>
           <DialogDescription>
-            اختر سلاسل المحتوى وعدد الأفكار لكل سلسلة، والذكاء الاصطناعي سيولّد أفكاراً مبنية على الأخبار الحقيقية
+            اختر المجلدات وسلاسل المحتوى، والذكاء الاصطناعي سيولّد أفكاراً مبنية على الأخبار الحقيقية
           </DialogDescription>
         </DialogHeader>
 
         {!isGenerating ? (
           <>
             <div className="space-y-5 py-2 flex-1 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>المجلد</Label>
-                  <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
-                    <SelectTrigger data-testid="select-folder">
-                      <SelectValue placeholder="اختر المجلد" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {folders?.map((folder) => (
-                        <SelectItem key={folder.id} value={folder.id}>
-                          {folder.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-medium">المجلدات</Label>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="select-all-folders"
+                      checked={allSelected}
+                      onCheckedChange={toggleAllFolders}
+                      data-testid="checkbox-all-folders"
+                    />
+                    <label htmlFor="select-all-folders" className="text-sm cursor-pointer">
+                      {allSelected ? "إلغاء الكل" : "تحديد الكل"}
+                    </label>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>فترة الأخبار</Label>
-                  <Select value={days} onValueChange={setDays}>
-                    <SelectTrigger data-testid="select-days">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">يوم واحد</SelectItem>
-                      <SelectItem value="3">3 أيام</SelectItem>
-                      <SelectItem value="7">أسبوع</SelectItem>
-                      <SelectItem value="14">أسبوعين</SelectItem>
-                      <SelectItem value="30">شهر</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-2">
+                  {folders?.map((folder) => {
+                    const isSelected = selectedFolderIds.includes(folder.id);
+                    return (
+                      <label
+                        key={folder.id}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                          isSelected ? "border-primary/40 bg-primary/5" : "border-border"
+                        }`}
+                        data-testid={`folder-checkbox-${folder.id}`}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleFolder(folder.id)}
+                        />
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className="h-3 w-3 rounded-full shrink-0"
+                            style={{ backgroundColor: folder.color || "#6b7280" }}
+                          />
+                          <span className="text-sm font-medium truncate">{folder.name}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
+                {selectedFolderIds.length === 0 && (
+                  <p className="text-xs text-destructive">اختر مجلداً واحداً على الأقل</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>فترة الأخبار</Label>
+                <Select value={days} onValueChange={setDays}>
+                  <SelectTrigger data-testid="select-days">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">يوم واحد</SelectItem>
+                    <SelectItem value="3">3 أيام</SelectItem>
+                    <SelectItem value="7">أسبوع</SelectItem>
+                    <SelectItem value="14">أسبوعين</SelectItem>
+                    <SelectItem value="30">شهر</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <Separator />
@@ -326,7 +369,7 @@ export function SmartGenerateDialog({
               </Button>
               <Button
                 onClick={handleGenerate}
-                disabled={totalIdeas === 0 || !selectedFolderId || !templates || templates.length === 0}
+                disabled={totalIdeas === 0 || selectedFolderIds.length === 0 || !templates || templates.length === 0}
                 data-testid="button-start-generate"
               >
                 <Sparkles className="ml-2 h-4 w-4" />
