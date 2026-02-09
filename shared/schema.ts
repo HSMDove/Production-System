@@ -67,6 +67,7 @@ export const content = pgTable("content", {
   keywords: text("keywords").array(),
   notifiedAt: timestamp("notified_at"),
   rewrittenContent: text("rewritten_content"),
+  usedForIdeas: boolean("used_for_ideas").default(false).notNull(),
 });
 
 export const contentRelations = relations(content, ({ one }) => ({

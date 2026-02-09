@@ -171,29 +171,25 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Folder not found" });
       }
       
-      const content = await storage.getContentByFolderId(req.params.id);
-      if (content.length === 0) {
-        return res.status(400).json({ error: "No content available to generate ideas from" });
+      const allUnusedContent = await storage.getUnusedContentByFolderId(req.params.id);
+      if (allUnusedContent.length === 0) {
+        return res.status(400).json({ error: "لا توجد أخبار جديدة غير مستخدمة. كل الأخبار تم استخدامها في توليد أفكار سابقة." });
       }
       
-      // Get custom template if specified
-      // "builtin" = use built-in prompt (no template)
-      // undefined = use user's default template if exists
-      // any other value = use the specified template ID
+      const contentToFeed = allUnusedContent.slice(0, 10);
+      
       let template = null;
       const templateId = req.body.templateId as string | undefined;
       if (templateId && templateId !== "builtin") {
         template = await storage.getPromptTemplateById(templateId);
       } else if (!templateId) {
-        // No template specified - use user's default if exists
         template = await storage.getDefaultPromptTemplate();
       }
-      // If templateId === "builtin", template stays null (use built-in prompt)
       
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
       
-      const generatedIdeas = await generateIdeasFromContent(content, folder.name, folder.id, template, existingTitles);
+      const generatedIdeas = await generateIdeasFromContent(contentToFeed, folder.name, folder.id, template, existingTitles);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -210,6 +206,10 @@ export async function registerRoutes(
         } catch (e) {
           console.error("Error saving idea:", e);
         }
+      }
+      
+      if (savedIdeas.length > 0) {
+        await storage.markContentUsedForIdeas(contentToFeed.map(c => c.id));
       }
       
       res.json({ 
@@ -236,14 +236,14 @@ export async function registerRoutes(
       }
 
       const folders = [];
-      const allContent: any[] = [];
+      const allUnusedContent: any[] = [];
 
       for (const fId of folderIds) {
         const folder = await storage.getFolderById(fId);
         if (folder) {
           folders.push(folder);
-          const content = await storage.getContentByFolderId(fId);
-          allContent.push(...content);
+          const unusedContent = await storage.getUnusedContentByFolderId(fId);
+          allUnusedContent.push(...unusedContent);
         }
       }
 
@@ -251,18 +251,24 @@ export async function registerRoutes(
         return res.status(404).json({ error: "No valid folders found" });
       }
 
+      if (allUnusedContent.length === 0) {
+        return res.status(400).json({ error: "لا توجد أخبار جديدة غير مستخدمة. كل الأخبار تم استخدامها في توليد أفكار سابقة." });
+      }
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - (days || 7));
-      const recentContent = allContent.filter((item) => {
+      const recentContent = allUnusedContent.filter((item) => {
         const pubDate = item.publishedAt || item.fetchedAt;
         return pubDate >= cutoffDate;
       });
 
-      const contentToUse = recentContent.length > 0 ? recentContent : allContent.slice(0, 30);
+      let contentPool = recentContent.length > 0 ? recentContent : allUnusedContent.slice(0, 30);
 
-      if (contentToUse.length === 0) {
-        return res.status(400).json({ error: "No content available in the selected folders" });
+      if (contentPool.length === 0) {
+        return res.status(400).json({ error: "لا توجد أخبار جديدة في الفترة المحددة. جرب زيادة فترة الأخبار أو أضف مصادر جديدة." });
       }
+
+      const contentToUse = contentPool.slice(0, 30);
 
       const folderNames = folders.map((f) => f.name).join("، ");
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
@@ -318,6 +324,11 @@ export async function registerRoutes(
             console.error("Error saving smart idea:", e);
           }
         }
+      }
+
+      if (allResults.length > 0) {
+        const usedContentIds = contentToUse.map((c: any) => c.id);
+        await storage.markContentUsedForIdeas(usedContentIds);
       }
 
       res.json({

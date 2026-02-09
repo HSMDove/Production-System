@@ -98,6 +98,9 @@ export interface IStorage {
   getUnnotifiedContent(): Promise<Content[]>;
   markContentNotified(id: string): Promise<Content | undefined>;
   updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined>;
+  
+  getUnusedContentByFolderId(folderId: string): Promise<Content[]>;
+  markContentUsedForIdeas(ids: string[]): Promise<void>;
 
   getAllStyleExamples(): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
@@ -405,6 +408,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(content.id, id))
       .returning();
     return updated;
+  }
+
+  async getUnusedContentByFolderId(folderId: string): Promise<Content[]> {
+    return db
+      .select()
+      .from(content)
+      .where(and(eq(content.folderId, folderId), eq(content.usedForIdeas, false)))
+      .orderBy(desc(content.fetchedAt));
+  }
+
+  async markContentUsedForIdeas(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const { inArray } = await import("drizzle-orm");
+    await db
+      .update(content)
+      .set({ usedForIdeas: true })
+      .where(inArray(content.id, ids));
   }
 
   async getAllStyleExamples(): Promise<StyleExample[]> {
