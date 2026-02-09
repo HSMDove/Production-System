@@ -135,6 +135,11 @@ Preferred communication style: Simple, everyday language.
 - Fields: id, ideaId, assigneeName, role (optional), createdAt
 - Cascade delete when parent idea is removed
 
+*Style Examples Table*
+- Past successful video ideas used as style reference for AI learning
+- Fields: id, title, description, thumbnailText, createdAt
+- Managed via Settings page; fed to AI during idea generation (Stage 1: Style Learning)
+
 ### External Dependencies
 
 **AI Services (Provider-Agnostic)**
@@ -143,6 +148,11 @@ Preferred communication style: Simple, everyday language.
 - Custom mode configurable via Settings page: Base URL, optional API Key, Model Name
 - All AI functions dynamically create OpenAI SDK client based on settings from database
 - `rewriteContent()` function for "Tech Voice" style rewriting with custom system prompts
+- `generateSmartView()` function for batch content rewriting into Smart View cards (catchy title, story, thumbnail suggestion)
+- 3-Stage Idea Generation Engine:
+  - Stage 1 (Style Learning): AI reads past successful ideas from style_examples table to learn user's writing style
+  - Stage 2 (News Reading): AI reads current news from selected folders
+  - Stage 3 (Knowledge Expansion): AI uses its own knowledge to complete/expand ideas when news alone is insufficient
 - Uses GPT models for Arabic content understanding and generation
 
 **Notification Pipeline**

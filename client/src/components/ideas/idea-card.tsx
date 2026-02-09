@@ -1,7 +1,10 @@
-import { GripVertical, MoreVertical, Pencil, Trash2, FileText, Clock, Image, Link2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { GripVertical, MoreVertical, Pencil, Trash2, FileText, Clock, Image, Link2, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,10 +20,112 @@ interface IdeaCardProps {
   idea: IdeaWithFolder;
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
+  onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
   isDragging?: boolean;
 }
 
-export function IdeaCard({ idea, onEdit, onDelete, isDragging }: IdeaCardProps) {
+function InlineEditField({ 
+  value, 
+  onSave, 
+  fieldType = "input",
+  className = "",
+  testId,
+}: {
+  value: string;
+  onSave: (newValue: string) => void;
+  fieldType?: "input" | "textarea";
+  className?: string;
+  testId?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const savedRef = useRef(false);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      savedRef.current = false;
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const handleSave = () => {
+    if (savedRef.current) return;
+    savedRef.current = true;
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== value) {
+      onSave(trimmed);
+    }
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    savedRef.current = true;
+    setEditValue(value);
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === "Escape") {
+      handleCancel();
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-start gap-1" onClick={(e) => e.stopPropagation()}>
+        {fieldType === "textarea" ? (
+          <Textarea
+            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSave}
+            className="text-sm min-h-[60px]"
+            data-testid={testId ? `${testId}-editing` : undefined}
+          />
+        ) : (
+          <Input
+            ref={inputRef as React.RefObject<HTMLInputElement>}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSave}
+            className="text-sm"
+            data-testid={testId ? `${testId}-editing` : undefined}
+          />
+        )}
+        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={handleSave} data-testid={testId ? `${testId}-save` : undefined}>
+          <Check className="h-3 w-3" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onMouseDown={handleCancel} data-testid={testId ? `${testId}-cancel` : undefined}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <span 
+      className={`cursor-pointer hover:bg-muted/50 rounded px-0.5 -mx-0.5 transition-colors ${className}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setEditing(true);
+      }}
+      title="اضغط للتعديل"
+      data-testid={testId}
+    >
+      {value}
+    </span>
+  );
+}
+
+export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, isDragging }: IdeaCardProps) {
   const {
     attributes,
     listeners,
@@ -36,6 +141,12 @@ export function IdeaCard({ idea, onEdit, onDelete, isDragging }: IdeaCardProps) 
   };
 
   const categoryColor = categoryColors[idea.category] || categoryColors.other;
+
+  const handleInlineUpdate = (field: string, value: string) => {
+    if (onInlineUpdate) {
+      onInlineUpdate(idea.id, field, value);
+    }
+  };
 
   return (
     <Card
@@ -56,7 +167,15 @@ export function IdeaCard({ idea, onEdit, onDelete, isDragging }: IdeaCardProps) 
           </button>
           <div className="flex-1 min-w-0">
             <h4 className="font-medium leading-tight mb-2 line-clamp-2" data-testid={`text-idea-title-${idea.id}`}>
-              {idea.title}
+              {onInlineUpdate ? (
+                <InlineEditField
+                  value={idea.title}
+                  onSave={(val) => handleInlineUpdate("title", val)}
+                  testId={`inline-edit-title-${idea.id}`}
+                />
+              ) : (
+                idea.title
+              )}
             </h4>
             <div className="flex flex-wrap items-center gap-1.5 mb-2">
               <Badge 
@@ -105,12 +224,36 @@ export function IdeaCard({ idea, onEdit, onDelete, isDragging }: IdeaCardProps) 
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {(idea.thumbnailText || idea.sourceContentTitles?.length || idea.notes) && (
+        {(idea.description || idea.thumbnailText || idea.sourceContentTitles?.length || idea.notes) && (
           <div className="mt-2 pt-2 border-t space-y-1.5">
+            {idea.description && (
+              <div className="text-xs text-muted-foreground">
+                {onInlineUpdate ? (
+                  <InlineEditField
+                    value={idea.description}
+                    onSave={(val) => handleInlineUpdate("description", val)}
+                    fieldType="textarea"
+                    className="line-clamp-2"
+                    testId={`inline-edit-description-${idea.id}`}
+                  />
+                ) : (
+                  <span className="line-clamp-2">{idea.description}</span>
+                )}
+              </div>
+            )}
             {idea.thumbnailText && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Image className="h-3 w-3 shrink-0" />
-                <span className="line-clamp-1" data-testid={`text-idea-thumbnail-${idea.id}`}>{idea.thumbnailText}</span>
+                {onInlineUpdate ? (
+                  <InlineEditField
+                    value={idea.thumbnailText}
+                    onSave={(val) => handleInlineUpdate("thumbnailText", val)}
+                    className="line-clamp-1"
+                    testId={`inline-edit-thumbnail-${idea.id}`}
+                  />
+                ) : (
+                  <span className="line-clamp-1" data-testid={`text-idea-thumbnail-${idea.id}`}>{idea.thumbnailText}</span>
+                )}
               </div>
             )}
             {idea.sourceContentTitles && idea.sourceContentTitles.length > 0 && (

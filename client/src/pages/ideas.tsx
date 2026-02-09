@@ -149,6 +149,23 @@ export default function Ideas() {
     }
   };
 
+  const inlineUpdateMutation = useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; [key: string]: any }) => {
+      return apiRequest("PATCH", `/api/ideas/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
+      toast({ title: "تم التحديث" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل في تحديث الفكرة", variant: "destructive" });
+    },
+  });
+
+  const handleInlineUpdate = (ideaId: string, field: string, value: string) => {
+    inlineUpdateMutation.mutate({ id: ideaId, [field]: value });
+  };
+
   const handleStatusChange = (ideaId: string, newStatus: IdeaStatus) => {
     updateIdeaMutation.mutate({ id: ideaId, status: newStatus });
   };
@@ -249,6 +266,7 @@ export default function Ideas() {
             ideas={filteredIdeas}
             onEdit={handleEditIdea}
             onDelete={handleDeleteIdea}
+            onInlineUpdate={handleInlineUpdate}
             onStatusChange={handleStatusChange}
             activeId={activeId}
             setActiveId={setActiveId}

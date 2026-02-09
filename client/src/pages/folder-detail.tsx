@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, RefreshCw, Languages, Power, Clock } from "lucide-react";
+import { ChevronLeft, RefreshCw, Languages, Power, Clock, Sparkles, Loader2 } from "lucide-react";
+import { SmartViewFeed } from "@/components/content/smart-view-feed";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
@@ -41,6 +42,7 @@ export default function FolderDetail() {
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [selectedFilterSourceId, setSelectedFilterSourceId] = useState<string | null>(null);
+  const [smartViewActive, setSmartViewActive] = useState(false);
   
   // Translation toggle - persist in localStorage
   const [showTranslation, setShowTranslation] = useState(() => {
@@ -159,6 +161,27 @@ export default function FolderDetail() {
       toast({ title: "حدث خطأ", description: "فشل في جلب المحتوى", variant: "destructive" });
     },
   });
+
+  const smartViewMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/folders/${id}/smart-view`, { days: 7 });
+      return response as { cards: Array<{ contentId: string; catchyTitle: string; story: string; thumbnailSuggestion: string; originalUrl: string }> };
+    },
+    onSuccess: () => {
+      setSmartViewActive(true);
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل في تحويل الأخبار للعرض الذكي", variant: "destructive" });
+    },
+  });
+
+  const handleSmartView = () => {
+    if (smartViewActive) {
+      setSmartViewActive(false);
+    } else {
+      smartViewMutation.mutate();
+    }
+  };
 
   const updateFolderMutation = useMutation({
     mutationFn: async (data: Partial<Folder>) => {
@@ -303,6 +326,21 @@ export default function FolderDetail() {
               <span className="hidden xs:inline">{showTranslation ? "عربي" : "إنجليزي"}</span>
             </Button>
             <Button
+              variant={smartViewActive ? "default" : "outline"}
+              size="sm"
+              onClick={handleSmartView}
+              disabled={smartViewMutation.isPending}
+              data-testid="button-smart-view"
+              className="gap-1.5"
+            >
+              {smartViewMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              <span className="mr-2">{smartViewActive ? "العرض العادي" : "العرض الذكي"}</span>
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={() => fetchAllSourcesMutation.mutate()}
@@ -340,7 +378,12 @@ export default function FolderDetail() {
                   onSortOrderChange={setSortOrder}
                 />
                 
-                {selectedFilterSourceId ? (
+                {smartViewActive ? (
+                  <SmartViewFeed 
+                    cards={smartViewMutation.data?.cards || []} 
+                    isLoading={smartViewMutation.isPending} 
+                  />
+                ) : selectedFilterSourceId ? (
                   <GroupedContentFeed 
                     content={filteredContent} 
                     isLoading={contentLoading} 

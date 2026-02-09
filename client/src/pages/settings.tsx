@@ -16,7 +16,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
   Sun, Moon, Monitor, Check, Sparkles, Database, 
   Bell, Send, MessageSquare, Bot, Loader2, 
-  Server, Globe, Key, Cpu, Save, TestTube
+  Server, Globe, Key, Cpu, Save, TestTube,
+  Star, Plus, Trash2, Image
 } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 
@@ -127,6 +128,47 @@ export default function Settings() {
     { value: "dark", label: "داكن", icon: Moon },
     { value: "system", label: "تلقائي", icon: Monitor },
   ] as const;
+
+  const [styleTitle, setStyleTitle] = useState("");
+  const [styleDescription, setStyleDescription] = useState("");
+  const [styleThumbnail, setStyleThumbnail] = useState("");
+
+  const { data: styleExamples } = useQuery<any[]>({
+    queryKey: ["/api/style-examples"],
+  });
+
+  const addStyleMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/style-examples", {
+        title: styleTitle,
+        description: styleDescription || undefined,
+        thumbnailText: styleThumbnail || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
+      setStyleTitle("");
+      setStyleDescription("");
+      setStyleThumbnail("");
+      toast({ title: "تمت الإضافة", description: "تم إضافة المثال بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل إضافة المثال", variant: "destructive" });
+    },
+  });
+
+  const deleteStyleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/style-examples/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
+      toast({ title: "تم الحذف", description: "تم حذف المثال بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حذف المثال", variant: "destructive" });
+    },
+  });
 
   const aiProvider = localSettings.ai_provider || "replit";
   const notificationsEnabled = localSettings.notifications_enabled === "true";
@@ -487,6 +529,106 @@ export default function Settings() {
                   <p className="text-sm font-medium mb-2">النتيجة:</p>
                   <p className="text-sm whitespace-pre-wrap" data-testid="text-ai-test-result">{testAiResult}</p>
                 </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-primary" />
+              أفكاري الناجحة السابقة
+            </CardTitle>
+            <CardDescription>
+              أضف أمثلة من أفكارك الناجحة ليتعلم الذكاء الاصطناعي أسلوبك
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="style-title">عنوان الفكرة</Label>
+                <Input
+                  id="style-title"
+                  placeholder="مثال: أفضل 3 تطبيقات لازم تجربها"
+                  value={styleTitle}
+                  onChange={(e) => setStyleTitle(e.target.value)}
+                  data-testid="input-style-title"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="style-description">وصف الفكرة</Label>
+                <Textarea
+                  id="style-description"
+                  placeholder="وصف قصير لمحتوى الفكرة..."
+                  value={styleDescription}
+                  onChange={(e) => setStyleDescription(e.target.value)}
+                  data-testid="textarea-style-description"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="style-thumbnail">نص الصورة المصغرة</Label>
+                <Input
+                  id="style-thumbnail"
+                  placeholder="مثال: 3 تطبيقات خرافية!"
+                  value={styleThumbnail}
+                  onChange={(e) => setStyleThumbnail(e.target.value)}
+                  data-testid="input-style-thumbnail"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => addStyleMutation.mutate()}
+                disabled={addStyleMutation.isPending || !styleTitle.trim()}
+                data-testid="button-add-style-example"
+              >
+                {addStyleMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span className="mr-2">إضافة مثال</span>
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              {styleExamples && styleExamples.length > 0 ? (
+                styleExamples.map((example: any) => (
+                  <div
+                    key={example.id}
+                    className="flex items-start justify-between gap-2 rounded-md border p-3"
+                    data-testid={`style-example-${example.id}`}
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <p className="font-bold">{example.title}</p>
+                      {example.description && (
+                        <p className="text-sm text-muted-foreground">{example.description}</p>
+                      )}
+                      {example.thumbnailText && (
+                        <p className="text-xs flex items-center gap-1">
+                          <Image className="h-3 w-3" />
+                          {example.thumbnailText}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteStyleMutation.mutate(example.id)}
+                      disabled={deleteStyleMutation.isPending}
+                      data-testid={`button-delete-style-${example.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  لا توجد أمثلة بعد. أضف أفكارك الناجحة السابقة ليتعلم منها الذكاء الاصطناعي
+                </p>
               )}
             </div>
           </CardContent>

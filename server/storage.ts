@@ -31,6 +31,9 @@ import {
   settings,
   type Setting,
   type InsertSetting,
+  styleExamples,
+  type StyleExample,
+  type InsertStyleExample,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -95,6 +98,10 @@ export interface IStorage {
   getUnnotifiedContent(): Promise<Content[]>;
   markContentNotified(id: string): Promise<Content | undefined>;
   updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined>;
+
+  getAllStyleExamples(): Promise<StyleExample[]>;
+  createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
+  deleteStyleExample(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -398,6 +405,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(content.id, id))
       .returning();
     return updated;
+  }
+
+  async getAllStyleExamples(): Promise<StyleExample[]> {
+    return db.select().from(styleExamples).orderBy(desc(styleExamples.createdAt));
+  }
+
+  async createStyleExample(example: InsertStyleExample): Promise<StyleExample> {
+    const [created] = await db.insert(styleExamples).values(example).returning();
+    return created;
+  }
+
+  async deleteStyleExample(id: string): Promise<boolean> {
+    const result = await db.delete(styleExamples).where(eq(styleExamples.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

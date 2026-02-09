@@ -540,6 +540,87 @@ export async function rewriteContent(
   }
 }
 
+export interface SmartViewCard {
+  contentId: string;
+  catchyTitle: string;
+  story: string;
+  thumbnailSuggestion: string;
+  originalUrl: string;
+}
+
+export async function generateSmartView(
+  contentItems: Content[],
+  customSystemPrompt?: string | null
+): Promise<SmartViewCard[]> {
+  if (contentItems.length === 0) return [];
+  
+  const itemsToProcess = contentItems.slice(0, 10);
+  
+  const numberedItems = itemsToProcess.map((item, i) => {
+    const title = item.arabicTitle || item.title;
+    const summary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
+    return `[${i + 1}] العنوان: ${title}\nالملخص: ${summary}\nالرابط: ${item.originalUrl}`;
+  }).join("\n\n");
+
+  const systemMessage = customSystemPrompt
+    ? `${customSystemPrompt}\n\nأنت كاتب محتوى تقني عربي لقناة Tech Voice. أعد صياغة الأخبار التالية بأسلوبك الخاص. أجب بصيغة JSON فقط.`
+    : `أنت حسام من قناة Tech Voice. أسلوبك سعودي تقني كاجوال. أعد صياغة كل خبر بأسلوبك الخاص كأنك تحكي لمتابعينك. أجب بصيغة JSON فقط.`;
+
+  const userPrompt = `أعد كتابة الأخبار التالية بأسلوب Tech Voice:
+
+${numberedItems}
+
+لكل خبر، أنشئ:
+1. عنوان جذاب (catchyTitle) - عنوان مثير للانتباه بالعامية السعودية التقنية
+2. القصة (story) - إعادة كتابة الخبر بالكامل بأسلوب سعودي كاجوال تقني (2-3 فقرات)
+3. اقتراح صورة مصغرة (thumbnailSuggestion) - وصف قصير لصورة مصغرة مناسبة
+
+أجب بصيغة JSON فقط:
+{
+  "cards": [
+    {
+      "index": 1,
+      "catchyTitle": "العنوان الجذاب",
+      "story": "القصة المعاد كتابتها...",
+      "thumbnailSuggestion": "اقتراح الصورة المصغرة"
+    }
+  ]
+}`;
+
+  try {
+    const { client, model } = await getAIClient();
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+    });
+
+    const responseContent = response.choices[0]?.message?.content;
+    if (!responseContent) return [];
+
+    const parsed = JSON.parse(responseContent) as { cards: Array<{ index: number; catchyTitle: string; story: string; thumbnailSuggestion: string }> };
+
+    return parsed.cards.map((card) => {
+      const idx = card.index - 1;
+      const originalItem = itemsToProcess[idx] || itemsToProcess[0];
+      return {
+        contentId: originalItem?.id || "",
+        catchyTitle: card.catchyTitle,
+        story: card.story,
+        thumbnailSuggestion: card.thumbnailSuggestion,
+        originalUrl: originalItem?.originalUrl || "",
+      };
+    });
+  } catch (error) {
+    console.error("Error generating smart view:", error);
+    throw new Error("Failed to generate smart view");
+  }
+}
+
 export async function generateSmartIdeasForTemplate(
   contentItems: Content[],
   folderNames: string,
@@ -548,7 +629,8 @@ export async function generateSmartIdeasForTemplate(
   templateName: string,
   templatePrompt: string,
   count: number,
-  customSystemPrompt?: string | null
+  customSystemPrompt?: string | null,
+  styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>
 ): Promise<SmartIdeaResult[]> {
   if (contentItems.length === 0) {
     return [];
@@ -563,6 +645,23 @@ export async function generateSmartIdeasForTemplate(
     })
     .join("\n\n");
 
+  let styleSection = "";
+  if (styleExamples && styleExamples.length > 0) {
+    const examples = styleExamples.map((ex, i) => {
+      let example = `مثال ${i + 1}: "${ex.title}"`;
+      if (ex.description) example += `\n    الوصف: ${ex.description}`;
+      if (ex.thumbnailText) example += `\n    نص المصغرة: ${ex.thumbnailText}`;
+      return example;
+    }).join("\n\n");
+    
+    styleSection = `\n🎯 المرحلة 1 - أسلوبي في الكتابة (تعلّم من أمثلتي الناجحة):
+هذه أمثلة من أفكاري الناجحة السابقة. تعلّم من أسلوب العناوين والوصف ونص المصغرة:
+
+${examples}
+
+يجب أن تتبع نفس أسلوب ونمط هذه الأمثلة في العناوين والوصف ونص المصغرة.\n\n`;
+  }
+
   const hasUserInstructions = templatePrompt && templatePrompt.trim().length > 0;
 
   let userPrompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
@@ -570,8 +669,8 @@ export async function generateSmartIdeasForTemplate(
 سلسلة المحتوى: "${templateName}"
 المجلدات: "${folderNames}"
 عدد الأفكار المطلوبة: ${count}
-
-هذه هي الأخبار الحقيقية المتاحة (مرقمة):
+${styleSection}
+📰 المرحلة 2 - الأخبار الحقيقية المتاحة (مرقمة):
 
 ${numberedContent}
 
@@ -586,9 +685,13 @@ ${templatePrompt}
 
   userPrompt += `مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
 
-قواعد مهمة جداً:
-1. يجب أن تستند كل فكرة إلى أخبار حقيقية من القائمة أعلاه فقط - لا تخترع أخباراً
-2. في حقل "sourceIndices" ضع أرقام الأخبار التي استخدمتها (مثل [1, 3, 5])
+🧠 المرحلة 3 - توسيع المعرفة:
+إذا كانت الأخبار المتاحة غير كافية لإكمال الفكرة، استخدم معرفتك الخاصة لإكمالها وإثرائها.
+مثلاً: إذا طُلب "أفضل 3 تطبيقات" وهناك خبر واحد فقط عن تطبيق، أكمل بتطبيقين آخرين من معرفتك.
+
+قواعد مهمة:
+1. ابدأ من الأخبار الحقيقية المتاحة كأساس، ثم أكمل من معرفتك عند الحاجة
+2. في حقل "sourceIndices" ضع أرقام الأخبار الحقيقية التي استخدمتها (مثل [1, 3, 5]) - اتركه فارغاً [] إذا اعتمدت على معرفتك فقط
 3. اكتب عنوان فيديو جذاب بالعربية
 4. اكتب نص مصغّر (Thumbnail Text) - عبارة قصيرة جداً مناسبة لصورة مصغرة
 5. اكتب سكريبت/ملخص تفصيلي للفيديو (3-5 فقرات)
@@ -610,8 +713,8 @@ ${templatePrompt}
 }`;
 
   const systemMessage = customSystemPrompt
-    ? `${customSystemPrompt}\n\nأنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم فقط الأخبار الحقيقية المقدمة. أجب دائماً بصيغة JSON صالحة.`
-    : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم فقط الأخبار الحقيقية المقدمة لإنشاء أفكار الفيديو. لا تخترع أخباراً. أجب دائماً بصيغة JSON صالحة.";
+    ? `${customSystemPrompt}\n\nأنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية كأساس ثم أكمل من معرفتك عند الحاجة. أجب دائماً بصيغة JSON صالحة.`
+    : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية المقدمة كأساس لأفكارك، ثم أكمل من معرفتك الخاصة عند الحاجة. أجب دائماً بصيغة JSON صالحة.";
 
   try {
     const { client, model } = await getAIClient();

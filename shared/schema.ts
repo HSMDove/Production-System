@@ -265,6 +265,23 @@ export const insertSettingSchema = createInsertSchema(settings);
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = z.infer<typeof insertSettingSchema>;
 
+// Style Examples - past successful video ideas for AI learning
+export const styleExamples = pgTable("style_examples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  thumbnailText: text("thumbnail_text"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type StyleExample = typeof styleExamples.$inferSelect;
+export type InsertStyleExample = z.infer<typeof insertStyleExampleSchema>;
+
 // Keep users table for compatibility
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

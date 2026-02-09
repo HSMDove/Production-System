@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent } from "./openai";
+import { getAIClient, rewriteContent, generateSmartView } from "./openai";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent } from "./folder-fetcher";
 import {
@@ -123,6 +123,47 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/folders/:id/smart-view", async (req, res) => {
+    try {
+      const folder = await storage.getFolderById(req.params.id);
+      if (!folder) {
+        return res.status(404).json({ error: "Folder not found" });
+      }
+
+      const allContent = await storage.getContentByFolderId(req.params.id);
+      
+      const days = req.body.days || 7;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      
+      let contentToUse = allContent.filter((item) => {
+        const pubDate = item.publishedAt || item.fetchedAt;
+        return pubDate >= cutoffDate;
+      });
+      
+      if (contentToUse.length === 0) {
+        contentToUse = allContent.slice(0, 10);
+      }
+
+      contentToUse.sort((a, b) => {
+        const dateA = new Date(a.publishedAt || a.fetchedAt).getTime();
+        const dateB = new Date(b.publishedAt || b.fetchedAt).getTime();
+        return dateB - dateA;
+      });
+
+      contentToUse = contentToUse.slice(0, 10);
+
+      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value;
+      
+      const cards = await generateSmartView(contentToUse, aiSystemPrompt);
+      
+      res.json({ cards });
+    } catch (error: any) {
+      console.error("Error generating smart view:", error);
+      res.status(500).json({ error: error.message || "Failed to generate smart view" });
+    }
+  });
+
   app.post("/api/folders/:id/generate-ideas", async (req, res) => {
     try {
       const folder = await storage.getFolderById(req.params.id);
@@ -224,6 +265,7 @@ export async function registerRoutes(
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
       const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+      const styleExamples = await storage.getAllStyleExamples();
 
       const allResults = [];
 
@@ -241,7 +283,8 @@ export async function registerRoutes(
           template.name,
           template.promptContent,
           templateReq.count,
-          aiSystemPrompt
+          aiSystemPrompt,
+          styleExamples
         );
 
         for (const idea of ideas) {
@@ -1131,6 +1174,38 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to test Slack connection" });
+    }
+  });
+
+  // Style Examples (Past Successful Ideas)
+  app.get("/api/style-examples", async (req, res) => {
+    try {
+      const examples = await storage.getAllStyleExamples();
+      res.json(examples);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch style examples" });
+    }
+  });
+
+  app.post("/api/style-examples", async (req, res) => {
+    try {
+      const example = await storage.createStyleExample(req.body);
+      res.json(example);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create style example" });
+    }
+  });
+
+  app.delete("/api/style-examples/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteStyleExample(req.params.id);
+      if (deleted) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "Style example not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete style example" });
     }
   });
 

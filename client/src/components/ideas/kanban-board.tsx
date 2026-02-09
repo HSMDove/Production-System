@@ -25,6 +25,7 @@ interface KanbanBoardProps {
   ideas: IdeaWithFolder[];
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
+  onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
   onStatusChange: (ideaId: string, newStatus: IdeaStatus) => void;
   activeId: string | null;
   setActiveId: (id: string | null) => void;
@@ -44,9 +45,10 @@ interface KanbanColumnProps {
   ideas: IdeaWithFolder[];
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
+  onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
 }
 
-function KanbanColumn({ status, ideas, onEdit, onDelete }: KanbanColumnProps) {
+function KanbanColumn({ status, ideas, onEdit, onDelete, onInlineUpdate }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
@@ -84,6 +86,7 @@ function KanbanColumn({ status, ideas, onEdit, onDelete }: KanbanColumnProps) {
                 idea={idea}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onInlineUpdate={onInlineUpdate}
               />
             ))}
           </div>
@@ -102,6 +105,7 @@ export function KanbanBoard({
   ideas,
   onEdit,
   onDelete,
+  onInlineUpdate,
   onStatusChange,
   activeId,
   setActiveId,
@@ -184,6 +188,7 @@ export function KanbanBoard({
             ideas={ideasByStatus[status]}
             onEdit={onEdit}
             onDelete={onDelete}
+            onInlineUpdate={onInlineUpdate}
           />
         ))}
       </div>
