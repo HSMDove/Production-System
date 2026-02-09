@@ -201,7 +201,7 @@ export default function Ideas() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-3xl font-bold" data-testid="text-ideas-title">الأفكار</h1>
               <Badge variant="secondary">{ideasCount}</Badge>
             </div>

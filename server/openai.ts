@@ -115,7 +115,8 @@ export async function generateIdeasFromContent(
   contentItems: Content[],
   folderName: string,
   folderId: string,
-  customTemplate?: PromptTemplate | null
+  customTemplate?: PromptTemplate | null,
+  existingTitles?: string[]
 ): Promise<InsertIdea[]> {
   if (contentItems.length === 0) {
     return [];
@@ -127,9 +128,14 @@ export async function generateIdeasFromContent(
     .join("\n");
 
   const promptTemplate = customTemplate?.promptContent || DEFAULT_PROMPT;
-  const prompt = promptTemplate
+  let prompt = promptTemplate
     .replace("{{FOLDER_NAME}}", folderName)
     .replace("{{CONTENT_SUMMARY}}", contentSummary);
+
+  if (existingTitles && existingTitles.length > 0) {
+    const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+    prompt += `\n\nتجنب تكرار هذه الأفكار الموجودة:\n${titlesList}`;
+  }
 
   try {
     const { client, model } = await getAIClient();
@@ -632,7 +638,8 @@ export async function generateSmartIdeasForTemplate(
   templatePrompt: string,
   count: number,
   customSystemPrompt?: string | null,
-  styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>
+  styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>,
+  existingTitles?: string[]
 ): Promise<SmartIdeaResult[]> {
   if (contentItems.length === 0) {
     return [];
@@ -683,6 +690,11 @@ ${numberedContent}
 ${templatePrompt}
 
 `;
+  }
+
+  if (existingTitles && existingTitles.length > 0) {
+    const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+    userPrompt += `تجنب تكرار هذه الأفكار الموجودة:\n${titlesList}\n\n`;
   }
 
   userPrompt += `مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".

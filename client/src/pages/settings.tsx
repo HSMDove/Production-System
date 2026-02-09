@@ -187,7 +187,7 @@ export default function Settings() {
 
   return (
     <MainLayout>
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6 pb-20">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
@@ -195,20 +195,6 @@ export default function Settings() {
               إعدادات المنصة والإشعارات والذكاء الاصطناعي
             </p>
           </div>
-          {hasChanges && (
-            <Button 
-              onClick={handleSave} 
-              disabled={saveMutation.isPending}
-              data-testid="button-save-settings"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              <span className="mr-2">حفظ الإعدادات</span>
-            </Button>
-          )}
         </div>
 
         <Card>
@@ -674,6 +660,26 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
+
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm p-3">
+          <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">لديك تغييرات غير محفوظة</p>
+            <Button 
+              onClick={handleSave} 
+              disabled={saveMutation.isPending}
+              data-testid="button-save-settings"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              <span className="mr-2">حفظ الإعدادات</span>
+            </Button>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

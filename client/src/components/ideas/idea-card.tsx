@@ -184,7 +184,7 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
             <GripVertical className="h-4 w-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium leading-tight mb-2 line-clamp-2" data-testid={`text-idea-title-${idea.id}`}>
+            <h4 className="font-medium leading-tight mb-2 line-clamp-2" dir="auto" data-testid={`text-idea-title-${idea.id}`}>
               {onInlineUpdate ? (
                 <InlineEditField
                   value={idea.title}
@@ -245,7 +245,7 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
         {(idea.description || idea.thumbnailText || idea.sourceContentTitles?.length || idea.notes) && (
           <div className="mt-2 pt-2 border-t space-y-1.5">
             {idea.description && (
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground" dir="auto">
                 {onInlineUpdate ? (
                   <InlineEditField
                     value={idea.description}

@@ -34,7 +34,7 @@ export function Header() {
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="hidden md:flex items-center gap-1 flex-wrap">
           {navItems.map((item) => (
             <Link key={item.href} href={item.href}>
               <Button

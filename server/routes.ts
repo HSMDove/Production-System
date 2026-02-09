@@ -190,7 +190,10 @@ export async function registerRoutes(
       }
       // If templateId === "builtin", template stays null (use built-in prompt)
       
-      const generatedIdeas = await generateIdeasFromContent(content, folder.name, folder.id, template);
+      const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
+      const existingTitles = existingIdeas.map(idea => idea.title);
+      
+      const generatedIdeas = await generateIdeasFromContent(content, folder.name, folder.id, template, existingTitles);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -266,6 +269,9 @@ export async function registerRoutes(
 
       const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
       const styleExamples = await storage.getAllStyleExamples();
+      
+      const allExistingIdeas = await storage.getAllIdeas();
+      const existingTitles = allExistingIdeas.map(idea => idea.title);
 
       const allResults = [];
 
@@ -284,7 +290,8 @@ export async function registerRoutes(
           template.promptContent,
           templateReq.count,
           aiSystemPrompt,
-          styleExamples
+          styleExamples,
+          existingTitles
         );
 
         for (const idea of ideas) {

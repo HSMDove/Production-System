@@ -202,7 +202,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
       <CardContent className="pt-0 space-y-3">
         <Link href={`/folder/${folder.id}`}>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer flex-wrap">
             <div className="flex items-center gap-1.5">
               <Rss className="h-4 w-4" />
               <span>{sourceCount} مصدر</span>
@@ -262,7 +262,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
               <FolderCountdown folderId={folder.id} refreshInterval={folder.refreshInterval} />
             )}
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

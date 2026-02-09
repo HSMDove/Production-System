@@ -56,7 +56,7 @@ export function SmartViewFeed({ cards, isLoading }: SmartViewFeedProps) {
             <div className="flex items-start gap-4">
               <div className="flex-1 min-w-0 space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-lg font-bold leading-tight" data-testid={`smart-card-title-${index}`}>
+                  <h3 className="text-lg font-bold leading-tight" dir="auto" data-testid={`smart-card-title-${index}`}>
                     {card.catchyTitle}
                   </h3>
                   <Badge variant="secondary" className="shrink-0">
@@ -65,7 +65,7 @@ export function SmartViewFeed({ cards, isLoading }: SmartViewFeedProps) {
                   </Badge>
                 </div>
                 
-                <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`smart-card-story-${index}`}>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto" data-testid={`smart-card-story-${index}`}>
                   {card.story}
                 </p>
               </div>
@@ -89,7 +89,7 @@ export function SmartViewFeed({ cards, isLoading }: SmartViewFeedProps) {
                 <Image className="h-4 w-4 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-medium">اقتراح الصورة المصغرة:</span>
-                  <span className="mr-1">{card.thumbnailSuggestion}</span>
+                  <span className="mr-1" dir="auto">{card.thumbnailSuggestion}</span>
                 </div>
               </div>
             )}

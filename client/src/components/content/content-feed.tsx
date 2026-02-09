@@ -180,8 +180,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
               {/* Title */}
               <h3 
                 className="text-sm sm:text-base font-semibold leading-tight line-clamp-2 text-foreground" 
-                dir={isArabicDisplay ? "rtl" : "ltr"}
-                style={{ textAlign: isArabicDisplay ? "right" : "left" }}
+                dir="auto"
                 data-testid={`text-content-title-${item.id}`}
               >
                 {displayTitle}
@@ -191,8 +190,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
               {displaySummary && (
                 <p 
                   className="hidden sm:block text-xs text-muted-foreground line-clamp-2" 
-                  dir={isArabicDisplay ? "rtl" : "ltr"}
-                  style={{ textAlign: isArabicDisplay ? "right" : "left" }}
+                  dir="auto"
                 >
                   {displaySummary}
                 </p>
@@ -225,7 +223,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                         <Sparkles className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">ملخص سريع</span>
                       </div>
-                      <p className="text-sm leading-relaxed" dir="rtl">
+                      <p className="text-sm leading-relaxed" dir="auto">
                         {item.arabicSummary}
                       </p>
                     </div>

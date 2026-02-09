@@ -131,6 +131,7 @@ function EditableField({
       ) : (
         <div
           className="text-sm leading-relaxed whitespace-pre-wrap cursor-pointer rounded-md p-2 hover:bg-muted/50 transition-colors min-h-[2rem]"
+          dir="auto"
           onClick={() => setEditing(true)}
           data-testid={`modal-field-${fieldKey}`}
         >
@@ -168,7 +169,7 @@ export function IdeaDetailModal({ idea, open, onOpenChange, onUpdate }: IdeaDeta
               <Badge variant="outline">{idea.folder.name}</Badge>
             )}
           </div>
-          <DialogTitle className="text-xl leading-tight" data-testid="modal-idea-title">
+          <DialogTitle className="text-xl leading-tight" dir="auto" data-testid="modal-idea-title">
             {idea.title}
           </DialogTitle>
         </DialogHeader>
@@ -237,7 +238,7 @@ export function IdeaDetailModal({ idea, open, onOpenChange, onUpdate }: IdeaDeta
                       >
                         <Link2 className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium leading-tight">{sourceTitle}</p>
+                          <p className="font-medium leading-tight" dir="auto">{sourceTitle}</p>
                           {url && (
                             <a
                               href={url}

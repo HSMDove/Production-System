@@ -216,7 +216,8 @@ export function SmartGenerateDialog({
 
         {!isGenerating ? (
           <>
-            <div className="space-y-5 py-2 flex-1 overflow-y-auto">
+            <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+            <div className="space-y-5 py-2">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-medium">المجلدات</Label>
@@ -363,6 +364,7 @@ export function SmartGenerateDialog({
                 )}
               </div>
             </div>
+            </ScrollArea>
 
             <DialogFooter className="gap-2 sm:gap-0">
               <Button
@@ -429,7 +431,7 @@ function IdeaResultCard({
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-base leading-relaxed" data-testid={`text-idea-title-${idea.id}`}>
+            <h3 className="font-bold text-base leading-relaxed" dir="auto" data-testid={`text-idea-title-${idea.id}`}>
               {idea.title}
             </h3>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -455,7 +457,7 @@ function IdeaResultCard({
             <Image className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-0.5">نص الصورة المصغرة</p>
-              <p className="text-sm font-medium" data-testid={`text-thumbnail-${idea.id}`}>{idea.thumbnailText}</p>
+              <p className="text-sm font-medium" dir="auto" data-testid={`text-thumbnail-${idea.id}`}>{idea.thumbnailText}</p>
             </div>
           </div>
         )}
@@ -466,7 +468,7 @@ function IdeaResultCard({
               <FileText className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">السكريبت</span>
             </div>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid={`text-script-${idea.id}`}>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto" data-testid={`text-script-${idea.id}`}>
               {idea.script}
             </p>
           </div>
@@ -490,7 +492,7 @@ function IdeaResultCard({
                   >
                     <span className="text-muted-foreground shrink-0 mt-0.5 text-xs">{idx + 1}.</span>
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm" data-testid={`text-source-title-${idea.id}-${idx}`}>{title}</p>
+                      <p className="truncate text-sm" dir="auto" data-testid={`text-source-title-${idea.id}-${idx}`}>{title}</p>
                       {url && (
                         <a
                           href={url}
