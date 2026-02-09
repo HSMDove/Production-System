@@ -546,6 +546,7 @@ export interface SmartViewCard {
   story: string;
   thumbnailSuggestion: string;
   originalUrl: string;
+  imageUrl: string | null;
 }
 
 export async function generateSmartView(
@@ -613,6 +614,7 @@ ${numberedItems}
         story: card.story,
         thumbnailSuggestion: card.thumbnailSuggestion,
         originalUrl: originalItem?.originalUrl || "",
+        imageUrl: originalItem?.imageUrl || null,
       };
     });
   } catch (error) {

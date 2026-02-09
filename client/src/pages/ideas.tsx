@@ -5,6 +5,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { KanbanBoard } from "@/components/ideas/kanban-board";
 import { IdeasTable } from "@/components/ideas/ideas-table";
 import { IdeaDialog } from "@/components/ideas/idea-dialog";
+import { IdeaDetailModal } from "@/components/ideas/idea-detail-modal";
 import { SmartGenerateDialog } from "@/components/ideas/smart-generate-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ export default function Ideas() {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [detailIdea, setDetailIdea] = useState<IdeaWithFolder | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const { data: ideas, isLoading: ideasLoading } = useQuery<IdeaWithFolder[]>({
     queryKey: ["/api/ideas"],
@@ -125,6 +128,18 @@ export default function Ideas() {
       toast({ title: "حدث خطأ", description: "فشل في حذف الفكرة", variant: "destructive" });
     },
   });
+
+  const handleCardClick = (idea: IdeaWithFolder) => {
+    setDetailIdea(idea);
+    setDetailModalOpen(true);
+  };
+
+  const handleDetailUpdate = (ideaId: string, field: string, value: string) => {
+    inlineUpdateMutation.mutate({ id: ideaId, [field]: value });
+    if (detailIdea && detailIdea.id === ideaId) {
+      setDetailIdea({ ...detailIdea, [field]: value });
+    }
+  };
 
   const handleAddIdea = () => {
     setSelectedIdea(null);
@@ -267,6 +282,7 @@ export default function Ideas() {
             onEdit={handleEditIdea}
             onDelete={handleDeleteIdea}
             onInlineUpdate={handleInlineUpdate}
+            onCardClick={handleCardClick}
             onStatusChange={handleStatusChange}
             activeId={activeId}
             setActiveId={setActiveId}
@@ -304,6 +320,13 @@ export default function Ideas() {
         description={`هل أنت متأكد من حذف الفكرة "${selectedIdea?.title}"؟`}
         onConfirm={() => selectedIdea && deleteIdeaMutation.mutate(selectedIdea.id)}
         isLoading={deleteIdeaMutation.isPending}
+      />
+
+      <IdeaDetailModal
+        idea={detailIdea}
+        open={detailModalOpen}
+        onOpenChange={setDetailModalOpen}
+        onUpdate={handleDetailUpdate}
       />
     </MainLayout>
   );

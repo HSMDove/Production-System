@@ -21,6 +21,7 @@ interface IdeaCardProps {
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
   onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
+  onCardClick?: (idea: IdeaWithFolder) => void;
   isDragging?: boolean;
 }
 
@@ -125,13 +126,14 @@ function InlineEditField({
   );
 }
 
-export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, isDragging }: IdeaCardProps) {
+export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, isDragging }: IdeaCardProps) {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
+    isDragging: isSortableDragging,
   } = useSortable({ id: idea.id });
 
   const style = {
@@ -141,6 +143,13 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, isDragging }:
   };
 
   const categoryColor = categoryColors[idea.category] || categoryColors.other;
+  const wasDraggingRef = useRef(false);
+
+  useEffect(() => {
+    if (isSortableDragging) {
+      wasDraggingRef.current = true;
+    }
+  }, [isSortableDragging]);
 
   const handleInlineUpdate = (field: string, value: string) => {
     if (onInlineUpdate) {
@@ -148,11 +157,20 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, isDragging }:
     }
   };
 
+  const handleCardClick = () => {
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      return;
+    }
+    onCardClick?.(idea);
+  };
+
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className="group"
+      className="group cursor-pointer hover-elevate"
+      onClick={handleCardClick}
       data-testid={`card-idea-${idea.id}`}
     >
       <CardContent className="p-3">

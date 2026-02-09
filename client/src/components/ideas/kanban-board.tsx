@@ -18,7 +18,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { IdeaCard } from "./idea-card";
-import type { IdeaWithFolder, IdeaStatus } from "@shared/schema";
+import type { IdeaWithFolder, IdeaStatus } from "@/lib/types";
 import { ideaStatusLabels, statusColors } from "@/lib/types";
 
 interface KanbanBoardProps {
@@ -26,6 +26,7 @@ interface KanbanBoardProps {
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
   onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
+  onCardClick?: (idea: IdeaWithFolder) => void;
   onStatusChange: (ideaId: string, newStatus: IdeaStatus) => void;
   activeId: string | null;
   setActiveId: (id: string | null) => void;
@@ -46,9 +47,10 @@ interface KanbanColumnProps {
   onEdit: (idea: IdeaWithFolder) => void;
   onDelete: (idea: IdeaWithFolder) => void;
   onInlineUpdate?: (ideaId: string, field: string, value: string) => void;
+  onCardClick?: (idea: IdeaWithFolder) => void;
 }
 
-function KanbanColumn({ status, ideas, onEdit, onDelete, onInlineUpdate }: KanbanColumnProps) {
+function KanbanColumn({ status, ideas, onEdit, onDelete, onInlineUpdate, onCardClick }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
@@ -87,6 +89,7 @@ function KanbanColumn({ status, ideas, onEdit, onDelete, onInlineUpdate }: Kanba
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onInlineUpdate={onInlineUpdate}
+                onCardClick={onCardClick}
               />
             ))}
           </div>
@@ -106,6 +109,7 @@ export function KanbanBoard({
   onEdit,
   onDelete,
   onInlineUpdate,
+  onCardClick,
   onStatusChange,
   activeId,
   setActiveId,
@@ -189,6 +193,7 @@ export function KanbanBoard({
             onEdit={onEdit}
             onDelete={onDelete}
             onInlineUpdate={onInlineUpdate}
+            onCardClick={onCardClick}
           />
         ))}
       </div>

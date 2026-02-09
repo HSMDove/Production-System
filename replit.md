@@ -148,7 +148,9 @@ Preferred communication style: Simple, everyday language.
 - Custom mode configurable via Settings page: Base URL, optional API Key, Model Name
 - All AI functions dynamically create OpenAI SDK client based on settings from database
 - `rewriteContent()` function for "Tech Voice" style rewriting with custom system prompts
-- `generateSmartView()` function for batch content rewriting into Smart View cards (catchy title, story, thumbnail suggestion)
+- `generateSmartView()` function for batch content rewriting into Smart View cards (catchy title, story, thumbnail suggestion, original image)
+- Smart View state persists per folder via localStorage; auto-fetches on load if previously active
+- Idea cards are clickable → opens IdeaDetailModal with full editable fields (title, thumbnailText, description, script, sources, notes)
 - 3-Stage Idea Generation Engine:
   - Stage 1 (Style Learning): AI reads past successful ideas from style_examples table to learn user's writing style
   - Stage 2 (News Reading): AI reads current news from selected folders

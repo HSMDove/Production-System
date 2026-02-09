@@ -42,7 +42,15 @@ export default function FolderDetail() {
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [selectedFilterSourceId, setSelectedFilterSourceId] = useState<string | null>(null);
-  const [smartViewActive, setSmartViewActive] = useState(false);
+  const [smartViewActive, setSmartViewActive] = useState(() => {
+    const saved = localStorage.getItem(`techvoice-smart-view-${id}`);
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem(`techvoice-smart-view-${id}`);
+    setSmartViewActive(saved === 'true');
+  }, [id]);
   
   // Translation toggle - persist in localStorage
   const [showTranslation, setShowTranslation] = useState(() => {
@@ -165,10 +173,11 @@ export default function FolderDetail() {
   const smartViewMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", `/api/folders/${id}/smart-view`, { days: 7 });
-      return response as { cards: Array<{ contentId: string; catchyTitle: string; story: string; thumbnailSuggestion: string; originalUrl: string }> };
+      return response as { cards: Array<{ contentId: string; catchyTitle: string; story: string; thumbnailSuggestion: string; originalUrl: string; imageUrl?: string | null }> };
     },
     onSuccess: () => {
       setSmartViewActive(true);
+      localStorage.setItem(`techvoice-smart-view-${id}`, 'true');
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل في تحويل الأخبار للعرض الذكي", variant: "destructive" });
@@ -178,10 +187,17 @@ export default function FolderDetail() {
   const handleSmartView = () => {
     if (smartViewActive) {
       setSmartViewActive(false);
+      localStorage.setItem(`techvoice-smart-view-${id}`, 'false');
     } else {
       smartViewMutation.mutate();
     }
   };
+
+  useEffect(() => {
+    if (smartViewActive && !smartViewMutation.data && !smartViewMutation.isPending) {
+      smartViewMutation.mutate();
+    }
+  }, [smartViewActive, id]);
 
   const updateFolderMutation = useMutation({
     mutationFn: async (data: Partial<Folder>) => {
