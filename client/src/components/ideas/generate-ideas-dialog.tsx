@@ -99,11 +99,16 @@ export function GenerateIdeasDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">يوم واحد</SelectItem>
+                    <SelectItem value="1">اليوم</SelectItem>
                     <SelectItem value="3">3 أيام</SelectItem>
                     <SelectItem value="7">أسبوع</SelectItem>
                     <SelectItem value="14">أسبوعين</SelectItem>
                     <SelectItem value="30">شهر</SelectItem>
+                    <SelectItem value="90">3 أشهر</SelectItem>
+                    <SelectItem value="180">6 أشهر</SelectItem>
+                    <SelectItem value="365">سنة</SelectItem>
+                    <SelectItem value="1095">3 سنوات</SelectItem>
+                    <SelectItem value="1825">5 سنوات</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
