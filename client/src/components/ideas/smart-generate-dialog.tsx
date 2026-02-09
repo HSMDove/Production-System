@@ -183,7 +183,7 @@ export function SmartGenerateDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 max-h-[60vh]">
+          <ScrollArea className="flex-1 overflow-y-auto min-h-0">
             <div className="space-y-4 p-1">
               {generatedIdeas.map((idea) => (
                 <IdeaResultCard key={idea.id} idea={idea} templates={templates} />
