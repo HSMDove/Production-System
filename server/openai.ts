@@ -122,9 +122,24 @@ export async function generateIdeasFromContent(
     return [];
   }
 
+  const sourceTypeLabels: Record<string, string> = {
+    youtube: "🎬 فيديو يوتيوب",
+    twitter: "🐦 تغريدة X",
+    tiktok: "📱 تيك توك",
+    rss: "📰 خبر",
+    website: "📰 خبر",
+  };
+
   const contentSummary = contentItems
     .slice(0, 10)
-    .map((item, i) => `${i + 1}. ${item.title}${item.summary ? `: ${item.summary}` : ""}`)
+    .map((item, i) => {
+      const sourceType = (item as any).sourceType || "rss";
+      const typeLabel = sourceTypeLabels[sourceType] || "📰 خبر";
+      const title = item.title;
+      const summary = item.summary ? `: ${item.summary}` : "";
+      const url = item.originalUrl ? `\n   رابط: ${item.originalUrl}` : "";
+      return `${i + 1}. [${typeLabel}] ${title}${summary}${url}`;
+    })
     .join("\n");
 
   const promptTemplate = customTemplate?.promptContent || DEFAULT_PROMPT;
@@ -144,7 +159,7 @@ export async function generateIdeasFromContent(
       messages: [
         {
           role: "system",
-          content: "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. أجب دائماً بصيغة JSON صالحة."
+          content: "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. المحتوى المقدم يشمل أخبار مواقع، فيديوهات يوتيوب، تغريدات X، وتيك توك - استخدم جميع أنواع المحتوى في توليد الأفكار ولا تتجاهل أي نوع. أجب دائماً بصيغة JSON صالحة."
         },
         {
           role: "user",
@@ -645,12 +660,22 @@ export async function generateSmartIdeasForTemplate(
     return [];
   }
 
+  const sourceTypeLabels: Record<string, string> = {
+    youtube: "🎬 فيديو يوتيوب",
+    twitter: "🐦 تغريدة X",
+    tiktok: "📱 تيك توك",
+    rss: "📰 خبر",
+    website: "📰 خبر",
+  };
+
   const numberedContent = contentItems
     .slice(0, 30)
     .map((item, i) => {
+      const sourceType = (item as any).sourceType || "rss";
+      const typeLabel = sourceTypeLabels[sourceType] || "📰 خبر";
       const title = item.arabicTitle || item.title;
       const summary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
-      return `[${i + 1}] ${title}${summary ? `\n    ${summary}` : ""}\n    رابط: ${item.originalUrl}`;
+      return `[${i + 1}] [${typeLabel}] ${title}${summary ? `\n    ${summary}` : ""}\n    رابط: ${item.originalUrl}`;
     })
     .join("\n\n");
 

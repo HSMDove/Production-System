@@ -178,6 +178,18 @@ export async function registerRoutes(
       
       const contentToFeed = allUnusedContent.slice(0, 10);
       
+      const sourcesMap = new Map<string, string>();
+      for (const item of contentToFeed) {
+        if (!sourcesMap.has(item.sourceId)) {
+          const source = await storage.getSourceById(item.sourceId);
+          if (source) sourcesMap.set(item.sourceId, source.type);
+        }
+      }
+      const enrichedContent = contentToFeed.map(item => ({
+        ...item,
+        sourceType: sourcesMap.get(item.sourceId) || "rss",
+      }));
+      
       let template = null;
       const templateId = req.body.templateId as string | undefined;
       if (templateId && templateId !== "builtin") {
@@ -189,7 +201,7 @@ export async function registerRoutes(
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
       
-      const generatedIdeas = await generateIdeasFromContent(contentToFeed, folder.name, folder.id, template, existingTitles);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -270,6 +282,18 @@ export async function registerRoutes(
 
       const contentToUse = contentPool.slice(0, 30);
 
+      const sourcesMap = new Map<string, string>();
+      for (const item of contentToUse) {
+        if (!sourcesMap.has(item.sourceId)) {
+          const source = await storage.getSourceById(item.sourceId);
+          if (source) sourcesMap.set(item.sourceId, source.type);
+        }
+      }
+      const enrichedContentToUse = contentToUse.map((item: any) => ({
+        ...item,
+        sourceType: sourcesMap.get(item.sourceId) || "rss",
+      }));
+
       const folderNames = folders.map((f) => f.name).join("، ");
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
@@ -288,7 +312,7 @@ export async function registerRoutes(
         if (!template) continue;
 
         const ideas = await generateSmartIdeasForTemplate(
-          contentToUse,
+          enrichedContentToUse,
           folderNames,
           primaryFolderId,
           template.id,
