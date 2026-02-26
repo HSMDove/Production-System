@@ -69,7 +69,7 @@ function formatTelegramMessage(contentItem: Content, rewrittenText: string): str
   if (contentItem.originalUrl) {
     message += `\n\n<a href="${contentItem.originalUrl}">المصدر</a>`;
   }
-  message += `\n\n#TechVoice`;
+  message += `\n\n#نظام_الإنتاج`;
   return message;
 }
 
@@ -340,7 +340,7 @@ export async function testTelegramConnection(
   botToken: string,
   chatId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "✅ <b>Tech Voice</b>\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة Tech Voice.";
+  const message = "✅ <b>نظام الإنتاج</b>\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
   try {
     const sent = await sendTelegramMessage(botToken, chatId, message);
     return sent 
@@ -354,7 +354,7 @@ export async function testTelegramConnection(
 export async function testSlackConnection(
   webhookUrl: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "✅ *Tech Voice*\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة Tech Voice.";
+  const message = "✅ *نظام الإنتاج*\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
   try {
     const sent = await sendSlackMessage(webhookUrl, message);
     return sent

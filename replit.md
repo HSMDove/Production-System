@@ -1,12 +1,13 @@
-# Tech Voice Content Platform
+# نظام الإنتاج (Production System)
 
 ## Overview
 
-Tech Voice is a private internal tool for the Tech Voice media company. It aggregates bilingual tech news from RSS feeds, translates/rewrites to Arabic using AI with a custom "Casual Saudi Tech" persona, and auto-posts to Telegram/Slack. Features a Feedly-style interface with sources sidebar, auto-refresh system, and focus on speed, reliability, and automation for exclusive content publishing. Full RTL (right-to-left) support for Arabic content.
+نظام الإنتاج هو أداة داخلية خاصة لإدارة المحتوى. يقوم بتجميع الأخبار التقنية ثنائية اللغة من خلاصات RSS، ويقوم بترجمتها/إعادة كتابتها إلى العربية باستخدام الذكاء الاصطناعي بأسلوب "سعودي كاجوال تقني"، وينشر تلقائياً إلى تيليجرام وسلاك. يتميز بواجهة تشبه Feedly مع شريط جانبي للمصادر، ونظام تحديث تلقائي، وتركيز على السرعة والموثوقية والأتمتة لنشر المحتوى الحصري. دعم كامل لـ RTL (من اليمين إلى اليسار) للمحتوى العربي.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Developer: حسام تيك فيلد (Hossam TechField)
 
 ## System Architecture
 
@@ -145,10 +146,10 @@ Preferred communication style: Simple, everyday language.
 
 **AI Services (Provider-Agnostic)**
 - Provider-agnostic AI engine via `getAIClient()` in `server/openai.ts`
-- Supports two modes: "Replit/OpenAI" (default, uses Replit AI Integrations) or "Custom/Local" (Ollama, LM Studio, etc.)
+- Supports two modes: "Production Cloud" (default, uses integrated AI) or "Custom/Local" (Ollama, LM Studio, etc.)
 - Custom mode configurable via Settings page: Base URL, optional API Key, Model Name
 - All AI functions dynamically create OpenAI SDK client based on settings from database
-- `rewriteContent()` function for "Tech Voice" style rewriting with custom system prompts
+- `rewriteContent()` function for "نظام الإنتاج" style rewriting with custom system prompts
 - `generateSmartView()` function for batch content rewriting into Smart View cards (catchy title, story, thumbnail suggestion, original image)
 - Smart View state persists per folder via localStorage; auto-fetches on load if previously active
 - Idea cards are clickable → opens IdeaDetailModal with full editable fields (title, thumbnailText, description, script, sources, notes)
@@ -168,7 +169,7 @@ Preferred communication style: Simple, everyday language.
 - Test functions for verifying connections from Settings page
 
 **Database**
-- PostgreSQL database (provisioned via DATABASE_URL environment variable)
+- PostgreSQL database (Relational storage)
 - Drizzle Kit for schema migrations in `/migrations` directory
 
 **Third-Party Libraries**
@@ -178,7 +179,6 @@ Preferred communication style: Simple, everyday language.
 - Lucide React: Icon library for UI elements
 
 **Development Tools**
-- Replit-specific integrations: error overlay, cartographer, dev banner (development only)
 - TypeScript for compile-time type checking
 - PostCSS with Autoprefixer for CSS processing
 

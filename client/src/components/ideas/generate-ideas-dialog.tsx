@@ -85,7 +85,7 @@ export function GenerateIdeasDialog({
             توليد أفكار فيديو
           </DialogTitle>
           <DialogDescription>
-            سيقوم الذكاء الاصطناعي بتحليل المحتوى في مجلد "{folderName}" وتوليد أفكار فيديو مناسبة لقناة Tech Voice
+            سيقوم الذكاء الاصطناعي بتحليل المحتوى في مجلد "{folderName}" وتوليد أفكار فيديو مناسبة لقناة نظام الإنتاج
           </DialogDescription>
         </DialogHeader>
 
@@ -119,7 +119,7 @@ export function GenerateIdeasDialog({
                     <SelectValue placeholder="اختر قالب التوليد" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="builtin">القالب المدمج (Tech Voice)</SelectItem>
+                    <SelectItem value="builtin">القالب المدمج (نظام الإنتاج)</SelectItem>
                     {templates?.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
                         {template.name}
@@ -131,7 +131,7 @@ export function GenerateIdeasDialog({
               </div>
               <div className="rounded-md border p-3 bg-muted/50">
                 <p className="text-sm text-muted-foreground">
-                  سيتم توليد أفكار بصيغ Tech Voice المعتمدة:
+                  سيتم توليد أفكار بصيغ نظام الإنتاج المعتمدة:
                 </p>
                 <ul className="mt-2 text-sm space-y-1">
                   <li>• ثلاثيات (Thalathiyat)</li>

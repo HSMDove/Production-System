@@ -383,7 +383,7 @@ export default function Settings() {
                   <SelectItem value="replit">
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4" />
-                      <span>Replit / OpenAI (الافتراضي)</span>
+                      <span>سحابة نظام الإنتاج (الافتراضي)</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="custom">
@@ -400,7 +400,7 @@ export default function Settings() {
               <div className="rounded-md border p-4 bg-muted/30">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    يستخدم Replit AI Integrations - لا حاجة لمفتاح API خاص
+                    يستخدم الذكاء الاصطناعي المدمج - لا حاجة لمفتاح API خاص
                   </p>
                   <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
                     متصل
@@ -463,7 +463,7 @@ export default function Settings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              أسلوب Tech Voice
+              أسلوب نظام الإنتاج
             </CardTitle>
             <CardDescription>
               حدد شخصية الكتابة - كيف يعيد الذكاء الاصطناعي صياغة الأخبار
@@ -475,7 +475,7 @@ export default function Settings() {
               <Textarea
                 id="system-prompt"
                 className="min-h-[150px] text-sm"
-                placeholder="أنت حسام من قناة Tech Voice. أسلوبك سعودي تقني كاجوال..."
+                placeholder="أنت حسام من قناة نظام الإنتاج. أسلوبك سعودي تقني كاجوال..."
                 value={localSettings.ai_system_prompt || ""}
                 onChange={(e) => updateSetting("ai_system_prompt", e.target.value)}
                 data-testid="textarea-system-prompt"
@@ -634,7 +634,7 @@ export default function Settings() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">PostgreSQL</p>
-                <p className="text-sm text-muted-foreground">قاعدة بيانات مُدارة من Replit</p>
+                <p className="text-sm text-muted-foreground">قاعدة بيانات مُدارة</p>
               </div>
               <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
                 متصل
@@ -645,17 +645,18 @@ export default function Settings() {
 
         <Card>
           <CardHeader>
-            <CardTitle>حول التطبيق</CardTitle>
+            <CardTitle>حول النظام</CardTitle>
+            <CardDescription>معلومات عن المطور والإصدار</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-sm">
-              <span className="font-medium">Tech Voice Content Platform</span>
+              <span className="font-medium">منصة نظام الإنتاج</span>
             </p>
             <p className="text-sm text-muted-foreground">
-              منصة إدارة المحتوى وتوليد أفكار الفيديو لقناة Tech Voice
+              منصة إدارة المحتوى وتوليد أفكار الفيديو
             </p>
             <p className="text-xs text-muted-foreground mt-4">
-              تم تطويره بواسطة Replit Agent
+              تم تطوير هذا النظام بواسطة <span className="font-bold text-primary">حسام تيك فيلد</span>
             </p>
           </CardContent>
         </Card>
