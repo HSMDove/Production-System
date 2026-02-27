@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check, Eye, EyeOff } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,59 @@ interface ContentFeedProps {
   isLoading?: boolean;
   showTranslation?: boolean;
   folderId?: string;
+}
+
+const READ_CONTENT_STORAGE_KEY = "techvoice-read-content-ids";
+
+type ContentAgeBand = "today" | "yesterday" | "beforeYesterday" | "archive";
+
+function getContentAgeBand(item: ContentWithSource): ContentAgeBand {
+  const date = new Date(item.publishedAt || item.fetchedAt);
+  const ageMs = Date.now() - date.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (ageMs < dayMs) return "today";
+  if (ageMs < 2 * dayMs) return "yesterday";
+  if (ageMs < 3 * dayMs) return "beforeYesterday";
+  return "archive";
+}
+
+function getAgeAccentStyles(ageBand: ContentAgeBand) {
+  switch (ageBand) {
+    case "today":
+      return {
+        barClassName: "bg-emerald-500/80",
+        ringClassName: "ring-emerald-500/20",
+        tintClassName: "bg-emerald-500/5 dark:bg-emerald-500/10",
+        glowClassName: "shadow-[0_0_0_1px_rgba(16,185,129,0.05)] dark:shadow-[0_0_0_1px_rgba(16,185,129,0.14)]",
+        label: "أخبار اليوم",
+      };
+    case "yesterday":
+      return {
+        barClassName: "bg-orange-500/80",
+        ringClassName: "ring-orange-500/20",
+        tintClassName: "bg-orange-500/5 dark:bg-orange-500/10",
+        glowClassName: "shadow-[0_0_0_1px_rgba(249,115,22,0.05)] dark:shadow-[0_0_0_1px_rgba(249,115,22,0.14)]",
+        label: "أخبار الأمس",
+      };
+    case "beforeYesterday":
+      return {
+        barClassName: "bg-rose-500/80",
+        ringClassName: "ring-rose-500/20",
+        tintClassName: "bg-rose-500/5 dark:bg-rose-500/10",
+        glowClassName: "shadow-[0_0_0_1px_rgba(244,63,94,0.05)] dark:shadow-[0_0_0_1px_rgba(244,63,94,0.14)]",
+        label: "أخبار قبل الأمس",
+      };
+    case "archive":
+    default:
+      return {
+        barClassName: "bg-slate-400/60",
+        ringClassName: "ring-slate-400/20",
+        tintClassName: "bg-slate-500/5 dark:bg-slate-500/10",
+        glowClassName: "shadow-[0_0_0_1px_rgba(100,116,139,0.04)] dark:shadow-[0_0_0_1px_rgba(100,116,139,0.10)]",
+        label: "الأرشيف",
+      };
+  }
 }
 
 function getSourceIcon(type: string) {
@@ -77,12 +130,14 @@ function getSourceDisplayName(item: ContentWithSource): string {
   }
 }
 
-function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslating }: { 
+function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslating, isRead = false, onToggleRead }: { 
   item: ContentWithSource; 
   onExplain?: (item: ContentWithSource) => void; 
   onTranslate?: (item: ContentWithSource) => void;
   showTranslation?: boolean;
   isTranslating?: boolean;
+  isRead?: boolean;
+  onToggleRead?: (id: string) => void;
 }) {
   const [imageError, setImageError] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -119,15 +174,30 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   // Check if we have a valid image
   const hasValidImage = item.imageUrl && !imageError;
+  const ageBand = getContentAgeBand(item);
+  const ageAccent = getAgeAccentStyles(ageBand);
   
   return (
     <Card 
-      className="transition-all duration-200 hover:border-primary/30"
+      className={`relative overflow-hidden transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.glowClassName} ${isRead ? "opacity-55 saturate-75" : "opacity-100"}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
+        <div className={`pointer-events-none absolute inset-0 ${ageAccent.tintClassName}`} />
         {/* Feedly-style horizontal layout */}
         <div className="flex flex-row gap-3 p-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={`w-1.5 self-stretch rounded-full ${ageAccent.barClassName}`}
+                data-testid={`content-age-accent-${item.id}`}
+                aria-label={ageAccent.label}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{ageAccent.label}</p>
+            </TooltipContent>
+          </Tooltip>
           {/* Thumbnail - Fixed size on the right (RTL) */}
           <div className="flex-shrink-0 relative">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
@@ -261,6 +331,29 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 </a>
               </Button>
 
+              {/* Read/Unread Toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => onToggleRead?.(item.id)}
+                    data-testid={`button-read-toggle-${item.id}`}
+                  >
+                    {isRead ? (
+                      <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">{isRead ? "مقروء" : "تحديد كمقروء"}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isRead ? "تم وضع الخبر كمقروء" : "وضع الخبر كمقروء"}</p>
+                </TooltipContent>
+              </Tooltip>
+
               {/* Broadcast to Channels */}
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -322,6 +415,33 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
   const [explanation, setExplanation] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(READ_CONTENT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setReadIds(new Set(parsed.filter((id) => typeof id === "string")));
+      }
+    } catch {
+      setReadIds(new Set());
+    }
+  }, []);
+
+  const handleToggleRead = (contentId: string) => {
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(contentId)) {
+        next.delete(contentId);
+      } else {
+        next.add(contentId);
+      }
+      localStorage.setItem(READ_CONTENT_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  };
   
   // Extract folderId from content if not provided
   const effectiveFolderId = folderId || content[0]?.folderId;
@@ -475,6 +595,8 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
               onTranslate={handleTranslate}
               showTranslation={showTranslation} 
               isTranslating={translatingIds.has(item.id)}
+              isRead={readIds.has(item.id)}
+              onToggleRead={handleToggleRead}
             />
           ))}
         </div>
@@ -495,6 +617,8 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
               onTranslate={handleTranslate}
               showTranslation={showTranslation} 
               isTranslating={translatingIds.has(item.id)}
+              isRead={readIds.has(item.id)}
+              onToggleRead={handleToggleRead}
             />
           ))}
         </div>
@@ -534,6 +658,8 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
                 onTranslate={handleTranslate}
                 showTranslation={showTranslation} 
                 isTranslating={translatingIds.has(item.id)}
+                isRead={readIds.has(item.id)}
+                onToggleRead={handleToggleRead}
               />
             ))
           ) : (
@@ -556,6 +682,8 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
                 onTranslate={handleTranslate}
                 showTranslation={showTranslation} 
                 isTranslating={translatingIds.has(item.id)}
+                isRead={readIds.has(item.id)}
+                onToggleRead={handleToggleRead}
               />
             ))
           ) : (
