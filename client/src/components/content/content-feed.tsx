@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,18 +56,21 @@ function getAgeAccentStyles(ageBand: ContentAgeBand) {
       return {
         barClassName: "bg-emerald-500/80",
         ringClassName: "ring-emerald-500/20",
+        tintClassName: "bg-emerald-500/[0.03] dark:bg-emerald-400/[0.04]",
         label: "أخبار اليوم",
       };
     case "yesterday":
       return {
         barClassName: "bg-orange-500/80",
         ringClassName: "ring-orange-500/20",
+        tintClassName: "bg-orange-500/[0.03] dark:bg-orange-400/[0.04]",
         label: "أخبار الأمس",
       };
     case "beforeYesterday":
       return {
         barClassName: "bg-rose-500/80",
         ringClassName: "ring-rose-500/20",
+        tintClassName: "bg-rose-500/[0.03] dark:bg-rose-400/[0.04]",
         label: "أخبار قبل الأمس",
       };
     case "archive":
@@ -75,6 +78,7 @@ function getAgeAccentStyles(ageBand: ContentAgeBand) {
       return {
         barClassName: "bg-slate-400/60",
         ringClassName: "ring-slate-400/20",
+        tintClassName: "bg-slate-400/[0.03] dark:bg-slate-300/[0.03]",
         label: "الأرشيف",
       };
   }
@@ -187,7 +191,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   return (
     <Card 
-      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${isRead ? "opacity-60 bg-muted/30" : ""}`}
+      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
@@ -349,6 +353,28 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 </Button>
               )}
               
+
+
+              {/* Mark as Read (Persistent) */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleMarkRead}
+                    disabled={isRead || readMutation.isPending}
+                    data-testid={`button-eye-read-${item.id}`}
+                    aria-label={isRead ? "تمت القراءة" : "تحديد كمقروء"}
+                  >
+                    <Eye className={`h-3.5 w-3.5 ${isRead ? "text-primary" : "text-muted-foreground"}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isRead ? "تمت القراءة" : "تحديد كمقروء"}</p>
+                </TooltipContent>
+              </Tooltip>
+
               {/* External Link */}
               <Button
                 variant="ghost"
@@ -368,20 +394,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 </a>
               </Button>
 
-              {/* Mark as Read Button (Visible if not read) */}
-              {!isRead && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 gap-1 text-xs text-muted-foreground hover:text-primary"
-                  onClick={handleMarkRead}
-                  disabled={readMutation.isPending}
-                  data-testid={`button-mark-read-${item.id}`}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">تمت القراءة</span>
-                </Button>
-              )}
 
               {/* Broadcast to Channels */}
               <Tooltip>
