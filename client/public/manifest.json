@@ -1,6 +1,6 @@
 {
-  "name": "Tech Voice - منصة المحتوى",
-  "short_name": "Tech Voice",
+  "name": "نظام الإنتاج",
+  "short_name": "نظام الإنتاج",
   "description": "منصة لإدارة المحتوى وتوليد أفكار الفيديوهات بالذكاء الاصطناعي",
   "start_url": "/",
   "display": "standalone",

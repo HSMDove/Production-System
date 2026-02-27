@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, RefreshCw, Languages, Power, Clock, Sparkles, Loader2 } from "lucide-react";
+import { ChevronLeft, RefreshCw, Languages, Power, Clock, Sparkles, Loader2, Layers } from "lucide-react";
+import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
+import { Rss, Globe } from "lucide-react";
 import { SmartViewFeed } from "@/components/content/smart-view-feed";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
@@ -377,8 +379,42 @@ export default function FolderDetail() {
           </TabsList>
 
           <TabsContent value="feed" className="space-y-4">
-            <div className="flex gap-4">
-              {/* Sources sidebar */}
+            {/* Mobile: horizontal source filter strip */}
+            <div className="flex md:hidden gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <Button
+                variant={selectedFilterSourceId === null ? "default" : "outline"}
+                size="sm"
+                className="flex-shrink-0 gap-1.5 h-8 text-xs"
+                onClick={() => setSelectedFilterSourceId(null)}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                الكل
+              </Button>
+              {(sources || []).map((source) => {
+                const IconMap: Record<string, React.ReactNode> = {
+                  youtube: <SiYoutube className="h-3.5 w-3.5 text-red-500" />,
+                  twitter: <SiX className="h-3.5 w-3.5" />,
+                  tiktok: <SiTiktok className="h-3.5 w-3.5" />,
+                  website: <Globe className="h-3.5 w-3.5 text-blue-500" />,
+                  rss: <Rss className="h-3.5 w-3.5 text-orange-500" />,
+                };
+                return (
+                  <Button
+                    key={source.id}
+                    variant={selectedFilterSourceId === source.id ? "secondary" : "outline"}
+                    size="sm"
+                    className="flex-shrink-0 gap-1.5 h-8 text-xs max-w-[130px]"
+                    onClick={() => setSelectedFilterSourceId(source.id)}
+                  >
+                    {IconMap[source.type] || <Rss className="h-3.5 w-3.5 text-orange-500" />}
+                    <span className="truncate">{source.name}</span>
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3">
+              {/* Sources sidebar - Desktop only */}
               <SourcesSidebar
                 sources={sources || []}
                 selectedSourceId={selectedFilterSourceId}

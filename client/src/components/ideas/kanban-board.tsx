@@ -76,7 +76,7 @@ function KanbanColumn({ status, ideas, onEdit, onDelete, onInlineUpdate, onCardC
           {ideas.length}
         </Badge>
       </div>
-      <ScrollArea className="flex-1 p-2" style={{ maxHeight: "calc(100vh - 280px)" }}>
+      <ScrollArea className="flex-1 p-2 h-[calc(100vh-220px)] min-h-[300px]">
         <SortableContext
           items={ideas.map((idea) => idea.id)}
           strategy={verticalListSortingStrategy}

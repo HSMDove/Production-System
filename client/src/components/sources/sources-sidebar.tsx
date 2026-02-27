@@ -27,8 +27,8 @@ function getSourceIcon(type: string) {
 
 export function SourcesSidebar({ sources, selectedSourceId, onSourceSelect }: SourcesSidebarProps) {
   return (
-    <div className="w-56 flex-shrink-0 border-r bg-muted/30 overflow-y-auto">
-      <div className="p-3 space-y-1">
+    <div className="hidden md:flex w-52 lg:w-56 flex-shrink-0 border-l bg-muted/20 rounded-lg overflow-y-auto">
+      <div className="p-2 space-y-1 w-full">
         <Button
           variant={selectedSourceId === null ? "default" : "ghost"}
           className="w-full justify-start gap-2"
