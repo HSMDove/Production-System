@@ -36,6 +36,50 @@ interface ContentFeedProps {
   folderId?: string;
 }
 
+
+type ContentAgeBand = "today" | "yesterday" | "beforeYesterday" | "archive";
+
+function getContentAgeBand(item: ContentWithSource): ContentAgeBand {
+  const date = new Date(item.publishedAt || item.fetchedAt);
+  const ageMs = Date.now() - date.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (ageMs < dayMs) return "today";
+  if (ageMs < 2 * dayMs) return "yesterday";
+  if (ageMs < 3 * dayMs) return "beforeYesterday";
+  return "archive";
+}
+
+function getAgeAccentStyles(ageBand: ContentAgeBand) {
+  switch (ageBand) {
+    case "today":
+      return {
+        barClassName: "bg-emerald-500/80",
+        ringClassName: "ring-emerald-500/20",
+        label: "أخبار اليوم",
+      };
+    case "yesterday":
+      return {
+        barClassName: "bg-orange-500/80",
+        ringClassName: "ring-orange-500/20",
+        label: "أخبار الأمس",
+      };
+    case "beforeYesterday":
+      return {
+        barClassName: "bg-rose-500/80",
+        ringClassName: "ring-rose-500/20",
+        label: "أخبار قبل الأمس",
+      };
+    case "archive":
+    default:
+      return {
+        barClassName: "bg-slate-400/60",
+        ringClassName: "ring-slate-400/20",
+        label: "الأرشيف",
+      };
+  }
+}
+
 function getSourceIcon(type: string) {
   switch (type) {
     case "youtube":
@@ -119,15 +163,29 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   // Check if we have a valid image
   const hasValidImage = item.imageUrl && !imageError;
+  const ageBand = getContentAgeBand(item);
+  const ageAccent = getAgeAccentStyles(ageBand);
   
   return (
     <Card 
-      className="transition-all duration-200 hover:border-primary/30"
+      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
         {/* Feedly-style horizontal layout */}
         <div className="flex flex-row gap-3 p-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={`w-1.5 self-stretch rounded-full ${ageAccent.barClassName}`}
+                data-testid={`content-age-accent-${item.id}`}
+                aria-label={ageAccent.label}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{ageAccent.label}</p>
+            </TooltipContent>
+          </Tooltip>
           {/* Thumbnail - Fixed size on the right (RTL) */}
           <div className="flex-shrink-0 relative">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
