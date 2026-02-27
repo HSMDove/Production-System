@@ -327,6 +327,27 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 <Sparkles className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">شرح مفصل</span>
               </Button>
+
+              {/* Translate Button */}
+              {needsTranslation && onTranslate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 gap-1 text-xs"
+                  onClick={() => onTranslate(item)}
+                  disabled={isTranslating}
+                  data-testid={`button-translate-${item.id}`}
+                >
+                  {isTranslating ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Languages className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isTranslating ? "جاري الترجمة..." : "ترجمة"}
+                  </span>
+                </Button>
+              )}
               
               {/* External Link */}
               <Button
