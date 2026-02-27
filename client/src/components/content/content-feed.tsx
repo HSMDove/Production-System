@@ -181,7 +181,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   });
 
   const handleMarkRead = () => {
-    if (!isRead) readMutation.mutate();
+    readMutation.mutate();
   };
 
   // Check if we have a valid image
@@ -355,7 +355,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
               
 
 
-              {/* Mark as Read (Persistent) */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -363,15 +362,15 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleMarkRead}
-                    disabled={isRead || readMutation.isPending}
+                    disabled={readMutation.isPending}
                     data-testid={`button-eye-read-${item.id}`}
-                    aria-label={isRead ? "تمت القراءة" : "تحديد كمقروء"}
+                    aria-label={isRead ? "إلغاء التحديد كمقروء" : "تحديد كمقروء"}
                   >
                     <Eye className={`h-3.5 w-3.5 ${isRead ? "text-primary" : "text-muted-foreground"}`} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isRead ? "تمت القراءة" : "تحديد كمقروء"}</p>
+                  <p>{isRead ? "إلغاء التحديد كمقروء" : "تحديد كمقروء"}</p>
                 </TooltipContent>
               </Tooltip>
 

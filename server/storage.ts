@@ -429,9 +429,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markContentRead(id: string): Promise<Content | undefined> {
+    const [item] = await db.select().from(content).where(eq(content.id, id));
+    if (!item) return undefined;
+    
+    const newReadAt = item.readAt ? null : new Date();
+    
     const [updated] = await db
       .update(content)
-      .set({ readAt: new Date() })
+      .set({ readAt: newReadAt })
       .where(eq(content.id, id))
       .returning();
     return updated;
