@@ -101,6 +101,7 @@ export interface IStorage {
   
   getUnusedContentByFolderId(folderId: string): Promise<Content[]>;
   markContentUsedForIdeas(ids: string[]): Promise<void>;
+  markContentRead(id: string): Promise<Content | undefined>;
 
   getAllStyleExamples(): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
@@ -425,6 +426,15 @@ export class DatabaseStorage implements IStorage {
       .update(content)
       .set({ usedForIdeas: true })
       .where(inArray(content.id, ids));
+  }
+
+  async markContentRead(id: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ readAt: new Date() })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
   }
 
   async getAllStyleExamples(): Promise<StyleExample[]> {

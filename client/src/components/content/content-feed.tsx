@@ -153,6 +153,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   const hasArabicSummary = !!item.arabicSummary;
   const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
   const needsTranslation = !hasArabicSummary || !hasTranslation;
+  const isRead = !!item.readAt;
   
   // Determine what to display based on translation mode
   // When translation is ON: show Arabic content ONLY if available, else keep English
@@ -161,6 +162,24 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary! : item.summary;
   const isArabicDisplay = showTranslation && hasTranslation;
   
+  const readMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/content/${item.id}/read`);
+    },
+    onSuccess: () => {
+      import("@/lib/queryClient").then(({ queryClient }) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+        if (item.folderId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
+        }
+      });
+    },
+  });
+
+  const handleMarkRead = () => {
+    if (!isRead) readMutation.mutate();
+  };
+
   // Check if we have a valid image
   const hasValidImage = item.imageUrl && !imageError;
   const ageBand = getContentAgeBand(item);
@@ -168,24 +187,29 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   return (
     <Card 
-      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName}`}
+      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${isRead ? "opacity-60 bg-muted/30" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
         {/* Feedly-style horizontal layout */}
         <div className="flex flex-row gap-3 p-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className={`w-1.5 self-stretch rounded-full ${ageAccent.barClassName}`}
-                data-testid={`content-age-accent-${item.id}`}
-                aria-label={ageAccent.label}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{ageAccent.label}</p>
-            </TooltipContent>
-          </Tooltip>
+          <div className="flex flex-col gap-2 items-center self-stretch">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`w-1.5 flex-1 rounded-full ${ageAccent.barClassName}`}
+                  data-testid={`content-age-accent-${item.id}`}
+                  aria-label={ageAccent.label}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{ageAccent.label}</p>
+              </TooltipContent>
+            </Tooltip>
+            {isRead && (
+              <Check className="h-3 w-3 text-primary shrink-0" />
+            )}
+          </div>
           {/* Thumbnail - Fixed size on the right (RTL) */}
           <div className="flex-shrink-0 relative">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
@@ -294,7 +318,10 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 gap-1 text-xs"
-                onClick={() => onExplain?.(item)}
+                onClick={() => {
+                  handleMarkRead();
+                  onExplain?.(item);
+                }}
                 data-testid={`button-explain-${item.id}`}
               >
                 <Sparkles className="h-3.5 w-3.5" />
@@ -307,6 +334,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 size="sm"
                 className="h-7 px-2 gap-1 text-xs"
                 asChild
+                onClick={handleMarkRead}
               >
                 <a
                   href={item.originalUrl}
@@ -318,6 +346,21 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                   <span className="hidden sm:inline">المصدر</span>
                 </a>
               </Button>
+
+              {/* Mark as Read Button (Visible if not read) */}
+              {!isRead && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 gap-1 text-xs text-muted-foreground hover:text-primary"
+                  onClick={handleMarkRead}
+                  disabled={readMutation.isPending}
+                  data-testid={`button-mark-read-${item.id}`}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">تمت القراءة</span>
+                </Button>
+              )}
 
               {/* Broadcast to Channels */}
               <Tooltip>
