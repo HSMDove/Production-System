@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Languages, RefreshCw, Send, Check, Eye, EyeOff } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,54 @@ interface ContentFeedProps {
   isLoading?: boolean;
   showTranslation?: boolean;
   folderId?: string;
+}
+
+
+type ContentAgeBand = "today" | "yesterday" | "beforeYesterday" | "archive";
+
+function getContentAgeBand(item: ContentWithSource): ContentAgeBand {
+  const date = new Date(item.publishedAt || item.fetchedAt);
+  const ageMs = Date.now() - date.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  if (ageMs < dayMs) return "today";
+  if (ageMs < 2 * dayMs) return "yesterday";
+  if (ageMs < 3 * dayMs) return "beforeYesterday";
+  return "archive";
+}
+
+function getAgeAccentStyles(ageBand: ContentAgeBand) {
+  switch (ageBand) {
+    case "today":
+      return {
+        barClassName: "bg-emerald-500/80",
+        ringClassName: "ring-emerald-500/20",
+        tintClassName: "bg-emerald-500/[0.045] dark:bg-emerald-400/[0.07]",
+        label: "أخبار اليوم",
+      };
+    case "yesterday":
+      return {
+        barClassName: "bg-orange-500/80",
+        ringClassName: "ring-orange-500/20",
+        tintClassName: "bg-orange-500/[0.045] dark:bg-orange-400/[0.07]",
+        label: "أخبار الأمس",
+      };
+    case "beforeYesterday":
+      return {
+        barClassName: "bg-rose-500/80",
+        ringClassName: "ring-rose-500/20",
+        tintClassName: "bg-rose-500/[0.045] dark:bg-rose-400/[0.07]",
+        label: "أخبار قبل الأمس",
+      };
+    case "archive":
+    default:
+      return {
+        barClassName: "bg-slate-400/60",
+        ringClassName: "ring-slate-400/20",
+        tintClassName: "bg-slate-400/[0.04] dark:bg-slate-300/[0.06]",
+        label: "الأرشيف",
+      };
+  }
 }
 
 function getSourceIcon(type: string) {
@@ -87,6 +135,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   const [imageError, setImageError] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
+  const [optimisticRead, setOptimisticRead] = useState(!!item.readAt);
   const { toast } = useToast();
 
   const broadcastMutation = useMutation({
@@ -109,6 +158,11 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   const hasArabicSummary = !!item.arabicSummary;
   const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
   const needsTranslation = !hasArabicSummary || !hasTranslation;
+  const isRead = optimisticRead || !!item.readAt;
+
+  useEffect(() => {
+    setOptimisticRead(!!item.readAt);
+  }, [item.readAt]);
   
   // Determine what to display based on translation mode
   // When translation is ON: show Arabic content ONLY if available, else keep English
@@ -117,17 +171,61 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary! : item.summary;
   const isArabicDisplay = showTranslation && hasTranslation;
   
+  const readMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/content/${item.id}/read`);
+    },
+    onMutate: () => {
+      setOptimisticRead(true);
+    },
+    onError: () => {
+      setOptimisticRead(false);
+    },
+    onSuccess: () => {
+      import("@/lib/queryClient").then(({ queryClient }) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+        if (item.folderId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
+        }
+      });
+    },
+  });
+
+  const handleMarkRead = () => {
+    if (!isRead) readMutation.mutate();
+  };
+
   // Check if we have a valid image
   const hasValidImage = item.imageUrl && !imageError;
+  const ageBand = getContentAgeBand(item);
+  const ageAccent = getAgeAccentStyles(ageBand);
   
   return (
-    <Card 
-      className="transition-all duration-200 hover:border-primary/30"
+    <Card
+      className={`relative overflow-hidden transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${isRead ? "opacity-55 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
+      <div className={`pointer-events-none absolute inset-0 ${ageAccent.tintClassName}`} aria-hidden="true" />
       <CardContent className="p-0">
         {/* Feedly-style horizontal layout */}
         <div className="flex flex-row gap-3 p-3">
+          <div className="flex flex-col gap-2 items-center self-stretch">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`w-1.5 flex-1 rounded-full ${ageAccent.barClassName}`}
+                  data-testid={`content-age-accent-${item.id}`}
+                  aria-label={ageAccent.label}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{ageAccent.label}</p>
+              </TooltipContent>
+            </Tooltip>
+            {isRead && (
+              <Check className="h-3 w-3 text-primary shrink-0" />
+            )}
+          </div>
           {/* Thumbnail - Fixed size on the right (RTL) */}
           <div className="flex-shrink-0 relative">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
@@ -236,7 +334,10 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 gap-1 text-xs"
-                onClick={() => onExplain?.(item)}
+                onClick={() => {
+                  handleMarkRead();
+                  onExplain?.(item);
+                }}
                 data-testid={`button-explain-${item.id}`}
               >
                 <Sparkles className="h-3.5 w-3.5" />
@@ -249,6 +350,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 size="sm"
                 className="h-7 px-2 gap-1 text-xs"
                 asChild
+                onClick={handleMarkRead}
               >
                 <a
                   href={item.originalUrl}
@@ -260,6 +362,25 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                   <span className="hidden sm:inline">المصدر</span>
                 </a>
               </Button>
+
+              {/* Read Toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-primary"
+                    onClick={handleMarkRead}
+                    disabled={isRead || readMutation.isPending}
+                    data-testid={`button-mark-read-${item.id}`}
+                  >
+                    {isRead ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isRead ? "تمت القراءة" : "تحديد كمقروء"}</p>
+                </TooltipContent>
+              </Tooltip>
 
               {/* Broadcast to Channels */}
               <Tooltip>

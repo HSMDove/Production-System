@@ -503,6 +503,19 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/content/:id/read", async (req, res) => {
+    try {
+      const content = await storage.markContentRead(req.params.id);
+      if (!content) {
+        return res.status(404).json({ error: "Content not found" });
+      }
+      res.json(content);
+    } catch (error) {
+      console.error("Error marking content read:", error);
+      res.status(500).json({ error: "Failed to mark content as read" });
+    }
+  });
+
   app.get("/api/ideas", async (req, res) => {
     try {
       const folderId = req.query.folderId as string | undefined;
