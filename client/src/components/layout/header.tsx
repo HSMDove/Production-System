@@ -30,7 +30,7 @@ export function Header() {
           <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">نظام الإنتاج</span>
+          <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">نظام حسام للإنتاج</span>
         </Link>
 
         {/* Desktop Navigation */}
