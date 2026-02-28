@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -226,6 +226,43 @@ export type InsertIdeaComment = z.infer<typeof insertIdeaCommentSchema>;
 
 export type IdeaAssignment = typeof ideaAssignments.$inferSelect;
 export type InsertIdeaAssignment = z.infer<typeof insertIdeaAssignmentSchema>;
+
+
+
+// Assistant Conversations - persistent chat sessions
+export const assistantConversations = pgTable("assistant_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull().default("محادثة جديدة"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const assistantMessages = pgTable("assistant_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull().$type<"user" | "assistant">(),
+  content: text("content").notNull(),
+  action: text("action"),
+  statusLabel: text("status_label"),
+  metadata: jsonb("metadata").$type<Record<string, any> | null>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAssistantConversationSchema = createInsertSchema(assistantConversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAssistantMessageSchema = createInsertSchema(assistantMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AssistantConversation = typeof assistantConversations.$inferSelect;
+export type InsertAssistantConversation = z.infer<typeof insertAssistantConversationSchema>;
+export type AssistantMessage = typeof assistantMessages.$inferSelect;
+export type InsertAssistantMessage = z.infer<typeof insertAssistantMessageSchema>;
 
 // Prompt Templates - custom AI prompt templates for idea generation
 export const promptTemplates = pgTable("prompt_templates", {

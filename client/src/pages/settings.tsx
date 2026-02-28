@@ -326,7 +326,7 @@ export default function Settings() {
                   {slackEnabled && (
                     <div className="space-y-3 pr-6">
                       <div className="space-y-2">
-                        <Label htmlFor="slack-webhook">Webhook URL</Label>
+                        <Label htmlFor="slack-webhook">Webhook URL (إشعارات الأخبار)</Label>
                         <Input
                           id="slack-webhook"
                           type="password"
@@ -337,6 +337,52 @@ export default function Settings() {
                           data-testid="input-slack-webhook"
                         />
                       </div>
+
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-token">Bot User OAuth Token (xoxb)</Label>
+                        <Input
+                          id="slack-bot-token"
+                          type="password"
+                          placeholder="xoxb-..."
+                          value={localSettings.slack_bot_token || ""}
+                          onChange={(e) => updateSetting("slack_bot_token", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-bot-token"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-signing-secret">Signing Secret</Label>
+                        <Input
+                          id="slack-signing-secret"
+                          type="password"
+                          placeholder="Slack Signing Secret"
+                          value={localSettings.slack_signing_secret || ""}
+                          onChange={(e) => updateSetting("slack_signing_secret", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-signing-secret"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-user-id">Bot User ID (اختياري)</Label>
+                        <Input
+                          id="slack-bot-user-id"
+                          placeholder="U012345..."
+                          value={localSettings.slack_bot_user_id || ""}
+                          onChange={(e) => updateSetting("slack_bot_user_id", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-bot-user-id"
+                        />
+                      </div>
+
+                      <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                        <p className="font-medium">Webhook Endpoint (ضعه في Slack Event Subscriptions):</p>
+                        <code className="block mt-1 text-xs break-all" dir="ltr">{window.location.origin}/api/integrations/slack/events</code>
+                      </div>
+
                       <Button
                         variant="outline"
                         size="sm"
