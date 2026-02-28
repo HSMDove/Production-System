@@ -803,6 +803,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/integrations/slack/events", async (_req, res) => {
+    const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+    const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+    res.json({
+      status: "online",
+      botToken: botToken ? `✅ مُضبوط (${botToken.slice(0, 8)}...)` : "❌ غير مُضبوط",
+      signingSecret: signingSecret ? "✅ مُضبوط" : "⚠️ غير مُضبوط (اختياري)",
+      message: "الـ endpoint جاهز لاستقبال أحداث Slack"
+    });
+  });
+
   app.post("/api/integrations/slack/events", async (req: any, res) => {
     try {
       const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
