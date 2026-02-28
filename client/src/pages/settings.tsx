@@ -96,6 +96,24 @@ export default function Settings() {
     },
   });
 
+  const testSlackBotMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-slack-bot", {
+        botToken: localSettings.slack_bot_token,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "✅ Bot Token صحيح", description: `البوت: @${data.botName} | الـ workspace: ${data.teamName}` });
+      } else {
+        toast({ title: "❌ Bot Token خاطئ", description: data.error || "تحقق من الـ Token", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار Bot Token", variant: "destructive" });
+    },
+  });
+
   const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة وشريحة A18 Pro");
   const [testAiResult, setTestAiResult] = useState("");
   
@@ -340,21 +358,43 @@ export default function Settings() {
 
                       <Separator />
 
-                      <div className="space-y-2">
-                        <Label htmlFor="slack-bot-token">Bot User OAuth Token (xoxb)</Label>
-                        <Input
-                          id="slack-bot-token"
-                          type="password"
-                          placeholder="xoxb-..."
-                          value={localSettings.slack_bot_token || ""}
-                          onChange={(e) => updateSetting("slack_bot_token", e.target.value)}
-                          dir="ltr"
-                          data-testid="input-slack-bot-token"
-                        />
+                      <div className="rounded-md border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 p-3 text-sm space-y-1">
+                        <p className="font-semibold text-blue-800 dark:text-blue-300">إعداد شات البوت (استقبال الرسائل)</p>
+                        <p className="text-muted-foreground text-xs">هذه الحقول تتيح للبوت الرد على رسائلك في Slack</p>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="slack-signing-secret">Signing Secret</Label>
+                        <Label htmlFor="slack-bot-token">
+                          Bot User OAuth Token (xoxb)
+                          {!localSettings.slack_bot_token && <span className="text-destructive text-xs mr-2">⚠ مطلوب للرد</span>}
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="slack-bot-token"
+                            type="password"
+                            placeholder="xoxb-..."
+                            value={localSettings.slack_bot_token || ""}
+                            onChange={(e) => updateSetting("slack_bot_token", e.target.value)}
+                            dir="ltr"
+                            data-testid="input-slack-bot-token"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => testSlackBotMutation.mutate()}
+                            disabled={testSlackBotMutation.isPending || !localSettings.slack_bot_token}
+                            data-testid="button-test-slack-bot"
+                          >
+                            {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-signing-secret">
+                          Signing Secret
+                          {!localSettings.slack_signing_secret && <span className="text-amber-500 text-xs mr-2">⚠ مطلوب للأمان</span>}
+                        </Label>
                         <Input
                           id="slack-signing-secret"
                           type="password"
@@ -378,9 +418,10 @@ export default function Settings() {
                         />
                       </div>
 
-                      <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                        <p className="font-medium">Webhook Endpoint (ضعه في Slack Event Subscriptions):</p>
-                        <code className="block mt-1 text-xs break-all" dir="ltr">{window.location.origin}/api/integrations/slack/events</code>
+                      <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-2">
+                        <p className="font-medium">Endpoint (ضعه في Slack → Event Subscriptions):</p>
+                        <code className="block text-xs break-all bg-background border rounded px-2 py-1" dir="ltr">{window.location.origin}/api/integrations/slack/events</code>
+                        <p className="text-xs text-muted-foreground">تأكد من تفعيل: <code>app_mention</code> و <code>message.im</code> في Subscribe to events</p>
                       </div>
 
                       <Button
