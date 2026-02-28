@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/calendar", icon: CalendarDays, label: "التقويم", testId: "link-calendar" },
   { href: "/analytics", icon: BarChart3, label: "التحليلات", testId: "link-analytics" },
   { href: "/trends", icon: TrendingUp, label: "الاتجاهات", testId: "link-trends" },
+  { href: "/model", icon: Bot, label: "النموذج", testId: "link-model" },
 ];
 
 export function Header() {

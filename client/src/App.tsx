@@ -12,6 +12,7 @@ import Analytics from "@/pages/analytics";
 import Trends from "@/pages/trends";
 import Settings from "@/pages/settings";
 import SplitView from "@/pages/split-view";
+import ModelAssistantPage from "@/pages/model-assistant";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/trends" component={Trends} />
       <Route path="/settings" component={Settings} />
       <Route path="/split-view" component={SplitView} />
+      <Route path="/model" component={ModelAssistantPage} />
       <Route component={NotFound} />
     </Switch>
   );

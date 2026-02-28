@@ -18,6 +18,31 @@ import {
   insertIdeaAssignmentSchema,
 } from "@shared/schema";
 
+type AssistantChatRequest = {
+  message: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+};
+
+const ideaCategories = [
+  "thalathiyat",
+  "leh",
+  "tech_i_use",
+  "news_roundup",
+  "deep_dive",
+  "comparison",
+  "tutorial",
+  "other",
+] as const;
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().trim();
+}
+
+function truncate(value: string | null | undefined, max = 220): string {
+  if (!value) return "";
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -513,6 +538,137 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error marking content read:", error);
       res.status(500).json({ error: "Failed to mark content as read" });
+    }
+  });
+
+
+
+  app.post("/api/assistant/chat", async (req, res) => {
+    try {
+      const body = req.body as AssistantChatRequest;
+      const userMessage = body?.message?.trim();
+
+      if (!userMessage) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      const [folders, allContent, allIdeas] = await Promise.all([
+        storage.getAllFolders(),
+        storage.getAllContent(),
+        storage.getAllIdeas(),
+      ]);
+
+      const folderById = new Map(folders.map((f) => [f.id, f]));
+
+      const sortedContent = [...allContent].sort((a, b) => {
+        const aDate = new Date(a.publishedAt || a.fetchedAt).getTime();
+        const bDate = new Date(b.publishedAt || b.fetchedAt).getTime();
+        return bDate - aDate;
+      });
+
+      const compactContext = {
+        folders: folders.map((f) => ({ id: f.id, name: f.name })),
+        latestContent: sortedContent.slice(0, 60).map((item) => ({
+          id: item.id,
+          folderName: folderById.get(item.folderId)?.name || "غير معروف",
+          title: item.title,
+          summary: truncate(item.summary || item.arabicSummary || item.arabicFullSummary || ""),
+          publishedAt: item.publishedAt || item.fetchedAt,
+          keywords: item.keywords || [],
+          url: item.originalUrl,
+        })),
+        recentIdeas: allIdeas
+          .slice()
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 30)
+          .map((idea) => ({
+            id: idea.id,
+            title: idea.title,
+            folderName: idea.folderId ? folderById.get(idea.folderId)?.name || null : null,
+            status: idea.status,
+          })),
+      };
+
+      const { client, model } = await getAIClient();
+
+      const planner = await client.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي. لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
+          },
+          {
+            role: "user",
+            content: `رسالة المستخدم: ${userMessage}
+
+السجل المختصر:${JSON.stringify(body.history || []).slice(0, 2000)}
+
+بيانات النظام:${JSON.stringify(compactContext)}`,
+          },
+        ],
+      });
+
+      const payload = planner.choices[0]?.message?.content;
+      if (!payload) {
+        return res.status(500).json({ error: "Failed to generate assistant response" });
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        parsed = { action: "chat", statusLabel: "thinking", answer: payload };
+      }
+
+      if (parsed.action === "save_idea" && parsed.ideaStructured) {
+        const folderName = normalizeText(parsed.ideaStructured.folderName || "");
+        const selectedFolder = folders.find((f) => normalizeText(f.name) === folderName);
+        const rawCategory = parsed.ideaStructured.category;
+        const safeCategory = ideaCategories.includes(rawCategory) ? rawCategory : "other";
+
+        const createdIdea = await storage.createIdea({
+          folderId: selectedFolder?.id || null,
+          title: parsed.ideaStructured.title || `فكرة من المحادثة - ${new Date().toLocaleDateString("ar")}`,
+          description: parsed.ideaStructured.description || userMessage,
+          category: safeCategory,
+          status: "raw_idea",
+          estimatedDuration: parsed.ideaStructured.estimatedDuration || "5-8 دقائق",
+          targetAudience: parsed.ideaStructured.targetAudience || "متابعو التقنية",
+          notes: "تمت إضافتها عبر صفحة النموذج (المساعد الذكي)",
+        });
+
+        return res.json({
+          action: "save_idea",
+          statusLabel: "saving_idea",
+          answer:
+            parsed.answer || `تم حفظ الفكرة بنجاح بعنوان: ${createdIdea.title} في قسم الأفكار.`,
+          createdIdea,
+        });
+      }
+
+      const matchedContent = Array.isArray(parsed.matches)
+        ? sortedContent.filter((item) => parsed.matches.includes(item.id)).slice(0, 8)
+        : [];
+
+      return res.json({
+        action: parsed.action || "chat",
+        statusLabel: parsed.statusLabel || "thinking",
+        answer: parsed.answer || "تمت المعالجة.",
+        matchedContent: matchedContent.map((item) => ({
+          id: item.id,
+          title: item.title,
+          originalUrl: item.originalUrl,
+          publishedAt: item.publishedAt || item.fetchedAt,
+          folderName: folderById.get(item.folderId)?.name || "غير معروف",
+        })),
+      });
+    } catch (error: any) {
+      console.error("Assistant chat error:", error);
+      res.status(500).json({ error: error?.message || "Failed to process assistant chat" });
     }
   });
 
