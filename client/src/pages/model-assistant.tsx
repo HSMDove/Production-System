@@ -68,6 +68,7 @@ export default function ModelAssistantPage() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [isNewMode, setIsNewMode] = useState(false);
 
   const { data: conversations } = useQuery<ConversationItem[]>({
     queryKey: ["/api/assistant/conversations"],
@@ -79,10 +80,10 @@ export default function ModelAssistantPage() {
   });
 
   useEffect(() => {
-    if (!activeConversationId && conversations && conversations.length > 0) {
+    if (!activeConversationId && !isNewMode && conversations && conversations.length > 0) {
       setActiveConversationId(conversations[0].id);
     }
-  }, [activeConversationId, conversations]);
+  }, [activeConversationId, isNewMode, conversations]);
 
   const createConversationMutation = useMutation({
     mutationFn: async () => apiRequest<ConversationItem>("POST", "/api/assistant/conversations", { title: "محادثة جديدة" }),
@@ -91,6 +92,46 @@ export default function ModelAssistantPage() {
       setActiveConversationId(conversation.id);
     },
   });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/assistant/conversations/${id}`),
+    onSuccess: (_: any, deletedId: string) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
+      if (activeConversationId === deletedId) {
+        setActiveConversationId(null);
+      }
+      toast({ title: "تم حذف المحادثة" });
+    },
+  });
+
+  const updateConversationMutation = useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) =>
+      apiRequest("PATCH", `/api/assistant/conversations/${id}`, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
+      setEditingConversationId(null);
+      toast({ title: "تم تحديث عنوان المحادثة" });
+    },
+  });
+
+  const handleStartEdit = (e: React.MouseEvent, id: string, currentTitle: string) => {
+    e.stopPropagation();
+    setEditingConversationId(id);
+    setEditTitle(currentTitle);
+  };
+
+  const handleSaveEdit = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!editTitle.trim()) return;
+    updateConversationMutation.mutate({ id, title: editTitle.trim() });
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm("هل أنت متأكد من حذف هذه المحادثة نهائياً؟")) {
+      deleteConversationMutation.mutate(id);
+    }
+  };
 
   const history = useMemo(
     () =>
@@ -137,6 +178,7 @@ export default function ModelAssistantPage() {
       const created = await createConversationMutation.mutateAsync();
       conversationId = created.id;
       setActiveConversationId(created.id);
+      setIsNewMode(false);
     }
 
     setInput("");
@@ -157,7 +199,7 @@ export default function ModelAssistantPage() {
                 size="sm"
                 variant="outline"
                 className="gap-1"
-                onClick={() => createConversationMutation.mutate()}
+                onClick={() => { setActiveConversationId(null); setIsNewMode(true); }}
                 data-testid="button-new-conversation"
               >
                 <Plus className="h-3.5 w-3.5" /> جديد
@@ -175,7 +217,7 @@ export default function ModelAssistantPage() {
                         ? "bg-primary/10 border-primary/30"
                         : "hover:bg-muted/50 border-transparent"
                     }`}
-                    onClick={() => !editingConversationId && setActiveConversationId(conversation.id)}
+                    onClick={() => { if (!editingConversationId) { setActiveConversationId(conversation.id); setIsNewMode(false); } }}
                     data-testid={`conversation-item-${conversation.id}`}
                   >
                     {editingConversationId === conversation.id ? (
