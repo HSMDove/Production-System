@@ -115,6 +115,7 @@ export interface IStorage {
   getAssistantConversationById(id: string): Promise<AssistantConversation | undefined>;
   createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation>;
   updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined>;
+  deleteAssistantConversation(id: string): Promise<boolean>;
   getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]>;
   createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage>;
 
@@ -475,6 +476,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(assistantConversations.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteAssistantConversation(id: string): Promise<boolean> {
+    const deleted = await db
+      .delete(assistantConversations)
+      .where(eq(assistantConversations.id, id))
+      .returning();
+    return deleted.length > 0;
   }
 
   async getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]> {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Loader2, MessageSquarePlus, Plus, Save, Search, Send, User } from "lucide-react";
+import { Bot, Loader2, MessageSquarePlus, Plus, Save, Search, Send, User, Trash2, Edit2, Check, X } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -66,6 +76,10 @@ export default function ModelAssistantPage() {
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [isNewMode, setIsNewMode] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { data: conversations } = useQuery<ConversationItem[]>({
     queryKey: ["/api/assistant/conversations"],
@@ -77,10 +91,10 @@ export default function ModelAssistantPage() {
   });
 
   useEffect(() => {
-    if (!activeConversationId && conversations && conversations.length > 0) {
+    if (!activeConversationId && !isNewMode && conversations && conversations.length > 0) {
       setActiveConversationId(conversations[0].id);
     }
-  }, [activeConversationId, conversations]);
+  }, [activeConversationId, isNewMode, conversations]);
 
   const createConversationMutation = useMutation({
     mutationFn: async () => apiRequest<ConversationItem>("POST", "/api/assistant/conversations", { title: "محادثة جديدة" }),
@@ -89,6 +103,44 @@ export default function ModelAssistantPage() {
       setActiveConversationId(conversation.id);
     },
   });
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/assistant/conversations/${id}`),
+    onSuccess: (_: any, deletedId: string) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
+      if (activeConversationId === deletedId) {
+        setActiveConversationId(null);
+      }
+      toast({ title: "تم حذف المحادثة" });
+    },
+  });
+
+  const updateConversationMutation = useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) =>
+      apiRequest("PATCH", `/api/assistant/conversations/${id}`, { title }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
+      setEditingConversationId(null);
+      toast({ title: "تم تحديث عنوان المحادثة" });
+    },
+  });
+
+  const handleStartEdit = (e: React.MouseEvent, id: string, currentTitle: string) => {
+    e.stopPropagation();
+    setEditingConversationId(id);
+    setEditTitle(currentTitle);
+  };
+
+  const handleSaveEdit = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!editTitle.trim()) return;
+    updateConversationMutation.mutate({ id, title: editTitle.trim() });
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setDeleteConfirmId(id);
+  };
 
   const history = useMemo(
     () =>
@@ -135,6 +187,7 @@ export default function ModelAssistantPage() {
       const created = await createConversationMutation.mutateAsync();
       conversationId = created.id;
       setActiveConversationId(created.id);
+      setIsNewMode(false);
     }
 
     setInput("");
@@ -155,7 +208,7 @@ export default function ModelAssistantPage() {
                 size="sm"
                 variant="outline"
                 className="gap-1"
-                onClick={() => createConversationMutation.mutate()}
+                onClick={() => { setActiveConversationId(null); setIsNewMode(true); }}
                 data-testid="button-new-conversation"
               >
                 <Plus className="h-3.5 w-3.5" /> جديد
@@ -166,21 +219,78 @@ export default function ModelAssistantPage() {
             <ScrollArea className="h-full">
               <div className="p-2 space-y-1">
                 {(conversations || []).map((conversation) => (
-                  <button
+                  <div
                     key={conversation.id}
-                    className={`w-full text-right rounded-lg px-3 py-2 transition-colors border ${
+                    className={`group relative w-full text-right rounded-lg px-3 py-2 transition-colors border ${
                       activeConversationId === conversation.id
                         ? "bg-primary/10 border-primary/30"
                         : "hover:bg-muted/50 border-transparent"
                     }`}
-                    onClick={() => setActiveConversationId(conversation.id)}
+                    onClick={() => { if (!editingConversationId) { setActiveConversationId(conversation.id); setIsNewMode(false); } }}
                     data-testid={`conversation-item-${conversation.id}`}
                   >
-                    <div className="font-medium text-sm line-clamp-1">{conversation.title || "محادثة بدون عنوان"}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {new Date(conversation.updatedAt).toLocaleString("ar")}
-                    </div>
-                  </button>
+                    {editingConversationId === conversation.id ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          size={1}
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="h-7 text-xs flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEdit(e as any, conversation.id);
+                            if (e.key === "Escape") setEditingConversationId(null);
+                          }}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-green-600"
+                          onClick={(e) => handleSaveEdit(e, conversation.id)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingConversationId(null);
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium text-sm line-clamp-1 flex-1">{conversation.title || "محادثة بدون عنوان"}</div>
+                          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              onClick={(e) => handleStartEdit(e, conversation.id, conversation.title)}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-destructive"
+                              onClick={(e) => handleDelete(e, conversation.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {new Date(conversation.updatedAt).toLocaleString("ar")}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 ))}
               </div>
             </ScrollArea>
@@ -298,6 +408,28 @@ export default function ModelAssistantPage() {
           </Card>
         </div>
       </div>
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف المحادثة</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف هذه المحادثة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmId) deleteConversationMutation.mutate(deleteConfirmId);
+                setDeleteConfirmId(null);
+              }}
+            >
+              حذف نهائياً
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }

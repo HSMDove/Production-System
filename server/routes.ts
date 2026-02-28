@@ -723,6 +723,34 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/assistant/conversations/:id", async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+      const updated = await storage.updateAssistantConversation(req.params.id, { title });
+      if (!updated) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update conversation" });
+    }
+  });
+
+  app.delete("/api/assistant/conversations/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAssistantConversation(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  });
+
   app.post("/api/assistant/chat", async (req, res) => {
     try {
       const body = req.body as AssistantChatRequest & { conversationId?: string };
