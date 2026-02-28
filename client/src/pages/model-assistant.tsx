@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, Loader2, MessageSquarePlus, Plus, Save, Search, Send, User } from "lucide-react";
+import { Bot, Loader2, MessageSquarePlus, Plus, Save, Search, Send, User, Trash2, Edit2, Check, X } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,8 @@ export default function ModelAssistantPage() {
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
   const { data: conversations } = useQuery<ConversationItem[]>({
     queryKey: ["/api/assistant/conversations"],
@@ -166,21 +168,78 @@ export default function ModelAssistantPage() {
             <ScrollArea className="h-full">
               <div className="p-2 space-y-1">
                 {(conversations || []).map((conversation) => (
-                  <button
+                  <div
                     key={conversation.id}
-                    className={`w-full text-right rounded-lg px-3 py-2 transition-colors border ${
+                    className={`group relative w-full text-right rounded-lg px-3 py-2 transition-colors border ${
                       activeConversationId === conversation.id
                         ? "bg-primary/10 border-primary/30"
                         : "hover:bg-muted/50 border-transparent"
                     }`}
-                    onClick={() => setActiveConversationId(conversation.id)}
+                    onClick={() => !editingConversationId && setActiveConversationId(conversation.id)}
                     data-testid={`conversation-item-${conversation.id}`}
                   >
-                    <div className="font-medium text-sm line-clamp-1">{conversation.title || "محادثة بدون عنوان"}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {new Date(conversation.updatedAt).toLocaleString("ar")}
-                    </div>
-                  </button>
+                    {editingConversationId === conversation.id ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          size={1}
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          className="h-7 text-xs flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEdit(e as any, conversation.id);
+                            if (e.key === "Escape") setEditingConversationId(null);
+                          }}
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-green-600"
+                          onClick={(e) => handleSaveEdit(e, conversation.id)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-red-600"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingConversationId(null);
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium text-sm line-clamp-1 flex-1">{conversation.title || "محادثة بدون عنوان"}</div>
+                          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              onClick={(e) => handleStartEdit(e, conversation.id, conversation.title)}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-destructive"
+                              onClick={(e) => handleDelete(e, conversation.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {new Date(conversation.updatedAt).toLocaleString("ar")}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 ))}
               </div>
             </ScrollArea>
