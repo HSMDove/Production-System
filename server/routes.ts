@@ -803,21 +803,40 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/integrations/slack/events", async (_req, res) => {
+    const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+    const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+    res.json({
+      status: "online",
+      botToken: botToken ? `✅ مُضبوط (${botToken.slice(0, 8)}...)` : "❌ غير مُضبوط",
+      signingSecret: signingSecret ? "✅ مُضبوط" : "⚠️ غير مُضبوط (اختياري)",
+      message: "الـ endpoint جاهز لاستقبال أحداث Slack"
+    });
+  });
+
   app.post("/api/integrations/slack/events", async (req: any, res) => {
     try {
       const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
       const payload = req.body || (rawBody ? JSON.parse(rawBody) : {});
 
+      // Handle URL verification challenge immediately (before signature check)
+      if (payload.type === "url_verification") {
+        console.log("[Slack] URL verification challenge received");
+        return res.json({ challenge: payload.challenge });
+      }
+
+      // Verify signature only if signing secret is configured
       const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
 
-      if (!verifySlackSignature(rawBody, timestamp || "", signature || "", signingSecret)) {
-        return res.status(401).json({ error: "Invalid Slack signature" });
-      }
-
-      if (payload.type === "url_verification") {
-        return res.json({ challenge: payload.challenge });
+      if (signingSecret) {
+        if (!verifySlackSignature(rawBody, timestamp || "", signature || "", signingSecret)) {
+          console.warn("[Slack] Signature verification failed - rejecting request");
+          return res.status(401).json({ error: "Invalid Slack signature" });
+        }
+      } else {
+        console.warn("[Slack] No signing secret configured - skipping signature verification");
       }
 
       if (payload.type !== "event_callback") {
@@ -825,52 +844,94 @@ export async function registerRoutes(
       }
 
       const event = payload.event;
-      if (!event || event.bot_id) {
+      if (!event) {
         return res.json({ ok: true });
       }
 
-      const text: string = event.text || "";
-      if (!text.trim()) {
+      // Ignore messages from bots (including our own bot)
+      if (event.bot_id || event.subtype === "bot_message") {
+        console.log("[Slack] Ignoring bot message");
         return res.json({ ok: true });
       }
 
-      const conversation = await storage.createAssistantConversation({
-        title: `Slack - ${text.slice(0, 50)}`,
-      });
-
-      const result = await runAssistantEngine(text, []);
-
-      await storage.createAssistantMessage({
-        conversationId: conversation.id,
-        role: "user",
-        content: text,
-      });
-      await storage.createAssistantMessage({
-        conversationId: conversation.id,
-        role: "assistant",
-        content: result.answer,
-        action: result.action,
-        statusLabel: result.statusLabel,
-      });
-
-      const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
-      if (botToken && event.channel) {
-        await fetch("https://slack.com/api/chat.postMessage", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${botToken}`,
-          },
-          body: JSON.stringify({
-            channel: event.channel,
-            text: result.answer,
-          }),
-        });
+      // Only handle app_mention and direct messages (im)
+      const supportedTypes = ["app_mention", "message"];
+      if (!supportedTypes.includes(event.type)) {
+        return res.json({ ok: true });
       }
 
-      return res.json({ ok: true });
+      let text: string = event.text || "";
+      // Strip bot mention (@BotName) from message text
+      text = text.replace(/<@[A-Z0-9]+>/g, "").trim();
+
+      if (!text) {
+        return res.json({ ok: true });
+      }
+
+      console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from channel ${event.channel}`);
+
+      // Respond to Slack immediately to avoid timeout
+      res.json({ ok: true });
+
+      // Process in background
+      (async () => {
+        try {
+          const conversation = await storage.createAssistantConversation({
+            title: `Slack - ${text.slice(0, 50)}`,
+          });
+
+          const result = await runAssistantEngine(text, []);
+          console.log(`[Slack] AI response ready, action: ${result.action}`);
+
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "user",
+            content: text,
+          });
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: result.answer,
+            action: result.action,
+            statusLabel: result.statusLabel,
+          });
+
+          const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+          if (!botToken) {
+            console.warn("[Slack] No bot token configured - cannot reply to Slack");
+            return;
+          }
+
+          if (!event.channel) {
+            console.warn("[Slack] No channel in event - cannot reply");
+            return;
+          }
+
+          const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${botToken}`,
+            },
+            body: JSON.stringify({
+              channel: event.channel,
+              text: result.answer,
+              thread_ts: event.thread_ts || event.ts,
+            }),
+          });
+          const slackData = await slackRes.json() as any;
+          if (!slackData.ok) {
+            console.error("[Slack] Failed to send reply:", slackData.error);
+          } else {
+            console.log("[Slack] Reply sent successfully");
+          }
+        } catch (bgError) {
+          console.error("[Slack] Background processing error:", bgError);
+        }
+      })();
+
     } catch (error) {
-      console.error("Slack events error:", error);
+      console.error("[Slack] Events endpoint error:", error);
       return res.status(500).json({ error: "Failed to process Slack event" });
     }
   });
@@ -1588,6 +1649,30 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to test Slack connection" });
+    }
+  });
+
+  app.post("/api/settings/test-slack-bot", async (req, res) => {
+    try {
+      const { botToken } = req.body;
+      if (!botToken) {
+        return res.status(400).json({ success: false, error: "Bot token is required" });
+      }
+      const authRes = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${botToken}`,
+        },
+      });
+      const data = await authRes.json() as any;
+      if (data.ok) {
+        res.json({ success: true, botName: data.user, teamName: data.team });
+      } else {
+        res.json({ success: false, error: data.error || "Invalid bot token" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to test bot token" });
     }
   });
 
