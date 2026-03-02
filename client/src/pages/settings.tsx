@@ -776,6 +776,8 @@ export default function Settings() {
                 )}
               </div>
 
+              <SlackLinkSection currentSlackId={user.slackUserId || ""} />
+
               <Button
                 variant="destructive"
                 className="w-full gap-2"
@@ -833,5 +835,57 @@ export default function Settings() {
         </div>
       )}
     </MainLayout>
+  );
+}
+
+function SlackLinkSection({ currentSlackId }: { currentSlackId: string }) {
+  const [slackId, setSlackId] = useState(currentSlackId);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setSlackId(currentSlackId);
+  }, [currentSlackId]);
+
+  const linkMutation = useMutation({
+    mutationFn: (slackUserId: string) =>
+      apiRequest("PATCH", "/api/auth/slack-link", { slackUserId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "تم الربط", description: "تم ربط حسابك بسلاك بنجاح" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل ربط حساب سلاك", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="space-y-2 p-3 rounded-lg border border-border/50 bg-muted/20">
+      <Label className="text-xs font-medium flex items-center gap-1.5">
+        <Link className="h-3.5 w-3.5" />
+        ربط حساب Slack
+      </Label>
+      <p className="text-xs text-muted-foreground">
+        أدخل معرّف Slack الخاص بك لاستخدام فكري مباشرة من سلاك. تجده من ملفك الشخصي في Slack.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          value={slackId}
+          onChange={(e) => setSlackId(e.target.value)}
+          placeholder="U0123456789"
+          dir="ltr"
+          className="text-sm h-8"
+          data-testid="input-slack-user-id"
+        />
+        <Button
+          size="sm"
+          className="h-8 shrink-0"
+          disabled={!slackId.trim() || slackId === currentSlackId || linkMutation.isPending}
+          onClick={() => linkMutation.mutate(slackId.trim())}
+          data-testid="button-link-slack"
+        >
+          {linkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "ربط"}
+        </Button>
+      </div>
+    </div>
   );
 }

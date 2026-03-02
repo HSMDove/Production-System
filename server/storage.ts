@@ -71,7 +71,7 @@ export interface IStorage {
   updateSource(id: string, source: Partial<InsertSource>): Promise<Source | undefined>;
   deleteSource(id: string): Promise<boolean>;
 
-  getAllContent(): Promise<Content[]>;
+  getAllContent(userId?: string): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
   getContentById(id: string): Promise<Content | undefined>;
@@ -254,7 +254,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ─── Content ─────────────────────────────────────────────────────────────
-  async getAllContent(): Promise<Content[]> {
+  async getAllContent(userId?: string): Promise<Content[]> {
+    if (userId) {
+      const userFolders = await this.getAllFolders(userId);
+      const folderIds = userFolders.map((f) => f.id);
+      if (folderIds.length === 0) return [];
+      const { inArray } = await import("drizzle-orm");
+      return db.select().from(content).where(inArray(content.folderId, folderIds)).orderBy(content.fetchedAt);
+    }
     return db.select().from(content).orderBy(content.fetchedAt);
   }
 

@@ -35,6 +35,9 @@ Developer: حسام تيك فيلد (Hossam TechField)
 - Ideas scoped by user's folders
 - Assistant conversations scoped by userId
 - Slack: `users.slack_user_id` links Slack User ID to platform account
+- Slack bot: identifies sender via `event.user` → `getUserBySlackUserId()` → rejects unlinked users with instructions
+- `runAssistantEngine()` accepts optional `userId` to scope folders/content/ideas per-user
+- `getAllContent(userId?)` filters content by user's folders when userId provided
 
 **Key Files:**
 - `server/auth.ts` — generateOTP(), sendOTPEmail() via Resend

@@ -60,11 +60,11 @@ type AssistantEngineResult = {
   createdIdea?: { id: string; title: string };
 };
 
-async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>): Promise<AssistantEngineResult> {
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId?: string | null): Promise<AssistantEngineResult> {
   const [folders, allContent, allIdeas] = await Promise.all([
-    storage.getAllFolders(),
-    storage.getAllContent(),
-    storage.getAllIdeas(),
+    storage.getAllFolders(userId || undefined),
+    storage.getAllContent(userId || undefined),
+    storage.getAllIdeas(userId || undefined),
   ]);
 
   const folderById = new Map(folders.map((f) => [f.id, f]));
@@ -915,7 +915,8 @@ export async function registerRoutes(
         content: userMessage,
       });
 
-      const result = await runAssistantEngine(userMessage, mergedHistory);
+      const sessionUserId = (req as any).session?.userId || null;
+      const result = await runAssistantEngine(userMessage, mergedHistory, sessionUserId);
 
       await storage.createAssistantMessage({
         conversationId,
@@ -998,7 +999,32 @@ export async function registerRoutes(
         return res.json({ ok: true });
       }
 
-      console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from channel ${event.channel}`);
+      const slackUserId = event.user;
+      console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from user ${slackUserId} in channel ${event.channel}`);
+
+      // Look up platform user by Slack User ID
+      let platformUser = slackUserId ? await storage.getUserBySlackUserId(slackUserId) : undefined;
+
+      if (!platformUser) {
+        console.log(`[Slack] User ${slackUserId} not linked to any platform account`);
+        // Respond immediately then send rejection message
+        res.json({ ok: true });
+        const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+        if (botToken && event.channel) {
+          await fetch("https://slack.com/api/chat.postMessage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${botToken}` },
+            body: JSON.stringify({
+              channel: event.channel,
+              text: `⚠️ حسابك في Slack غير مربوط بنظام الإنتاج.\n\nلربط حسابك:\n1. سجّل دخول في نظام الإنتاج\n2. اذهب إلى الإعدادات\n3. أدخل معرّف Slack الخاص بك: \`${slackUserId}\`\n\nبعدها تقدر تستخدم فكري هنا بشكل عادي 👌`,
+              thread_ts: event.thread_ts || event.ts,
+            }),
+          });
+        }
+        return;
+      }
+
+      console.log(`[Slack] Matched platform user: ${platformUser.name || platformUser.email} (${platformUser.id})`);
 
       // Respond to Slack immediately to avoid timeout
       res.json({ ok: true });
@@ -1008,9 +1034,10 @@ export async function registerRoutes(
         try {
           const conversation = await storage.createAssistantConversation({
             title: `Slack - ${text.slice(0, 50)}`,
-          });
+            userId: platformUser!.id,
+          } as any);
 
-          const result = await runAssistantEngine(text, []);
+          const result = await runAssistantEngine(text, [], platformUser!.id);
           console.log(`[Slack] AI response ready, action: ${result.action}`);
 
           await storage.createAssistantMessage({
