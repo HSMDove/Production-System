@@ -14,6 +14,8 @@ import Settings from "@/pages/settings";
 import SplitView from "@/pages/split-view";
 import ModelAssistantPage from "@/pages/model-assistant";
 import NotFound from "@/pages/not-found";
+import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
+import { FikriOverlay } from "@/components/fikri/fikri-overlay";
 
 function Router() {
   return (
@@ -37,8 +39,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="default-dark" storageKey="tech-voice-theme">
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <FikriOverlayProvider>
+            <Toaster />
+            <Router />
+            <FikriOverlay />
+          </FikriOverlayProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

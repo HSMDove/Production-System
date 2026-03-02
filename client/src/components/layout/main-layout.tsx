@@ -1,8 +1,9 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Bot } from "lucide-react";
 import { Header } from "./header";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
+import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [location] = useLocation();
+  const { setOpen } = useFikriOverlay();
   const showFikriLauncher = location !== "/settings";
 
   return (
@@ -20,15 +22,14 @@ export function MainLayout({ children }: MainLayoutProps) {
       </main>
 
       {showFikriLauncher && (
-        <Link href="/model">
-          <Button
-            className="fixed bottom-6 left-6 z-[80] rounded-full px-5 py-6 shadow-2xl backdrop-blur-md"
-            data-testid="button-fikri-fab"
-          >
-            <Bot className="h-4 w-4 ml-2" />
-            {t("fikri.name")}
-          </Button>
-        </Link>
+        <Button
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[80] rounded-full px-5 py-6 shadow-2xl backdrop-blur-md"
+          data-testid="button-fikri-fab"
+          onClick={() => setOpen(true)}
+        >
+          <Bot className="h-4 w-4 ml-2" />
+          {t("fikri.name")}
+        </Button>
       )}
     </div>
   );
