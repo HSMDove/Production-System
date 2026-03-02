@@ -3,9 +3,47 @@ import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Users - auth-capable user accounts
+export const genderTypes = ["male", "female", "other"] as const;
+export type GenderType = typeof genderTypes[number];
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  age: integer("age"),
+  gender: text("gender").$type<GenderType>(),
+  slackUserId: text("slack_user_id").unique(),
+  onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// OTP Codes - for email-based authentication
+export const otpCodes = pgTable("otp_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  code: text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type OtpCode = typeof otpCodes.$inferSelect;
+
 // Folders - represents content categories like "Android", "Apple", "AI"
 export const folders = pgTable("folders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   color: text("color").default("#3b82f6"),
@@ -85,7 +123,7 @@ export const contentRelations = relations(content, ({ one }) => ({
 // Ideas - generated video ideas with workflow states
 export const ideaStatuses = [
   "raw_idea",
-  "needs_research", 
+  "needs_research",
   "ready_for_script",
   "script_in_progress",
   "ready_for_filming",
@@ -227,11 +265,10 @@ export type InsertIdeaComment = z.infer<typeof insertIdeaCommentSchema>;
 export type IdeaAssignment = typeof ideaAssignments.$inferSelect;
 export type InsertIdeaAssignment = z.infer<typeof insertIdeaAssignmentSchema>;
 
-
-
 // Assistant Conversations - persistent chat sessions
 export const assistantConversations = pgTable("assistant_conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("محادثة جديدة"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -278,14 +315,14 @@ export const promptTemplates = pgTable("prompt_templates", {
 
 export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
   id: true,
-  isDefault: true, // Default status can only be changed via set-default endpoint
+  isDefault: true,
   createdAt: true,
   updatedAt: true,
 });
 
 export const updatePromptTemplateSchema = createInsertSchema(promptTemplates).omit({
   id: true,
-  isDefault: true, // Default status can only be changed via set-default endpoint
+  isDefault: true,
   createdAt: true,
 }).partial();
 
@@ -320,18 +357,3 @@ export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
 
 export type StyleExample = typeof styleExamples.$inferSelect;
 export type InsertStyleExample = z.infer<typeof insertStyleExampleSchema>;
-
-// Keep users table for compatibility
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;

@@ -17,15 +17,17 @@ import {
   Palette, Check, Sparkles, Database, 
   Bell, Send, MessageSquare, Bot, Loader2, 
   Server, Globe, Key, Cpu, Save, TestTube,
-  Star, Plus, Trash2, Image
+  Star, Plus, Trash2, Image, LogOut, User, Link
 } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
+import { useAuth } from "@/hooks/use-auth";
 
 type SettingsData = Record<string, string | null>;
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
+  const { user, logout, isLoggingOut } = useAuth();
   
   const [localSettings, setLocalSettings] = useState<SettingsData>({});
   const [hasChanges, setHasChanges] = useState(false);
@@ -746,6 +748,51 @@ export default function Settings() {
             </div>
           </CardContent>
         </Card>
+
+        {user && (
+          <Card className="border-muted">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                الحساب
+              </CardTitle>
+              <CardDescription>معلومات حسابك وتسجيل الخروج</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{user.name || "مستخدم"}</p>
+                  <p className="text-xs text-muted-foreground truncate" dir="ltr">{user.email}</p>
+                </div>
+                {user.slackUserId && (
+                  <div className="mr-auto shrink-0">
+                    <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-1 rounded-full border border-green-500/20">
+                      Slack مرتبط
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                variant="destructive"
+                className="w-full gap-2"
+                onClick={() => logout()}
+                disabled={isLoggingOut}
+                data-testid="button-logout"
+              >
+                {isLoggingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+                تسجيل الخروج
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

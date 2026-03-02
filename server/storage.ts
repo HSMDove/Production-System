@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, gt } from "drizzle-orm";
 import { db } from "./db";
 import {
   folders,
@@ -6,6 +6,7 @@ import {
   content,
   ideas,
   users,
+  otpCodes,
   promptTemplates,
   ideaComments,
   ideaAssignments,
@@ -20,6 +21,7 @@ import {
   type UpdateIdea,
   type User,
   type InsertUser,
+  type OtpCode,
   type PromptTemplate,
   type InsertPromptTemplate,
   type UpdatePromptTemplate,
@@ -43,22 +45,32 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  
-  getAllFolders(): Promise<Folder[]>;
+  // Auth / Users
+  getUserById(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserBySlackUserId(slackUserId: string): Promise<User | undefined>;
+  createUser(user: Partial<InsertUser>): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+
+  // OTP
+  createOTP(email: string, code: string, expiresAt: Date): Promise<OtpCode>;
+  getValidOTP(email: string, code: string): Promise<OtpCode | undefined>;
+  markOTPUsed(id: string): Promise<void>;
+  invalidateOTPsForEmail(email: string): Promise<void>;
+
+  // Folders (user-scoped)
+  getAllFolders(userId?: string): Promise<Folder[]>;
   getFolderById(id: string): Promise<Folder | undefined>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
   deleteFolder(id: string): Promise<boolean>;
-  
+
   getSourcesByFolderId(folderId: string): Promise<Source[]>;
   getSourceById(id: string): Promise<Source | undefined>;
   createSource(source: InsertSource): Promise<Source>;
   updateSource(id: string, source: Partial<InsertSource>): Promise<Source | undefined>;
   deleteSource(id: string): Promise<boolean>;
-  
+
   getAllContent(): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
@@ -70,16 +82,16 @@ export interface IStorage {
   updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
   updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
-  
+
   getAllSources(): Promise<Source[]>;
-  
-  getAllIdeas(): Promise<Idea[]>;
+
+  getAllIdeas(userId?: string): Promise<Idea[]>;
   getIdeasByFolderId(folderId: string): Promise<Idea[]>;
   getIdeaById(id: string): Promise<Idea | undefined>;
   createIdea(idea: InsertIdea): Promise<Idea>;
   updateIdea(id: string, idea: UpdateIdea): Promise<Idea | undefined>;
   deleteIdea(id: string): Promise<boolean>;
-  
+
   getAllPromptTemplates(): Promise<PromptTemplate[]>;
   getPromptTemplateById(id: string): Promise<PromptTemplate | undefined>;
   getDefaultPromptTemplate(): Promise<PromptTemplate | undefined>;
@@ -87,11 +99,11 @@ export interface IStorage {
   updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined>;
   deletePromptTemplate(id: string): Promise<boolean>;
   setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
-  
+
   getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]>;
   createComment(comment: InsertIdeaComment): Promise<IdeaComment>;
   deleteComment(id: string): Promise<boolean>;
-  
+
   getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
   createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
   deleteAssignment(id: string): Promise<boolean>;
@@ -104,14 +116,12 @@ export interface IStorage {
   getUnnotifiedContent(): Promise<Content[]>;
   markContentNotified(id: string): Promise<Content | undefined>;
   updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined>;
-  
+
   getUnusedContentByFolderId(folderId: string): Promise<Content[]>;
   markContentUsedForIdeas(ids: string[]): Promise<void>;
   markContentRead(id: string): Promise<Content | undefined>;
 
-
-
-  getAssistantConversations(): Promise<AssistantConversation[]>;
+  getAssistantConversations(userId?: string): Promise<AssistantConversation[]>;
   getAssistantConversationById(id: string): Promise<AssistantConversation | undefined>;
   createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation>;
   updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined>;
@@ -119,28 +129,82 @@ export interface IStorage {
   getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]>;
   createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage>;
 
-    getAllStyleExamples(): Promise<StyleExample[]>;
+  getAllStyleExamples(): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
   deleteStyleExample(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
+  // ─── Auth / Users ────────────────────────────────────────────────────────
+  async getUserById(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim()));
     return user;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+  async getUserBySlackUserId(slackUserId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.slackUserId, slackUserId));
     return user;
   }
 
-  async getAllFolders(): Promise<Folder[]> {
+  async createUser(data: Partial<InsertUser>): Promise<User> {
+    const [user] = await db.insert(users).values(data as any).returning();
+    return user;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [updated] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ─── OTP ─────────────────────────────────────────────────────────────────
+  async createOTP(email: string, code: string, expiresAt: Date): Promise<OtpCode> {
+    const [otp] = await db.insert(otpCodes).values({ email: email.toLowerCase().trim(), code, expiresAt }).returning();
+    return otp;
+  }
+
+  async getValidOTP(email: string, code: string): Promise<OtpCode | undefined> {
+    const now = new Date();
+    const [otp] = await db
+      .select()
+      .from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.email, email.toLowerCase().trim()),
+          eq(otpCodes.code, code),
+          eq(otpCodes.used, false),
+          gt(otpCodes.expiresAt, now)
+        )
+      )
+      .orderBy(desc(otpCodes.createdAt))
+      .limit(1);
+    return otp;
+  }
+
+  async markOTPUsed(id: string): Promise<void> {
+    await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, id));
+  }
+
+  async invalidateOTPsForEmail(email: string): Promise<void> {
+    await db
+      .update(otpCodes)
+      .set({ used: true })
+      .where(and(eq(otpCodes.email, email.toLowerCase().trim()), eq(otpCodes.used, false)));
+  }
+
+  // ─── Folders ─────────────────────────────────────────────────────────────
+  async getAllFolders(userId?: string): Promise<Folder[]> {
+    if (userId) {
+      return db.select().from(folders).where(eq(folders.userId, userId)).orderBy(folders.createdAt);
+    }
     return db.select().from(folders).orderBy(folders.createdAt);
   }
 
@@ -150,12 +214,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFolder(folder: InsertFolder): Promise<Folder> {
-    const [created] = await db.insert(folders).values(folder).returning();
+    const [created] = await db.insert(folders).values(folder as any).returning();
     return created;
   }
 
   async updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined> {
-    const [updated] = await db.update(folders).set(folder).where(eq(folders.id, id)).returning();
+    const [updated] = await db.update(folders).set(folder as any).where(eq(folders.id, id)).returning();
     return updated;
   }
 
@@ -164,6 +228,7 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
+  // ─── Sources ─────────────────────────────────────────────────────────────
   async getSourcesByFolderId(folderId: string): Promise<Source[]> {
     return db.select().from(sources).where(eq(sources.folderId, folderId)).orderBy(sources.createdAt);
   }
@@ -188,6 +253,7 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
+  // ─── Content ─────────────────────────────────────────────────────────────
   async getAllContent(): Promise<Content[]> {
     return db.select().from(content).orderBy(content.fetchedAt);
   }
@@ -216,9 +282,7 @@ export class DatabaseStorage implements IStorage {
         eq(content.originalUrl, contentItem.originalUrl)
       )
     );
-    if (existing) {
-      return null;
-    }
+    if (existing) return null;
     const [created] = await db.insert(content).values(contentItem as any).returning();
     return created;
   }
@@ -233,12 +297,7 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateContentSentiment(
-    id: string,
-    sentiment: SentimentType,
-    sentimentScore: number,
-    keywords: string[]
-  ): Promise<Content | undefined> {
+  async updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined> {
     const [updated] = await db
       .update(content)
       .set({ sentiment, sentimentScore, keywords })
@@ -274,7 +333,21 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getAllIdeas(): Promise<Idea[]> {
+  // ─── Ideas ────────────────────────────────────────────────────────────────
+  async getAllIdeas(userId?: string): Promise<Idea[]> {
+    if (userId) {
+      const userFolders = await this.getAllFolders(userId);
+      const folderIds = userFolders.map((f) => f.id);
+      if (folderIds.length === 0) {
+        return db.select().from(ideas).where(isNull(ideas.folderId)).orderBy(ideas.createdAt);
+      }
+      const { inArray, or } = await import("drizzle-orm");
+      return db
+        .select()
+        .from(ideas)
+        .where(or(inArray(ideas.folderId, folderIds), isNull(ideas.folderId)))
+        .orderBy(ideas.createdAt);
+    }
     return db.select().from(ideas).orderBy(ideas.createdAt);
   }
 
@@ -302,6 +375,7 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
+  // ─── Prompt Templates ─────────────────────────────────────────────────────
   async getAllPromptTemplates(): Promise<PromptTemplate[]> {
     return db.select().from(promptTemplates).orderBy(promptTemplates.createdAt);
   }
@@ -343,6 +417,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // ─── Comments & Assignments ───────────────────────────────────────────────
   async getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]> {
     return db.select().from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).orderBy(desc(ideaComments.createdAt));
   }
@@ -371,6 +446,7 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
+  // ─── Settings ─────────────────────────────────────────────────────────────
   async getSetting(key: string): Promise<Setting | undefined> {
     const [setting] = await db.select().from(settings).where(eq(settings.key, key));
     return setting;
@@ -401,6 +477,7 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
+  // ─── Notifications ────────────────────────────────────────────────────────
   async getUnnotifiedContent(): Promise<Content[]> {
     return db
       .select()
@@ -453,9 +530,15 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-
-
-  async getAssistantConversations(): Promise<AssistantConversation[]> {
+  // ─── Assistant Conversations ──────────────────────────────────────────────
+  async getAssistantConversations(userId?: string): Promise<AssistantConversation[]> {
+    if (userId) {
+      return db
+        .select()
+        .from(assistantConversations)
+        .where(eq(assistantConversations.userId, userId))
+        .orderBy(desc(assistantConversations.updatedAt));
+    }
     return db.select().from(assistantConversations).orderBy(desc(assistantConversations.updatedAt));
   }
 
@@ -465,14 +548,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation> {
-    const [created] = await db.insert(assistantConversations).values(conversation).returning();
+    const [created] = await db.insert(assistantConversations).values(conversation as any).returning();
     return created;
   }
 
   async updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined> {
     const [updated] = await db
       .update(assistantConversations)
-      .set({ ...patch, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: new Date() } as any)
       .where(eq(assistantConversations.id, id))
       .returning();
     return updated;
@@ -495,7 +578,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage> {
-    const [created] = await db.insert(assistantMessages).values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null }).returning();
+    const [created] = await db
+      .insert(assistantMessages)
+      .values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null })
+      .returning();
     await db
       .update(assistantConversations)
       .set({ updatedAt: new Date() })
@@ -503,7 +589,8 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-    async getAllStyleExamples(): Promise<StyleExample[]> {
+  // ─── Style Examples ───────────────────────────────────────────────────────
+  async getAllStyleExamples(): Promise<StyleExample[]> {
     return db.select().from(styleExamples).orderBy(desc(styleExamples.createdAt));
   }
 

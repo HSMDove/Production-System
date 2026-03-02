@@ -1,7 +1,8 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
+import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
@@ -193,14 +194,138 @@ function verifySlackSignature(rawBody: string, timestamp: string, slackSignature
   }
 }
 
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
+  // ─── Auth Routes ──────────────────────────────────────────────────────────
+
+  app.post("/api/auth/send-otp", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "البريد الإلكتروني مطلوب" });
+      }
+      const normalizedEmail = email.toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ error: "البريد الإلكتروني غير صحيح" });
+      }
+
+      await storage.invalidateOTPsForEmail(normalizedEmail);
+
+      const otp = generateOTP();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      await storage.createOTP(normalizedEmail, otp, expiresAt);
+      await sendOTPEmail(normalizedEmail, otp);
+
+      res.json({ success: true, message: "تم إرسال رمز التحقق إلى بريدك الإلكتروني" });
+    } catch (error: any) {
+      console.error("Send OTP error:", error);
+      res.status(500).json({ error: error?.message || "فشل إرسال رمز التحقق" });
+    }
+  });
+
+  app.post("/api/auth/verify-otp", async (req, res) => {
+    try {
+      const { email, code } = req.body;
+      if (!email || !code) {
+        return res.status(400).json({ error: "البريد الإلكتروني والرمز مطلوبان" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const otp = await storage.getValidOTP(normalizedEmail, code.toString());
+
+      if (!otp) {
+        return res.status(400).json({ error: "الرمز غير صحيح أو منتهي الصلاحية" });
+      }
+
+      await storage.markOTPUsed(otp.id);
+
+      let user = await storage.getUserByEmail(normalizedEmail);
+      const isNew = !user;
+
+      if (!user) {
+        user = await storage.createUser({ email: normalizedEmail, onboardingCompleted: false });
+      }
+
+      req.session.userId = user.id;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+
+      res.json({ success: true, user, isNew });
+    } catch (error: any) {
+      console.error("Verify OTP error:", error);
+      res.status(500).json({ error: error?.message || "فشل التحقق" });
+    }
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      if (!req.session?.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (!user) {
+        req.session.destroy(() => {});
+        return res.status(401).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ success: true });
+    });
+  });
+
+  app.patch("/api/auth/profile", requireAuth, async (req, res) => {
+    try {
+      const { name, age, gender } = req.body;
+      const updated = await storage.updateUser(req.session.userId!, {
+        name,
+        age: age ? parseInt(age) : undefined,
+        gender,
+        onboardingCompleted: true,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to update profile" });
+    }
+  });
+
+  app.patch("/api/auth/slack-link", requireAuth, async (req, res) => {
+    try {
+      const { slackUserId } = req.body;
+      if (!slackUserId) return res.status(400).json({ error: "slackUserId مطلوب" });
+      const updated = await storage.updateUser(req.session.userId!, { slackUserId });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to link Slack" });
+    }
+  });
+
+  // ─── Folder Routes (user-scoped) ──────────────────────────────────────────
+
   app.get("/api/folders", async (req, res) => {
     try {
-      const folders = await storage.getAllFolders();
+      const userId = req.session?.userId;
+      const folders = await storage.getAllFolders(userId);
       res.json(folders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch folders" });
@@ -213,7 +338,8 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const folder = await storage.createFolder(parsed.data);
+      const userId = req.session?.userId;
+      const folder = await storage.createFolder({ ...parsed.data, userId: userId || null } as any);
       res.status(201).json(folder);
     } catch (error) {
       res.status(500).json({ error: "Failed to create folder" });
@@ -691,9 +817,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/assistant/conversations", async (_req, res) => {
+  app.get("/api/assistant/conversations", async (req, res) => {
     try {
-      const conversations = await storage.getAssistantConversations();
+      const userId = req.session?.userId;
+      const conversations = await storage.getAssistantConversations(userId);
       res.json(conversations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch conversations" });
@@ -703,7 +830,8 @@ export async function registerRoutes(
   app.post("/api/assistant/conversations", async (req, res) => {
     try {
       const title = (req.body?.title as string | undefined)?.trim() || "محادثة جديدة";
-      const conversation = await storage.createAssistantConversation({ title });
+      const userId = req.session?.userId || null;
+      const conversation = await storage.createAssistantConversation({ title, userId } as any);
       res.status(201).json(conversation);
     } catch (error) {
       res.status(500).json({ error: "Failed to create conversation" });
@@ -769,9 +897,11 @@ export async function registerRoutes(
       }
 
       if (!conversationId) {
+        const userId = (req as any).session?.userId || null;
         const created = await storage.createAssistantConversation({
           title: userMessage.slice(0, 60),
-        });
+          userId,
+        } as any);
         conversationId = created.id;
       }
 
@@ -939,11 +1069,12 @@ export async function registerRoutes(
   app.get("/api/ideas", async (req, res) => {
     try {
       const folderId = req.query.folderId as string | undefined;
+      const userId = req.session?.userId;
       let ideas;
       if (folderId) {
         ideas = await storage.getIdeasByFolderId(folderId);
       } else {
-        ideas = await storage.getAllIdeas();
+        ideas = await storage.getAllIdeas(userId);
       }
       res.json(ideas);
     } catch (error) {
