@@ -9,6 +9,39 @@
 Preferred communication style: Simple, everyday language.
 Developer: حسام تيك فيلد (Hossam TechField)
 
+## Auth System (OTP via Resend)
+
+**Authentication Flow:**
+- Email-only login with 6-digit OTP (5 minute expiry)
+- OTP emails sent via Resend API (`RESEND_API_KEY` secret required)
+- NOTE: Resend in test mode only sends to owner email. To send to all users, verify a domain at resend.com/domains and update `from` address in `server/auth.ts`
+- Session-based auth using express-session + connect-pg-simple (PostgreSQL session store)
+- Sessions stored in `session` table (auto-created by connect-pg-simple)
+
+**Pages:**
+- `/login` — email input, sends OTP
+- `/verify` — 6-digit OTP input (paste support, auto-submit on complete)
+- `/onboarding` — new users: name, age, gender collection
+- All other routes protected by `AuthGuard` → redirect to `/login`
+
+**Database Tables Added:**
+- `users` — redesigned: email (unique), name, age, gender, slack_user_id, onboarding_completed, user_id
+- `otp_codes` — email, code, expires_at, used flag
+- `folders.user_id` — links folders to users (multi-tenant)
+- `assistant_conversations.user_id` — scopes conversations per user
+
+**Multi-tenant Logic:**
+- Folders scoped by `userId` in storage layer
+- Ideas scoped by user's folders
+- Assistant conversations scoped by userId
+- Slack: `users.slack_user_id` links Slack User ID to platform account
+
+**Key Files:**
+- `server/auth.ts` — generateOTP(), sendOTPEmail() via Resend
+- `client/src/hooks/use-auth.ts` — useAuth() hook
+- `client/src/components/auth/auth-guard.tsx` — route protection
+- `server/routes.ts` — /api/auth/* endpoints (send-otp, verify-otp, me, logout, profile, slack-link)
+
 ## System Architecture
 
 ### Frontend Architecture

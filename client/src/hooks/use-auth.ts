@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 
 export interface AuthUser {
@@ -16,8 +16,9 @@ export interface AuthUser {
 export function useAuth() {
   const [, navigate] = useLocation();
 
-  const { data: user, isLoading, error } = useQuery<AuthUser>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
@@ -30,7 +31,7 @@ export function useAuth() {
     },
   });
 
-  const isAuthenticated = !!user && !error;
+  const isAuthenticated = !!user;
 
   return {
     user,
