@@ -22,14 +22,14 @@ export function MainLayout({ children }: MainLayoutProps) {
       </main>
 
       {showFikriLauncher && (
-        <Button
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[80] rounded-full px-5 py-6 shadow-2xl backdrop-blur-md"
+        <button
+          className="fixed bottom-5 left-5 z-[150] flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-3 text-sm font-semibold shadow-lg hover:opacity-90 active:scale-95 transition-all"
           data-testid="button-fikri-fab"
           onClick={() => setOpen(true)}
         >
-          <Bot className="h-4 w-4 ml-2" />
-          {t("fikri.name")}
-        </Button>
+          <Bot className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">{t("fikri.name")}</span>
+        </button>
       )}
     </div>
   );
