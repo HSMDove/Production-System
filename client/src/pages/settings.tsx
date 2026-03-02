@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
-  Sun, Moon, Monitor, Check, Sparkles, Database, 
+  Palette, Check, Sparkles, Database, 
   Bell, Send, MessageSquare, Bot, Loader2, 
   Server, Globe, Key, Cpu, Save, TestTube,
   Star, Plus, Trash2, Image
@@ -142,9 +142,9 @@ export default function Settings() {
   };
 
   const themeOptions = [
-    { value: "light", label: "فاتح", icon: Sun },
-    { value: "dark", label: "داكن", icon: Moon },
-    { value: "system", label: "تلقائي", icon: Monitor },
+    { value: "default-dark", label: "السمة الافتراضية الداكنة", color: "bg-blue-500" },
+    { value: "tech-field", label: "تيك فيلد #e86179", color: "bg-rose-400" },
+    { value: "tech-voice", label: "تيك فويس #12d3d8", color: "bg-cyan-400" },
   ] as const;
 
   const [styleTitle, setStyleTitle] = useState("");
@@ -217,28 +217,28 @@ export default function Settings() {
 
         <Card>
           <CardHeader>
-            <CardTitle>المظهر</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5 text-primary" /> محرك السمات</CardTitle>
             <CardDescription>اختر المظهر المفضل لديك</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
               {themeOptions.map((option) => {
-                const Icon = option.icon;
                 const isSelected = theme === option.value;
                 return (
                   <Button
                     key={option.value}
                     variant={isSelected ? "default" : "outline"}
                     className="gap-2"
-                    onClick={() => setTheme(option.value)}
+                    onClick={() => setTheme(option.value as any)}
                     data-testid={`button-theme-${option.value}`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <span className={`h-3 w-3 rounded-full ${option.color}`} />
                     {option.label}
                     {isSelected && <Check className="h-4 w-4 mr-1" />}
                   </Button>
                 );
               })}
+              <p className="text-xs text-muted-foreground mt-3">النمط تشغيليًا داكن دائمًا، وذي الخيارات تغيّر شخصية الألوان فقط.</p>
             </div>
           </CardContent>
         </Card>

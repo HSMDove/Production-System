@@ -69,7 +69,7 @@ interface AssistantResponse {
 const loadingLabelMap = {
   searching_news: "جاري البحث في الأخبار والمجلدات...",
   saving_idea: "جاري فهم الفكرة وحفظها في قسم الأفكار...",
-  thinking: "المساعد يفكّر...",
+  thinking: "فكري يفكّر...",
 } as const;
 
 export default function ModelAssistantPage() {
@@ -299,15 +299,15 @@ export default function ModelAssistantPage() {
 
         <div className="space-y-4 min-w-0">
           <div>
-            <h1 className="text-3xl font-bold" data-testid="text-model-page-title">النموذج</h1>
-            <p className="text-muted-foreground mt-1">مساعد ذكي متصل بالأخبار والمجلدات وقسم الأفكار، مع حفظ كامل لجلسات المحادثة.</p>
+            <h1 className="text-3xl font-bold" data-testid="text-model-page-title">فكري</h1>
+            <p className="text-muted-foreground mt-1">فكري متصل بالأخبار والمجلدات وقسم الأفكار، مع حفظ كامل لجلسات المحادثة.</p>
           </div>
 
           <Card className="min-h-[68vh] flex flex-col">
             <CardHeader className="border-b">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Bot className="h-5 w-5 text-primary" />
-                محادثة ذكية
+                جلسة مع فكري
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
@@ -317,7 +317,7 @@ export default function ModelAssistantPage() {
                   <span>جاري تحميل الرسائل...</span>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="text-sm text-muted-foreground">ابدأ محادثة جديدة واسأل المساعد عن الأخبار أو اطلب منه حفظ فكرة.</div>
+                <div className="text-sm text-muted-foreground">ابدأ محادثة جديدة واسأل فكري عن الأخبار أو اطلب منه حفظ فكرة.</div>
               ) : (
                 messages.map((message) => (
                   <div key={message.id} className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}>
@@ -332,7 +332,7 @@ export default function ModelAssistantPage() {
                         {message.role === "assistant" ? (
                           <>
                             <Bot className="h-3.5 w-3.5" />
-                            <span>المساعد</span>
+                            <span>فكري</span>
                           </>
                         ) : (
                           <>

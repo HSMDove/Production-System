@@ -105,7 +105,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
       {
         role: "system",
         content:
-          "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي. لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
+          "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي واسمك \"فكري\". عند أول رد تعرّف بنفسك باسم فكري.  لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
       },
       {
         role: "user",

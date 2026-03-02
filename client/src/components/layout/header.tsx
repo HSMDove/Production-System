@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { t } from "@/i18n";
 import {
   Sheet,
   SheetContent,
@@ -12,12 +13,12 @@ import {
 } from "@/components/ui/sheet";
 
 const navItems = [
-  { href: "/", icon: FolderOpen, label: "المجلدات", testId: "link-dashboard" },
-  { href: "/ideas", icon: Lightbulb, label: "الأفكار", testId: "link-ideas" },
-  { href: "/calendar", icon: CalendarDays, label: "التقويم", testId: "link-calendar" },
-  { href: "/analytics", icon: BarChart3, label: "التحليلات", testId: "link-analytics" },
-  { href: "/trends", icon: TrendingUp, label: "الاتجاهات", testId: "link-trends" },
-  { href: "/model", icon: Bot, label: "النموذج", testId: "link-model" },
+  { href: "/", icon: FolderOpen, label: t("nav.folders"), testId: "link-dashboard" },
+  { href: "/ideas", icon: Lightbulb, label: t("nav.ideas"), testId: "link-ideas" },
+  { href: "/calendar", icon: CalendarDays, label: t("nav.calendar"), testId: "link-calendar" },
+  { href: "/analytics", icon: BarChart3, label: t("nav.analytics"), testId: "link-analytics" },
+  { href: "/trends", icon: TrendingUp, label: t("nav.trends"), testId: "link-trends" },
+  { href: "/model", icon: Bot, label: t("nav.fikri"), testId: "link-model" },
 ];
 
 export function Header() {
@@ -31,7 +32,7 @@ export function Header() {
           <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">نظام حسام للإنتاج</span>
+          <span className="text-lg sm:text-xl font-bold" data-testid="text-logo">{t("brand.name")}</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -96,7 +97,7 @@ export function Header() {
                     data-testid="mobile-link-settings"
                   >
                     <Settings className="h-5 w-5" />
-                    <span className="text-base">الإعدادات</span>
+                    <span className="text-base">{t("nav.settings")}</span>
                   </Button>
                 </Link>
               </nav>
