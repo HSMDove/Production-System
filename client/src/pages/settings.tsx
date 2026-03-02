@@ -192,7 +192,6 @@ export default function Settings() {
   const notificationsEnabled = localSettings.notifications_enabled === "true";
   const telegramEnabled = localSettings.telegram_enabled === "true";
   const slackEnabled = localSettings.slack_enabled === "true";
-  const currentLanguage = localSettings.language || "ar";
 
   if (isLoading) {
     return (
@@ -214,37 +213,7 @@ export default function Settings() {
               إعدادات المنصة والإشعارات والذكاء الاصطناعي
             </p>
           </div>
-          {hasChanges && (
-            <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-2">
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              حفظ التغييرات
-            </Button>
-          )}
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5 text-primary" />
-              لغة الواجهة
-            </CardTitle>
-            <CardDescription>اختر اللغة المفضلة لواجهة المستخدم</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Select 
-              value={currentLanguage} 
-              onValueChange={(value) => updateSetting("language", value)}
-            >
-              <SelectTrigger data-testid="select-language">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ar">العربية (Arabic)</SelectItem>
-                <SelectItem value="en">English (الإنجليزية)</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
