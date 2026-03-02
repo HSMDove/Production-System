@@ -16,7 +16,8 @@ export default function LoginPage() {
     mutationFn: (email: string) =>
       apiRequest<{ success: boolean; message: string }>("POST", "/api/auth/send-otp", { email }),
     onSuccess: () => {
-      navigate(`/verify?email=${encodeURIComponent(email)}`);
+      sessionStorage.setItem("otp_email", email.trim());
+      navigate("/verify");
     },
     onError: (error: any) => {
       toast({

@@ -10,7 +10,7 @@ import type { AuthUser } from "@/hooks/use-auth";
 
 export default function VerifyOTPPage() {
   const [, navigate] = useLocation();
-  const email = new URLSearchParams(window.location.search).get("email") || "";
+  const email = sessionStorage.getItem("otp_email") || "";
   const { toast } = useToast();
 
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
@@ -36,6 +36,7 @@ export default function VerifyOTPPage() {
         { email, code }
       ),
     onSuccess: (data) => {
+      sessionStorage.removeItem("otp_email");
       queryClient.setQueryData(["/api/auth/me"], data.user);
       if (data.isNew) {
         navigate("/onboarding");
