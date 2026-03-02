@@ -316,3 +316,60 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+
+/* Dark-oriented + expandable theme engine */
+:root {
+  --golden: 1.618;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, hsl(var(--primary) / 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, hsl(var(--accent) / 0.22), transparent 55%),
+    hsl(var(--background));
+}
+
+[data-app-theme="default-dark"] {
+  --primary: 217 91% 60%;
+  --ring: 217 91% 60%;
+  --accent: 217 15% 17%;
+  --sidebar-primary: 217 91% 60%;
+}
+
+[data-app-theme="tech-field"] {
+  --primary: 347 76% 64%;
+  --ring: 347 76% 64%;
+  --accent: 347 28% 18%;
+  --sidebar-primary: 347 76% 64%;
+  --chart-1: 347 76% 68%;
+  --chart-2: 332 65% 62%;
+}
+
+[data-app-theme="tech-voice"] {
+  --primary: 182 84% 46%;
+  --ring: 182 84% 46%;
+  --accent: 188 30% 16%;
+  --sidebar-primary: 182 84% 46%;
+  --chart-1: 182 84% 50%;
+  --chart-2: 199 75% 62%;
+}
+
+/* Neumorphism + glass touch */
+.card, .glass-surface {
+  backdrop-filter: blur(12px);
+  background-color: hsl(var(--card) / 0.68);
+  border: 1px solid hsl(var(--border) / 0.55);
+  box-shadow:
+    10px 10px 24px hsl(0 0% 0% / 0.22),
+    -6px -6px 18px hsl(0 0% 100% / 0.02);
+}
+
+.container {
+  padding-inline: calc(0.75rem * var(--golden));
+}
