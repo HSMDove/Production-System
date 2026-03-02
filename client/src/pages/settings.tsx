@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
-  Sun, Moon, Monitor, Check, Sparkles, Database, 
+  Palette, Check, Sparkles, Database, 
   Bell, Send, MessageSquare, Bot, Loader2, 
   Server, Globe, Key, Cpu, Save, TestTube,
   Star, Plus, Trash2, Image
@@ -96,6 +96,24 @@ export default function Settings() {
     },
   });
 
+  const testSlackBotMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-slack-bot", {
+        botToken: localSettings.slack_bot_token,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "✅ Bot Token صحيح", description: `البوت: @${data.botName} | الـ workspace: ${data.teamName}` });
+      } else {
+        toast({ title: "❌ Bot Token خاطئ", description: data.error || "تحقق من الـ Token", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار Bot Token", variant: "destructive" });
+    },
+  });
+
   const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة وشريحة A18 Pro");
   const [testAiResult, setTestAiResult] = useState("");
   
@@ -124,9 +142,9 @@ export default function Settings() {
   };
 
   const themeOptions = [
-    { value: "light", label: "فاتح", icon: Sun },
-    { value: "dark", label: "داكن", icon: Moon },
-    { value: "system", label: "تلقائي", icon: Monitor },
+    { value: "default-dark", label: "السمة الافتراضية الداكنة", color: "bg-blue-500" },
+    { value: "tech-field", label: "تيك فيلد #e86179", color: "bg-rose-400" },
+    { value: "tech-voice", label: "تيك فويس #12d3d8", color: "bg-cyan-400" },
   ] as const;
 
   const [styleTitle, setStyleTitle] = useState("");
@@ -199,28 +217,28 @@ export default function Settings() {
 
         <Card>
           <CardHeader>
-            <CardTitle>المظهر</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5 text-primary" /> محرك السمات</CardTitle>
             <CardDescription>اختر المظهر المفضل لديك</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
               {themeOptions.map((option) => {
-                const Icon = option.icon;
                 const isSelected = theme === option.value;
                 return (
                   <Button
                     key={option.value}
                     variant={isSelected ? "default" : "outline"}
                     className="gap-2"
-                    onClick={() => setTheme(option.value)}
+                    onClick={() => setTheme(option.value as any)}
                     data-testid={`button-theme-${option.value}`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <span className={`h-3 w-3 rounded-full ${option.color}`} />
                     {option.label}
                     {isSelected && <Check className="h-4 w-4 mr-1" />}
                   </Button>
                 );
               })}
+              <p className="text-xs text-muted-foreground mt-3">النمط تشغيليًا داكن دائمًا، وذي الخيارات تغيّر شخصية الألوان فقط.</p>
             </div>
           </CardContent>
         </Card>
@@ -326,7 +344,7 @@ export default function Settings() {
                   {slackEnabled && (
                     <div className="space-y-3 pr-6">
                       <div className="space-y-2">
-                        <Label htmlFor="slack-webhook">Webhook URL</Label>
+                        <Label htmlFor="slack-webhook">Webhook URL (إشعارات الأخبار)</Label>
                         <Input
                           id="slack-webhook"
                           type="password"
@@ -337,6 +355,75 @@ export default function Settings() {
                           data-testid="input-slack-webhook"
                         />
                       </div>
+
+                      <Separator />
+
+                      <div className="rounded-md border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 p-3 text-sm space-y-1">
+                        <p className="font-semibold text-blue-800 dark:text-blue-300">إعداد شات البوت (استقبال الرسائل)</p>
+                        <p className="text-muted-foreground text-xs">هذه الحقول تتيح للبوت الرد على رسائلك في Slack</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-token">
+                          Bot User OAuth Token (xoxb)
+                          {!localSettings.slack_bot_token && <span className="text-destructive text-xs mr-2">⚠ مطلوب للرد</span>}
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="slack-bot-token"
+                            type="password"
+                            placeholder="xoxb-..."
+                            value={localSettings.slack_bot_token || ""}
+                            onChange={(e) => updateSetting("slack_bot_token", e.target.value)}
+                            dir="ltr"
+                            data-testid="input-slack-bot-token"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => testSlackBotMutation.mutate()}
+                            disabled={testSlackBotMutation.isPending || !localSettings.slack_bot_token}
+                            data-testid="button-test-slack-bot"
+                          >
+                            {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-signing-secret">
+                          Signing Secret
+                          {!localSettings.slack_signing_secret && <span className="text-amber-500 text-xs mr-2">⚠ مطلوب للأمان</span>}
+                        </Label>
+                        <Input
+                          id="slack-signing-secret"
+                          type="password"
+                          placeholder="Slack Signing Secret"
+                          value={localSettings.slack_signing_secret || ""}
+                          onChange={(e) => updateSetting("slack_signing_secret", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-signing-secret"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-user-id">Bot User ID (اختياري)</Label>
+                        <Input
+                          id="slack-bot-user-id"
+                          placeholder="U012345..."
+                          value={localSettings.slack_bot_user_id || ""}
+                          onChange={(e) => updateSetting("slack_bot_user_id", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-bot-user-id"
+                        />
+                      </div>
+
+                      <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-2">
+                        <p className="font-medium">Endpoint (ضعه في Slack → Event Subscriptions):</p>
+                        <code className="block text-xs break-all bg-background border rounded px-2 py-1" dir="ltr">{window.location.origin}/api/integrations/slack/events</code>
+                        <p className="text-xs text-muted-foreground">تأكد من تفعيل: <code>app_mention</code> و <code>message.im</code> في Subscribe to events</p>
+                      </div>
+
                       <Button
                         variant="outline"
                         size="sm"

@@ -34,6 +34,12 @@ import {
   styleExamples,
   type StyleExample,
   type InsertStyleExample,
+  assistantConversations,
+  assistantMessages,
+  type AssistantConversation,
+  type InsertAssistantConversation,
+  type AssistantMessage,
+  type InsertAssistantMessage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -103,7 +109,17 @@ export interface IStorage {
   markContentUsedForIdeas(ids: string[]): Promise<void>;
   markContentRead(id: string): Promise<Content | undefined>;
 
-  getAllStyleExamples(): Promise<StyleExample[]>;
+
+
+  getAssistantConversations(): Promise<AssistantConversation[]>;
+  getAssistantConversationById(id: string): Promise<AssistantConversation | undefined>;
+  createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation>;
+  updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined>;
+  deleteAssistantConversation(id: string): Promise<boolean>;
+  getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]>;
+  createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage>;
+
+    getAllStyleExamples(): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
   deleteStyleExample(id: string): Promise<boolean>;
 }
@@ -437,7 +453,57 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getAllStyleExamples(): Promise<StyleExample[]> {
+
+
+  async getAssistantConversations(): Promise<AssistantConversation[]> {
+    return db.select().from(assistantConversations).orderBy(desc(assistantConversations.updatedAt));
+  }
+
+  async getAssistantConversationById(id: string): Promise<AssistantConversation | undefined> {
+    const [conversation] = await db.select().from(assistantConversations).where(eq(assistantConversations.id, id));
+    return conversation;
+  }
+
+  async createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation> {
+    const [created] = await db.insert(assistantConversations).values(conversation).returning();
+    return created;
+  }
+
+  async updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined> {
+    const [updated] = await db
+      .update(assistantConversations)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(assistantConversations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAssistantConversation(id: string): Promise<boolean> {
+    const deleted = await db
+      .delete(assistantConversations)
+      .where(eq(assistantConversations.id, id))
+      .returning();
+    return deleted.length > 0;
+  }
+
+  async getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]> {
+    return db
+      .select()
+      .from(assistantMessages)
+      .where(eq(assistantMessages.conversationId, conversationId))
+      .orderBy(assistantMessages.createdAt);
+  }
+
+  async createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage> {
+    const [created] = await db.insert(assistantMessages).values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null }).returning();
+    await db
+      .update(assistantConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(assistantConversations.id, message.conversationId));
+    return created;
+  }
+
+    async getAllStyleExamples(): Promise<StyleExample[]> {
     return db.select().from(styleExamples).orderBy(desc(styleExamples.createdAt));
   }
 

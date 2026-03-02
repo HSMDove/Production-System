@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye, Languages, RefreshCw } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

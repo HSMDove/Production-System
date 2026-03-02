@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
@@ -17,6 +18,180 @@ import {
   insertIdeaCommentSchema,
   insertIdeaAssignmentSchema,
 } from "@shared/schema";
+
+type AssistantChatRequest = {
+  message: string;
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
+};
+
+const ideaCategories = [
+  "thalathiyat",
+  "leh",
+  "tech_i_use",
+  "news_roundup",
+  "deep_dive",
+  "comparison",
+  "tutorial",
+  "other",
+] as const;
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().trim();
+}
+
+function truncate(value: string | null | undefined, max = 220): string {
+  if (!value) return "";
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+
+type AssistantEngineResult = {
+  action: "search_news" | "save_idea" | "chat";
+  statusLabel: "searching_news" | "saving_idea" | "thinking";
+  answer: string;
+  matchedContent: Array<{
+    id: string;
+    title: string;
+    originalUrl: string;
+    publishedAt: Date;
+    folderName: string;
+  }>;
+  createdIdea?: { id: string; title: string };
+};
+
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>): Promise<AssistantEngineResult> {
+  const [folders, allContent, allIdeas] = await Promise.all([
+    storage.getAllFolders(),
+    storage.getAllContent(),
+    storage.getAllIdeas(),
+  ]);
+
+  const folderById = new Map(folders.map((f) => [f.id, f]));
+  const sortedContent = [...allContent].sort((a, b) => {
+    const aDate = new Date(a.publishedAt || a.fetchedAt).getTime();
+    const bDate = new Date(b.publishedAt || b.fetchedAt).getTime();
+    return bDate - aDate;
+  });
+
+  const compactContext = {
+    folders: folders.map((f) => ({ id: f.id, name: f.name })),
+    latestContent: sortedContent.slice(0, 60).map((item) => ({
+      id: item.id,
+      folderName: folderById.get(item.folderId)?.name || "غير معروف",
+      title: item.title,
+      summary: truncate(item.summary || item.arabicSummary || item.arabicFullSummary || ""),
+      publishedAt: item.publishedAt || item.fetchedAt,
+      keywords: item.keywords || [],
+      url: item.originalUrl,
+    })),
+    recentIdeas: allIdeas
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 30)
+      .map((idea) => ({
+        id: idea.id,
+        title: idea.title,
+        folderName: idea.folderId ? folderById.get(idea.folderId)?.name || null : null,
+        status: idea.status,
+      })),
+  };
+
+  const { client, model } = await getAIClient();
+  const planner = await client.chat.completions.create({
+    model,
+    response_format: { type: "json_object" },
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي واسمك \"فكري\". عند أول رد تعرّف بنفسك باسم فكري.  لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
+      },
+      {
+        role: "user",
+        content: `رسالة المستخدم: ${userMessage}
+
+السجل المختصر:${JSON.stringify(history).slice(0, 3000)}
+
+بيانات النظام:${JSON.stringify(compactContext)}`,
+      },
+    ],
+  });
+
+  const payload = planner.choices[0]?.message?.content;
+  if (!payload) {
+    throw new Error("Failed to generate assistant response");
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    parsed = { action: "chat", statusLabel: "thinking", answer: payload };
+  }
+
+  if (parsed.action === "save_idea" && parsed.ideaStructured) {
+    const folderName = normalizeText(parsed.ideaStructured.folderName || "");
+    const selectedFolder = folders.find((f) => normalizeText(f.name) === folderName);
+    const rawCategory = parsed.ideaStructured.category;
+    const safeCategory = ideaCategories.includes(rawCategory) ? rawCategory : "other";
+
+    const createdIdea = await storage.createIdea({
+      folderId: selectedFolder?.id || null,
+      title: parsed.ideaStructured.title || `فكرة من المحادثة - ${new Date().toLocaleDateString("ar")}`,
+      description: parsed.ideaStructured.description || userMessage,
+      category: safeCategory,
+      status: "raw_idea",
+      estimatedDuration: parsed.ideaStructured.estimatedDuration || "5-8 دقائق",
+      targetAudience: parsed.ideaStructured.targetAudience || "متابعو التقنية",
+      notes: "تمت إضافتها عبر المساعد الذكي",
+    });
+
+    return {
+      action: "save_idea",
+      statusLabel: "saving_idea",
+      answer: parsed.answer || `تم حفظ الفكرة بنجاح بعنوان: ${createdIdea.title} في قسم الأفكار.`,
+      createdIdea: { id: createdIdea.id, title: createdIdea.title },
+      matchedContent: [],
+    };
+  }
+
+  const matchedContent = Array.isArray(parsed.matches)
+    ? sortedContent.filter((item) => parsed.matches.includes(item.id)).slice(0, 8)
+    : [];
+
+  return {
+    action: parsed.action || "chat",
+    statusLabel: parsed.statusLabel || "thinking",
+    answer: parsed.answer || "تمت المعالجة.",
+    matchedContent: matchedContent.map((item) => ({
+      id: item.id,
+      title: item.title,
+      originalUrl: item.originalUrl,
+      publishedAt: item.publishedAt || item.fetchedAt,
+      folderName: folderById.get(item.folderId)?.name || "غير معروف",
+    })),
+  };
+}
+
+function verifySlackSignature(rawBody: string, timestamp: string, slackSignature: string, signingSecret: string): boolean {
+  if (!timestamp || !slackSignature || !signingSecret) return false;
+
+  const now = Math.floor(Date.now() / 1000);
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(now - ts) > 60 * 5) {
+    return false;
+  }
+
+  const base = `v0:${timestamp}:${rawBody}`;
+  const expected = `v0=${createHmac("sha256", signingSecret).update(base).digest("hex")}`;
+
+  try {
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(slackSignature));
+  } catch {
+    return false;
+  }
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -513,6 +688,251 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error marking content read:", error);
       res.status(500).json({ error: "Failed to mark content as read" });
+    }
+  });
+
+  app.get("/api/assistant/conversations", async (_req, res) => {
+    try {
+      const conversations = await storage.getAssistantConversations();
+      res.json(conversations);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  app.post("/api/assistant/conversations", async (req, res) => {
+    try {
+      const title = (req.body?.title as string | undefined)?.trim() || "محادثة جديدة";
+      const conversation = await storage.createAssistantConversation({ title });
+      res.status(201).json(conversation);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create conversation" });
+    }
+  });
+
+  app.get("/api/assistant/conversations/:id/messages", async (req, res) => {
+    try {
+      const conversation = await storage.getAssistantConversationById(req.params.id);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const messages = await storage.getAssistantMessagesByConversationId(req.params.id);
+      res.json({ conversation, messages });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch conversation messages" });
+    }
+  });
+
+  app.patch("/api/assistant/conversations/:id", async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+      const updated = await storage.updateAssistantConversation(req.params.id, { title });
+      if (!updated) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update conversation" });
+    }
+  });
+
+  app.delete("/api/assistant/conversations/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAssistantConversation(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete conversation" });
+    }
+  });
+
+  app.post("/api/assistant/chat", async (req, res) => {
+    try {
+      const body = req.body as AssistantChatRequest & { conversationId?: string };
+      const userMessage = body?.message?.trim();
+
+      if (!userMessage) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      let conversationId = body.conversationId;
+      if (conversationId) {
+        const existing = await storage.getAssistantConversationById(conversationId);
+        if (!existing) {
+          conversationId = undefined;
+        }
+      }
+
+      if (!conversationId) {
+        const created = await storage.createAssistantConversation({
+          title: userMessage.slice(0, 60),
+        });
+        conversationId = created.id;
+      }
+
+      const existingMessages = await storage.getAssistantMessagesByConversationId(conversationId);
+      const history = existingMessages.map((m) => ({ role: m.role, content: m.content }));
+      const mergedHistory = [...history, ...(body.history || [])].slice(-16);
+
+      await storage.createAssistantMessage({
+        conversationId,
+        role: "user",
+        content: userMessage,
+      });
+
+      const result = await runAssistantEngine(userMessage, mergedHistory);
+
+      await storage.createAssistantMessage({
+        conversationId,
+        role: "assistant",
+        content: result.answer,
+        action: result.action,
+        statusLabel: result.statusLabel,
+        metadata: result.matchedContent?.length ? { matchedContent: result.matchedContent } : null,
+      });
+
+      res.json({ conversationId, ...result });
+    } catch (error: any) {
+      console.error("Assistant chat error:", error);
+      res.status(500).json({ error: error?.message || "Failed to process assistant chat" });
+    }
+  });
+
+  app.get("/api/integrations/slack/events", async (_req, res) => {
+    const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+    const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+    res.json({
+      status: "online",
+      botToken: botToken ? `✅ مُضبوط (${botToken.slice(0, 8)}...)` : "❌ غير مُضبوط",
+      signingSecret: signingSecret ? "✅ مُضبوط" : "⚠️ غير مُضبوط (اختياري)",
+      message: "الـ endpoint جاهز لاستقبال أحداث Slack"
+    });
+  });
+
+  app.post("/api/integrations/slack/events", async (req: any, res) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
+      const payload = req.body || (rawBody ? JSON.parse(rawBody) : {});
+
+      // Handle URL verification challenge immediately (before signature check)
+      if (payload.type === "url_verification") {
+        console.log("[Slack] URL verification challenge received");
+        return res.json({ challenge: payload.challenge });
+      }
+
+      // Verify signature only if signing secret is configured
+      const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+      const signature = req.headers["x-slack-signature"] as string | undefined;
+      const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
+
+      if (signingSecret) {
+        if (!verifySlackSignature(rawBody, timestamp || "", signature || "", signingSecret)) {
+          console.warn("[Slack] Signature verification failed - rejecting request");
+          return res.status(401).json({ error: "Invalid Slack signature" });
+        }
+      } else {
+        console.warn("[Slack] No signing secret configured - skipping signature verification");
+      }
+
+      if (payload.type !== "event_callback") {
+        return res.json({ ok: true });
+      }
+
+      const event = payload.event;
+      if (!event) {
+        return res.json({ ok: true });
+      }
+
+      // Ignore messages from bots (including our own bot)
+      if (event.bot_id || event.subtype === "bot_message") {
+        console.log("[Slack] Ignoring bot message");
+        return res.json({ ok: true });
+      }
+
+      // Only handle app_mention and direct messages (im)
+      const supportedTypes = ["app_mention", "message"];
+      if (!supportedTypes.includes(event.type)) {
+        return res.json({ ok: true });
+      }
+
+      let text: string = event.text || "";
+      // Strip bot mention (@BotName) from message text
+      text = text.replace(/<@[A-Z0-9]+>/g, "").trim();
+
+      if (!text) {
+        return res.json({ ok: true });
+      }
+
+      console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from channel ${event.channel}`);
+
+      // Respond to Slack immediately to avoid timeout
+      res.json({ ok: true });
+
+      // Process in background
+      (async () => {
+        try {
+          const conversation = await storage.createAssistantConversation({
+            title: `Slack - ${text.slice(0, 50)}`,
+          });
+
+          const result = await runAssistantEngine(text, []);
+          console.log(`[Slack] AI response ready, action: ${result.action}`);
+
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "user",
+            content: text,
+          });
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: result.answer,
+            action: result.action,
+            statusLabel: result.statusLabel,
+          });
+
+          const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+          if (!botToken) {
+            console.warn("[Slack] No bot token configured - cannot reply to Slack");
+            return;
+          }
+
+          if (!event.channel) {
+            console.warn("[Slack] No channel in event - cannot reply");
+            return;
+          }
+
+          const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${botToken}`,
+            },
+            body: JSON.stringify({
+              channel: event.channel,
+              text: result.answer,
+              thread_ts: event.thread_ts || event.ts,
+            }),
+          });
+          const slackData = await slackRes.json() as any;
+          if (!slackData.ok) {
+            console.error("[Slack] Failed to send reply:", slackData.error);
+          } else {
+            console.log("[Slack] Reply sent successfully");
+          }
+        } catch (bgError) {
+          console.error("[Slack] Background processing error:", bgError);
+        }
+      })();
+
+    } catch (error) {
+      console.error("[Slack] Events endpoint error:", error);
+      return res.status(500).json({ error: "Failed to process Slack event" });
     }
   });
 
@@ -1229,6 +1649,30 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: "Failed to test Slack connection" });
+    }
+  });
+
+  app.post("/api/settings/test-slack-bot", async (req, res) => {
+    try {
+      const { botToken } = req.body;
+      if (!botToken) {
+        return res.status(400).json({ success: false, error: "Bot token is required" });
+      }
+      const authRes = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${botToken}`,
+        },
+      });
+      const data = await authRes.json() as any;
+      if (data.ok) {
+        res.json({ success: true, botName: data.user, teamName: data.team });
+      } else {
+        res.json({ success: false, error: data.error || "Invalid bot token" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message || "Failed to test bot token" });
     }
   });
 
