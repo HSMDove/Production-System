@@ -191,12 +191,12 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   return (
     <Card 
-      className={`transition-all duration-200 hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
+      className={`glass-surface rounded-[1.35rem] transition-all duration-300 hover:scale-[1.005] hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
         {/* Feedly-style horizontal layout */}
-        <div className="flex flex-row gap-3 p-3">
+        <div className="flex flex-row gap-[calc(0.5rem*1.618)] p-[calc(0.75rem*1.618)]">
           <div className="flex flex-col gap-2 items-center self-stretch">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -434,7 +434,7 @@ function ContentSkeleton() {
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex flex-row gap-3 p-3">
+        <div className="flex flex-row gap-[calc(0.5rem*1.618)] p-[calc(0.75rem*1.618)]">
           <Skeleton className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-md" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3 w-24" />

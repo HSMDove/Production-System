@@ -169,11 +169,11 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
     <Card
       ref={setNodeRef}
       style={style}
-      className="group cursor-pointer hover-elevate"
+      className="group cursor-pointer glass-surface rounded-[1.35rem] hover:scale-[1.01] transition-all duration-300"
       onClick={handleCardClick}
       data-testid={`card-idea-${idea.id}`}
     >
-      <CardContent className="p-3">
+      <CardContent className="p-[calc(0.75rem*1.618)]">
         <div className="flex items-start gap-2">
           <button
             className="mt-1 cursor-grab touch-none opacity-0 group-hover:opacity-100 transition-opacity"
