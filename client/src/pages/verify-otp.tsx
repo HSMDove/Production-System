@@ -9,8 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/hooks/use-auth";
 
 export default function VerifyOTPPage() {
-  const [location, navigate] = useLocation();
-  const email = new URLSearchParams(location.split("?")[1] || "").get("email") || "";
+  const [, navigate] = useLocation();
+  const email = new URLSearchParams(window.location.search).get("email") || "";
   const { toast } = useToast();
 
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
