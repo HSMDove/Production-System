@@ -42,7 +42,11 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Failed to send email: ${JSON.stringify(error)}`);
+    const error = await response.json().catch(() => ({})) as any;
+    const errorMessage = error?.message || "";
+    if (errorMessage.includes("testing emails") || errorMessage.includes("verify a domain")) {
+      throw new Error("هذا البريد غير مدعوم حالياً. يرجى استخدام البريد المسجّل في النظام أو التواصل مع المسؤول لإضافة دومين مخصص.");
+    }
+    throw new Error(`فشل إرسال البريد الإلكتروني: ${errorMessage || JSON.stringify(error)}`);
   }
 }

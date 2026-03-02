@@ -20,9 +20,18 @@ export default function LoginPage() {
       navigate("/verify");
     },
     onError: (error: any) => {
+      let msg = "فشل إرسال الرمز";
+      try {
+        const raw = error?.message || "";
+        const jsonPart = raw.includes("{") ? raw.slice(raw.indexOf("{")) : "";
+        if (jsonPart) {
+          const parsed = JSON.parse(jsonPart);
+          msg = parsed.error || msg;
+        }
+      } catch {}
       toast({
         title: "خطأ",
-        description: error?.message || "فشل إرسال الرمز",
+        description: msg,
         variant: "destructive",
       });
     },
