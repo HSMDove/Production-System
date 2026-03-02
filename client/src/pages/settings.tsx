@@ -215,6 +215,23 @@ export default function Settings() {
           </div>
         </div>
 
+        <Card className="glass-surface">
+          <CardHeader>
+            <CardTitle>لغة العرض</CardTitle>
+            <CardDescription>اختر لغة الواجهة الأساسية للموقع.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-between">
+              <span>اللغة العربية باللهجة السعودية</span>
+              <Badge>مفعّل</Badge>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-between opacity-70 cursor-not-allowed" aria-disabled="true">
+              <span>English</span>
+              <Badge variant="secondary">قريباً</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5 text-primary" /> محرك السمات</CardTitle>

@@ -139,11 +139,11 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
   return (
     <Card 
-      className="group transition-all duration-200 hover:border-primary/50 hover:shadow-md"
+      className="group glass-surface rounded-[1.618rem] transition-all duration-300 hover:scale-[1.01] hover:border-primary/40"
       data-testid={`card-folder-${folder.id}`}
     >
       <Link href={`/folder/${folder.id}`}>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3 cursor-pointer">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3 cursor-pointer px-[calc(0.75rem*1.618)] pt-[calc(0.75rem*1.618)]">
           <div className="flex items-center gap-3">
             <div
               className="flex h-12 w-12 items-center justify-center rounded-md flex-shrink-0"
@@ -200,7 +200,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
         </CardHeader>
       </Link>
 
-      <CardContent className="pt-0 space-y-3">
+      <CardContent className="pt-0 space-y-[calc(0.5rem*1.618)] px-[calc(0.75rem*1.618)] pb-[calc(0.75rem*1.618)]">
         <Link href={`/folder/${folder.id}`}>
           <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer flex-wrap">
             <div className="flex items-center gap-1.5">
