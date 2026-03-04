@@ -51,10 +51,10 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-8">
         {/* Logo & Title */}
         <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
-            <Bot className="h-8 w-8 text-primary" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)] mb-2">
+            <Bot className="h-8 w-8" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">نظام الإنتاج</h1>
+          <h1 className="text-3xl font-black tracking-tight bg-gradient-to-br from-white to-white/60 bg-clip-text text-transparent">نَهْج</h1>
           <p className="text-muted-foreground text-sm">
             أدخل بريدك الإلكتروني لتلقّي رمز الدخول
           </p>

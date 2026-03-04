@@ -30,11 +30,11 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:px-4 md:px-8">
-        <Link href="/" className="flex items-center gap-2 sm:gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground sm:h-10 sm:w-10">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-primary-foreground sm:h-10 sm:w-10 shadow-[0_0_15px_rgba(var(--primary),0.4)] group-hover:scale-110 transition-transform">
             <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
-          <span className="text-lg font-bold sm:text-xl" data-testid="text-logo">{t("brand.name")}</span>
+          <span className="text-xl font-black sm:text-2xl tracking-tighter bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent" data-testid="text-logo">{t("brand.name")}</span>
         </Link>
 
         <nav className="hidden flex-wrap items-center gap-1 md:flex">

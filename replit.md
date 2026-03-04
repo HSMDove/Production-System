@@ -1,8 +1,8 @@
-# نظام الإنتاج (Production System)
+# نَهْج (NahjHub)
 
 ## Overview
 
-نظام الإنتاج هو أداة داخلية خاصة لإدارة المحتوى. يقوم بتجميع الأخبار التقنية ثنائية اللغة من خلاصات RSS، ويقوم بترجمتها/إعادة كتابتها إلى العربية باستخدام الذكاء الاصطناعي بأسلوب "سعودي كاجوال تقني"، وينشر تلقائياً إلى تيليجرام وسلاك. يتميز بواجهة تشبه Feedly مع شريط جانبي للمصادر، ونظام تحديث تلقائي، وتركيز على السرعة والموثوقية والأتمتة لنشر المحتوى الحصري. دعم كامل لـ RTL (من اليمين إلى اليسار) للمحتوى العربي.
+نَهْج (NahjHub) هو أداة داخلية خاصة لإدارة المحتوى. يقوم بتجميع الأخبار التقنية ثنائية اللغة من خلاصات RSS، ويقوم بترجمتها/إعادة كتابتها إلى العربية باستخدام الذكاء الاصطناعي بأسلوب "سعودي كاجوال تقني"، وينشر تلقائياً إلى تيليجرام وسلاك. يتميز بواجهة تشبه Feedly مع شريط جانبي للمصادر، ونظام تحديث تلقائي، وتركيز على السرعة والموثوقية والأتمتة لنشر المحتوى الحصري. دعم كامل لـ RTL (من اليمين إلى اليسار) للمحتوى العربي.
 
 ## User Preferences
 
@@ -185,7 +185,7 @@ Developer: حسام تيك فيلد (Hossam TechField)
 - Supports two modes: "Production Cloud" (default, uses integrated AI) or "Custom/Local" (Ollama, LM Studio, etc.)
 - Custom mode configurable via Settings page: Base URL, optional API Key, Model Name
 - All AI functions dynamically create OpenAI SDK client based on settings from database
-- `rewriteContent()` function for "نظام الإنتاج" style rewriting with custom system prompts
+- `rewriteContent()` function for "نَهْج" style rewriting with custom system prompts
 - `generateSmartView()` function for batch content rewriting into Smart View cards (catchy title, story, thumbnail suggestion, original image)
 - Smart View state persists per folder via localStorage; auto-fetches on load if previously active
 - Idea cards are clickable → opens IdeaDetailModal with full editable fields (title, thumbnailText, description, script, sources, notes)
