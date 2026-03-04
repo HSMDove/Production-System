@@ -118,7 +118,7 @@ export default function Dashboard() {
               {welcomePrefix} {user?.name || "مستخدم"} {emoji}
             </h1>
             <p className="text-muted-foreground mt-2 max-w-md">
-              نظّم مصادرك وأفكارك في نَهْج، وجهتك لإنتاج المحتوى التقني الاحترافي
+              نظّم مصادرك وأفكارك في نَسَق، وجهتك لإنتاج المحتوى التقني الاحترافي
             </p>
           </div>
           <div className="flex gap-3 relative z-10">

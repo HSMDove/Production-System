@@ -17,12 +17,12 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "نَهْج <noreply@productionsystem.com>",
+      from: "نَسَق <noreply@productionsystem.com>",
       to: [email],
       subject: `رمز الدخول: ${otp}`,
       html: `
         <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f0f; border-radius: 16px; color: #fff;">
-          <h1 style="font-size: 24px; margin-bottom: 8px; color: #fff;">نَهْج 🎬</h1>
+          <h1 style="font-size: 28px; font-weight: 900; margin-bottom: 8px; color: #fff;">نَسَق</h1>
           <p style="color: #aaa; margin-bottom: 32px;">مرحباً! هذا رمز الدخول الخاص بك</p>
           
           <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 32px; text-align: center; margin-bottom: 24px;">
