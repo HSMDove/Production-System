@@ -17,7 +17,7 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "نَسَق <noreply@productionsystem.com>",
+      from: "نَسَق <noreply@nasaqapp.net>",
       to: [email],
       subject: `رمز الدخول: ${otp}`,
       html: `
