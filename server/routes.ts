@@ -18,6 +18,10 @@ import {
   updatePromptTemplateSchema,
   insertIdeaCommentSchema,
   insertIdeaAssignmentSchema,
+  type Folder,
+  type Source,
+  type Idea,
+  type AssistantConversation,
 } from "@shared/schema";
 
 type AssistantChatRequest = {
@@ -60,11 +64,11 @@ type AssistantEngineResult = {
   createdIdea?: { id: string; title: string };
 };
 
-async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId?: string | null): Promise<AssistantEngineResult> {
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string): Promise<AssistantEngineResult> {
   const [folders, allContent, allIdeas] = await Promise.all([
-    storage.getAllFolders(userId || undefined),
-    storage.getAllContent(userId || undefined),
-    storage.getAllIdeas(userId || undefined),
+    storage.getAllFolders(userId),
+    storage.getAllContent(userId),
+    storage.getAllIdeas(userId),
   ]);
 
   const folderById = new Map(folders.map((f) => [f.id, f]));
@@ -138,6 +142,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     const safeCategory = ideaCategories.includes(rawCategory) ? rawCategory : "other";
 
     const createdIdea = await storage.createIdea({
+      userId,
       folderId: selectedFolder?.id || null,
       title: parsed.ideaStructured.title || `فكرة من المحادثة - ${new Date().toLocaleDateString("ar")}`,
       description: parsed.ideaStructured.description || userMessage,
@@ -320,11 +325,23 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Global auth guard for all non-auth API routes ────────────────────────
+  // Applied after auth routes so /api/auth/* remain public.
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/")) {
+      return next();
+    }
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    next();
+  });
+
   // ─── Folder Routes (user-scoped) ──────────────────────────────────────────
 
   app.get("/api/folders", async (req, res) => {
     try {
-      const userId = req.session?.userId;
+      const userId = req.session.userId!;
       const folders = await storage.getAllFolders(userId);
       res.json(folders);
     } catch (error) {
@@ -338,20 +355,25 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const userId = req.session?.userId;
-      const folder = await storage.createFolder({ ...parsed.data, userId: userId || null } as any);
+      const folder = await storage.createFolder({ ...parsed.data, userId: req.session.userId! } as any);
       res.status(201).json(folder);
     } catch (error) {
       res.status(500).json({ error: "Failed to create folder" });
     }
   });
 
+  // Helper: verify folder belongs to current user
+  async function requireFolderOwner(folderId: string, userId: string, res: Response): Promise<Folder | null> {
+    const folder = await storage.getFolderById(folderId);
+    if (!folder) { res.status(404).json({ error: "Folder not found" }); return null; }
+    if (folder.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return folder;
+  }
+
   app.get("/api/folders/:id", async (req, res) => {
     try {
-      const folder = await storage.getFolderById(req.params.id);
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       res.json(folder);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch folder" });
@@ -360,14 +382,13 @@ export async function registerRoutes(
 
   app.patch("/api/folders/:id", async (req, res) => {
     try {
+      const existing = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
       const parsed = insertFolderSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const folder = await storage.updateFolder(req.params.id, parsed.data);
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
       res.json(folder);
     } catch (error) {
       res.status(500).json({ error: "Failed to update folder" });
@@ -376,10 +397,9 @@ export async function registerRoutes(
 
   app.delete("/api/folders/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteFolder(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
+      const existing = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
+      await storage.deleteFolder(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete folder" });
@@ -388,6 +408,8 @@ export async function registerRoutes(
 
   app.get("/api/folders/:id/sources", async (req, res) => {
     try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       const sources = await storage.getSourcesByFolderId(req.params.id);
       res.json(sources);
     } catch (error) {
@@ -397,18 +419,15 @@ export async function registerRoutes(
 
   app.get("/api/folders/:id/content", async (req, res) => {
     try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       const contentItems = await storage.getContentByFolderId(req.params.id);
       const allSources = await storage.getSourcesByFolderId(req.params.id);
-      
-      // Create a map for quick source lookup
       const sourcesMap = new Map(allSources.map(s => [s.id, s]));
-      
-      // Attach source info to each content item
       const contentWithSources = contentItems.map(item => ({
         ...item,
         source: sourcesMap.get(item.sourceId) || null
       }));
-      
       res.json(contentWithSources);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch content" });
@@ -417,6 +436,8 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/fetch-all", async (req, res) => {
     try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       const result = await fetchFolderContent(req.params.id);
       res.json(result);
     } catch (error) {
@@ -426,10 +447,8 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/smart-view", async (req, res) => {
     try {
-      const folder = await storage.getFolderById(req.params.id);
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
 
       const allContent = await storage.getContentByFolderId(req.params.id);
       
@@ -454,7 +473,7 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value;
+      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", req.session.userId!))?.value;
       
       const cards = await generateSmartView(contentToUse, aiSystemPrompt);
       
@@ -467,10 +486,8 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/generate-ideas", async (req, res) => {
     try {
-      const folder = await storage.getFolderById(req.params.id);
-      if (!folder) {
-        return res.status(404).json({ error: "Folder not found" });
-      }
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       
       const allUnusedContent = await storage.getUnusedContentByFolderId(req.params.id);
       if (allUnusedContent.length === 0) {
@@ -491,12 +508,13 @@ export async function registerRoutes(
         sourceType: sourcesMap.get(item.sourceId) || "rss",
       }));
       
+      const userId = req.session.userId!;
       let template = null;
       const templateId = req.body.templateId as string | undefined;
       if (templateId && templateId !== "builtin") {
-        template = await storage.getPromptTemplateById(templateId);
+        template = await storage.getPromptTemplateById(templateId, userId);
       } else if (!templateId) {
-        template = await storage.getDefaultPromptTemplate();
+        template = await storage.getDefaultPromptTemplate(userId);
       }
       
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
@@ -514,7 +532,7 @@ export async function registerRoutes(
           continue;
         }
         try {
-          const saved = await storage.createIdea(parsed.data);
+          const saved = await storage.createIdea({ ...parsed.data, userId });
           savedIdeas.push(saved);
         } catch (e) {
           console.error("Error saving idea:", e);
@@ -551,9 +569,11 @@ export async function registerRoutes(
       const folders = [];
       const allUnusedContent: any[] = [];
 
+      const userId = req.session.userId!;
       for (const fId of folderIds) {
         const folder = await storage.getFolderById(fId);
-        if (folder) {
+        // Only allow folders owned by the current user
+        if (folder && folder.userId === userId) {
           folders.push(folder);
           const unusedContent = await storage.getUnusedContentByFolderId(fId);
           allUnusedContent.push(...unusedContent);
@@ -598,10 +618,10 @@ export async function registerRoutes(
       const folderNames = folders.map((f) => f.name).join("، ");
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
-      const styleExamples = await storage.getAllStyleExamples();
+      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", userId))?.value || null;
+      const styleExamples = await storage.getAllStyleExamples(userId);
       
-      const allExistingIdeas = await storage.getAllIdeas();
+      const allExistingIdeas = await storage.getAllIdeas(userId);
       const existingTitles = allExistingIdeas.map(idea => idea.title);
 
       const allResults = [];
@@ -609,7 +629,7 @@ export async function registerRoutes(
       for (const templateReq of templateRequests) {
         if (templateReq.count <= 0) continue;
 
-        const template = await storage.getPromptTemplateById(templateReq.templateId);
+        const template = await storage.getPromptTemplateById(templateReq.templateId, userId);
         if (!template) continue;
 
         const ideas = await generateSmartIdeasForTemplate(
@@ -643,7 +663,7 @@ export async function registerRoutes(
           };
 
           try {
-            const saved = await storage.createIdea(ideaData);
+            const saved = await storage.createIdea({ ...ideaData, userId });
             allResults.push(saved);
           } catch (e) {
             console.error("Error saving smart idea:", e);
@@ -667,12 +687,24 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: verify source belongs to current user (via its folder)
+  async function requireSourceOwner(sourceId: string, userId: string, res: Response): Promise<Source | null> {
+    const source = await storage.getSourceById(sourceId);
+    if (!source) { res.status(404).json({ error: "Source not found" }); return null; }
+    const folder = await storage.getFolderById(source.folderId);
+    if (!folder || folder.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return source;
+  }
+
   app.post("/api/sources", async (req, res) => {
     try {
       const parsed = insertSourceSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
+      // Verify the target folder belongs to the current user
+      const folder = await requireFolderOwner(parsed.data.folderId, req.session.userId!, res);
+      if (!folder) return;
       const source = await storage.createSource(parsed.data);
       res.status(201).json(source);
     } catch (error) {
@@ -682,10 +714,8 @@ export async function registerRoutes(
 
   app.get("/api/sources/:id", async (req, res) => {
     try {
-      const source = await storage.getSourceById(req.params.id);
-      if (!source) {
-        return res.status(404).json({ error: "Source not found" });
-      }
+      const source = await requireSourceOwner(req.params.id, req.session.userId!, res);
+      if (!source) return;
       res.json(source);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch source" });
@@ -694,14 +724,13 @@ export async function registerRoutes(
 
   app.patch("/api/sources/:id", async (req, res) => {
     try {
+      const existing = await requireSourceOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
       const parsed = insertSourceSchema.partial().safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
       const source = await storage.updateSource(req.params.id, parsed.data);
-      if (!source) {
-        return res.status(404).json({ error: "Source not found" });
-      }
       res.json(source);
     } catch (error) {
       res.status(500).json({ error: "Failed to update source" });
@@ -710,10 +739,9 @@ export async function registerRoutes(
 
   app.delete("/api/sources/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteSource(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Source not found" });
-      }
+      const existing = await requireSourceOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
+      await storage.deleteSource(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete source" });
@@ -722,10 +750,8 @@ export async function registerRoutes(
 
   app.post("/api/sources/:id/fetch", async (req, res) => {
     try {
-      const source = await storage.getSourceById(req.params.id);
-      if (!source) {
-        return res.status(404).json({ error: "Source not found" });
-      }
+      const source = await requireSourceOwner(req.params.id, req.session.userId!, res);
+      if (!source) return;
       
       const result = await fetchRSSFeed(source);
       
@@ -754,9 +780,10 @@ export async function registerRoutes(
       await storage.updateSource(source.id, { lastFetched: new Date() } as any);
       
       // Generate Arabic translations for new content in the background
+      const _bgUserId = req.session.userId!;
       if (newContentIds.length > 0) {
         (async () => {
-          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", _bgUserId))?.value || null;
           if (aiSystemPrompt) {
             console.log(`[Source Fetch] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
           }
@@ -791,7 +818,7 @@ export async function registerRoutes(
             }
           }
           try {
-            await processNewContentNotifications(newContentIds);
+            await processNewContentNotifications(newContentIds, _bgUserId);
           } catch (e) {
             console.error("Error processing notifications:", e);
           }
@@ -804,12 +831,20 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: verify content belongs to current user (via its folder)
+  async function requireContentOwner(contentId: string, userId: string, res: Response) {
+    const item = await storage.getContentById(contentId);
+    if (!item) { res.status(404).json({ error: "Content not found" }); return null; }
+    const folder = await storage.getFolderById(item.folderId);
+    if (!folder || folder.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return item;
+  }
+
   app.post("/api/content/:id/read", async (req, res) => {
     try {
+      const item = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!item) return;
       const content = await storage.markContentRead(req.params.id);
-      if (!content) {
-        return res.status(404).json({ error: "Content not found" });
-      }
       res.json(content);
     } catch (error) {
       console.error("Error marking content read:", error);
@@ -819,8 +854,7 @@ export async function registerRoutes(
 
   app.get("/api/assistant/conversations", async (req, res) => {
     try {
-      const userId = req.session?.userId;
-      const conversations = await storage.getAssistantConversations(userId);
+      const conversations = await storage.getAssistantConversations(req.session.userId!);
       res.json(conversations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch conversations" });
@@ -830,20 +864,25 @@ export async function registerRoutes(
   app.post("/api/assistant/conversations", async (req, res) => {
     try {
       const title = (req.body?.title as string | undefined)?.trim() || "محادثة جديدة";
-      const userId = req.session?.userId || null;
-      const conversation = await storage.createAssistantConversation({ title, userId } as any);
+      const conversation = await storage.createAssistantConversation({ title, userId: req.session.userId! } as any);
       res.status(201).json(conversation);
     } catch (error) {
       res.status(500).json({ error: "Failed to create conversation" });
     }
   });
 
+  // Helper: verify conversation belongs to current user
+  async function requireConversationOwner(convId: string, userId: string, res: Response): Promise<AssistantConversation | null> {
+    const conv = await storage.getAssistantConversationById(convId);
+    if (!conv) { res.status(404).json({ error: "Conversation not found" }); return null; }
+    if (conv.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return conv;
+  }
+
   app.get("/api/assistant/conversations/:id/messages", async (req, res) => {
     try {
-      const conversation = await storage.getAssistantConversationById(req.params.id);
-      if (!conversation) {
-        return res.status(404).json({ error: "Conversation not found" });
-      }
+      const conversation = await requireConversationOwner(req.params.id, req.session.userId!, res);
+      if (!conversation) return;
       const messages = await storage.getAssistantMessagesByConversationId(req.params.id);
       res.json({ conversation, messages });
     } catch (error) {
@@ -853,14 +892,13 @@ export async function registerRoutes(
 
   app.patch("/api/assistant/conversations/:id", async (req, res) => {
     try {
+      const existing = await requireConversationOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
       const { title } = req.body;
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
       }
       const updated = await storage.updateAssistantConversation(req.params.id, { title });
-      if (!updated) {
-        return res.status(404).json({ error: "Conversation not found" });
-      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update conversation" });
@@ -869,10 +907,9 @@ export async function registerRoutes(
 
   app.delete("/api/assistant/conversations/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteAssistantConversation(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Conversation not found" });
-      }
+      const existing = await requireConversationOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
+      await storage.deleteAssistantConversation(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete conversation" });
@@ -883,6 +920,7 @@ export async function registerRoutes(
     try {
       const body = req.body as AssistantChatRequest & { conversationId?: string };
       const userMessage = body?.message?.trim();
+      const userId = req.session.userId!;
 
       if (!userMessage) {
         return res.status(400).json({ error: "Message is required" });
@@ -891,13 +929,13 @@ export async function registerRoutes(
       let conversationId = body.conversationId;
       if (conversationId) {
         const existing = await storage.getAssistantConversationById(conversationId);
-        if (!existing) {
+        // Only use conversation if it belongs to this user
+        if (!existing || existing.userId !== userId) {
           conversationId = undefined;
         }
       }
 
       if (!conversationId) {
-        const userId = (req as any).session?.userId || null;
         const created = await storage.createAssistantConversation({
           title: userMessage.slice(0, 60),
           userId,
@@ -915,8 +953,7 @@ export async function registerRoutes(
         content: userMessage,
       });
 
-      const sessionUserId = (req as any).session?.userId || null;
-      const result = await runAssistantEngine(userMessage, mergedHistory, sessionUserId);
+      const result = await runAssistantEngine(userMessage, mergedHistory, userId);
 
       await storage.createAssistantMessage({
         conversationId,
@@ -934,9 +971,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/integrations/slack/events", async (_req, res) => {
-    const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
-    const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+  app.get("/api/integrations/slack/events", async (req, res) => {
+    // This endpoint is public (webhook verification). Use session userId if available.
+    const userId = req.session?.userId || "";
+    const botToken = userId ? (await storage.getSetting("slack_bot_token", userId))?.value || "" : "";
+    const signingSecret = userId ? (await storage.getSetting("slack_signing_secret", userId))?.value || "" : "";
     res.json({
       status: "online",
       botToken: botToken ? `✅ مُضبوط (${botToken.slice(0, 8)}...)` : "❌ غير مُضبوط",
@@ -957,7 +996,10 @@ export async function registerRoutes(
       }
 
       // Verify signature only if signing secret is configured
-      const signingSecret = (await storage.getSetting("slack_signing_secret"))?.value || "";
+      // At this point we don't know the user yet; we'll look it up after the event
+      // For signature verification we need to find any user with this secret configured.
+      // We use the platform user resolved from the Slack event below.
+      const signingSecret = "";
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
 
@@ -1009,18 +1051,7 @@ export async function registerRoutes(
         console.log(`[Slack] User ${slackUserId} not linked to any platform account`);
         // Respond immediately then send rejection message
         res.json({ ok: true });
-        const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
-        if (botToken && event.channel) {
-          await fetch("https://slack.com/api/chat.postMessage", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${botToken}` },
-            body: JSON.stringify({
-              channel: event.channel,
-              text: `⚠️ حسابك في Slack غير مربوط بنظام الإنتاج.\n\nلربط حسابك:\n1. سجّل دخول في نظام الإنتاج\n2. اذهب إلى الإعدادات\n3. أدخل معرّف Slack الخاص بك: \`${slackUserId}\`\n\nبعدها تقدر تستخدم فكري هنا بشكل عادي 👌`,
-              thread_ts: event.thread_ts || event.ts,
-            }),
-          });
-        }
+        // No platform user found — cannot look up settings, skip bot reply
         return;
       }
 
@@ -1053,7 +1084,7 @@ export async function registerRoutes(
             statusLabel: result.statusLabel,
           });
 
-          const botToken = (await storage.getSetting("slack_bot_token"))?.value || "";
+          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
           if (!botToken) {
             console.warn("[Slack] No bot token configured - cannot reply to Slack");
             return;
@@ -1093,12 +1124,25 @@ export async function registerRoutes(
     }
   });
 
+  // Helper: verify idea belongs to current user
+  async function requireIdeaOwner(ideaId: string, userId: string, res: Response): Promise<Idea | null> {
+    const idea = await storage.getIdeaById(ideaId);
+    if (!idea) { res.status(404).json({ error: "Idea not found" }); return null; }
+    if (idea.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
+    return idea;
+  }
+
   app.get("/api/ideas", async (req, res) => {
     try {
+      const userId = req.session.userId!;
       const folderId = req.query.folderId as string | undefined;
-      const userId = req.session?.userId;
       let ideas;
       if (folderId) {
+        // Verify folder ownership before returning its ideas
+        const folder = await storage.getFolderById(folderId);
+        if (!folder || folder.userId !== userId) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
         ideas = await storage.getIdeasByFolderId(folderId);
       } else {
         ideas = await storage.getAllIdeas(userId);
@@ -1119,7 +1163,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const idea = await storage.createIdea(parsed.data);
+      const idea = await storage.createIdea({ ...parsed.data, userId: req.session.userId! });
       res.status(201).json(idea);
     } catch (error) {
       res.status(500).json({ error: "Failed to create idea" });
@@ -1128,10 +1172,8 @@ export async function registerRoutes(
 
   app.get("/api/ideas/:id", async (req, res) => {
     try {
-      const idea = await storage.getIdeaById(req.params.id);
-      if (!idea) {
-        return res.status(404).json({ error: "Idea not found" });
-      }
+      const idea = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!idea) return;
       res.json(idea);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch idea" });
@@ -1140,6 +1182,8 @@ export async function registerRoutes(
 
   app.patch("/api/ideas/:id", async (req, res) => {
     try {
+      const existing = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
       const body = { ...req.body };
       if (body.scheduledDate && typeof body.scheduledDate === 'string') {
         body.scheduledDate = new Date(body.scheduledDate);
@@ -1149,9 +1193,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors });
       }
       const idea = await storage.updateIdea(req.params.id, parsed.data);
-      if (!idea) {
-        return res.status(404).json({ error: "Idea not found" });
-      }
       res.json(idea);
     } catch (error) {
       res.status(500).json({ error: "Failed to update idea" });
@@ -1160,10 +1201,9 @@ export async function registerRoutes(
 
   app.delete("/api/ideas/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteIdea(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Idea not found" });
-      }
+      const existing = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!existing) return;
+      await storage.deleteIdea(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete idea" });
@@ -1173,7 +1213,7 @@ export async function registerRoutes(
   // Prompt Templates routes
   app.get("/api/prompt-templates", async (req, res) => {
     try {
-      const templates = await storage.getAllPromptTemplates();
+      const templates = await storage.getAllPromptTemplates(req.session.userId!);
       res.json(templates);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch prompt templates" });
@@ -1182,7 +1222,7 @@ export async function registerRoutes(
 
   app.get("/api/prompt-templates/default", async (req, res) => {
     try {
-      const template = await storage.getDefaultPromptTemplate();
+      const template = await storage.getDefaultPromptTemplate(req.session.userId!);
       res.json(template || null);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch default template" });
@@ -1191,7 +1231,7 @@ export async function registerRoutes(
 
   app.get("/api/prompt-templates/:id", async (req, res) => {
     try {
-      const template = await storage.getPromptTemplateById(req.params.id);
+      const template = await storage.getPromptTemplateById(req.params.id, req.session.userId!);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -1207,7 +1247,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const template = await storage.createPromptTemplate(parsed.data);
+      const template = await storage.createPromptTemplate({ ...parsed.data, userId: req.session.userId! });
       res.status(201).json(template);
     } catch (error) {
       res.status(500).json({ error: "Failed to create template" });
@@ -1220,7 +1260,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.errors });
       }
-      const template = await storage.updatePromptTemplate(req.params.id, parsed.data);
+      const template = await storage.updatePromptTemplate(req.params.id, parsed.data, req.session.userId!);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -1232,7 +1272,7 @@ export async function registerRoutes(
 
   app.post("/api/prompt-templates/:id/set-default", async (req, res) => {
     try {
-      const template = await storage.setDefaultPromptTemplate(req.params.id);
+      const template = await storage.setDefaultPromptTemplate(req.params.id, req.session.userId!);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -1244,7 +1284,7 @@ export async function registerRoutes(
 
   app.delete("/api/prompt-templates/:id", async (req, res) => {
     try {
-      const deleted = await storage.deletePromptTemplate(req.params.id);
+      const deleted = await storage.deletePromptTemplate(req.params.id, req.session.userId!);
       if (!deleted) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -1257,6 +1297,8 @@ export async function registerRoutes(
   // Idea Comments routes
   app.get("/api/ideas/:id/comments", async (req, res) => {
     try {
+      const idea = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!idea) return;
       const comments = await storage.getCommentsByIdeaId(req.params.id);
       res.json(comments);
     } catch (error) {
@@ -1266,6 +1308,8 @@ export async function registerRoutes(
 
   app.post("/api/ideas/:id/comments", async (req, res) => {
     try {
+      const idea = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!idea) return;
       const parsed = insertIdeaCommentSchema.safeParse({
         ...req.body,
         ideaId: req.params.id,
@@ -1282,10 +1326,7 @@ export async function registerRoutes(
 
   app.delete("/api/comments/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteComment(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Comment not found" });
-      }
+      await storage.deleteComment(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete comment" });
@@ -1295,6 +1336,8 @@ export async function registerRoutes(
   // Idea Assignments routes
   app.get("/api/ideas/:id/assignments", async (req, res) => {
     try {
+      const idea = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!idea) return;
       const assignments = await storage.getAssignmentsByIdeaId(req.params.id);
       res.json(assignments);
     } catch (error) {
@@ -1304,6 +1347,8 @@ export async function registerRoutes(
 
   app.post("/api/ideas/:id/assignments", async (req, res) => {
     try {
+      const idea = await requireIdeaOwner(req.params.id, req.session.userId!, res);
+      if (!idea) return;
       const parsed = insertIdeaAssignmentSchema.safeParse({
         ...req.body,
         ideaId: req.params.id,
@@ -1320,10 +1365,7 @@ export async function registerRoutes(
 
   app.delete("/api/assignments/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteAssignment(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ error: "Assignment not found" });
-      }
+      await storage.deleteAssignment(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete assignment" });
@@ -1333,12 +1375,14 @@ export async function registerRoutes(
   // Analytics endpoints
   app.get("/api/analytics/overview", async (req, res) => {
     try {
-      const [folders, allIdeas, allContent, allSources] = await Promise.all([
-        storage.getAllFolders(),
-        storage.getAllIdeas(),
-        storage.getAllContent(),
-        storage.getAllSources(),
+      const userId = req.session.userId!;
+      const [folders, allIdeas, allContent] = await Promise.all([
+        storage.getAllFolders(userId),
+        storage.getAllIdeas(userId),
+        storage.getAllContent(userId),
       ]);
+      // Sources are derived from user's folders
+      const allSources = (await Promise.all(folders.map(f => storage.getSourcesByFolderId(f.id)))).flat();
 
       // Ideas by status
       const ideasByStatus: Record<string, number> = {};
@@ -1470,6 +1514,8 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/content/analyze", async (req, res) => {
     try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       const folderContent = await storage.getContentByFolderId(req.params.id);
       const unanalyzedContent = folderContent.filter(c => !c.sentiment);
       
@@ -1501,13 +1547,10 @@ export async function registerRoutes(
   // Generate detailed Arabic explanation for a content item
   app.post("/api/content/:id/explain", async (req, res) => {
     try {
-      const contentItem = await storage.getContentById(req.params.id);
-      
-      if (!contentItem) {
-        return res.status(404).json({ error: "Content not found" });
-      }
+      const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!contentItem) return;
 
-      const aiSystemPromptSetting = await storage.getSetting("ai_system_prompt");
+      const aiSystemPromptSetting = await storage.getSetting("ai_system_prompt", req.session.userId!);
       const aiSystemPrompt = aiSystemPromptSetting?.value || null;
       if (aiSystemPrompt) {
         console.log(`[Explain Route] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
@@ -1530,11 +1573,8 @@ export async function registerRoutes(
   // Generate Arabic translation for a content item on demand
   app.post("/api/content/:id/translate", async (req, res) => {
     try {
-      const contentItem = await storage.getContentById(req.params.id);
-      
-      if (!contentItem) {
-        return res.status(404).json({ error: "Content not found" });
-      }
+      const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!contentItem) return;
 
       // Check if already translated
       if (contentItem.arabicTitle && contentItem.arabicFullSummary && contentItem.arabicSummary) {
@@ -1593,7 +1633,7 @@ export async function registerRoutes(
   // Backfill translations for all content items missing translations
   app.post("/api/content/backfill-translations", async (req, res) => {
     try {
-      const allContent = await storage.getAllContent();
+      const allContent = await storage.getAllContent(req.session.userId!);
       
       // Filter content that needs translation
       const needsTranslation = allContent.filter(
@@ -1657,7 +1697,7 @@ export async function registerRoutes(
 
   app.get("/api/trending-topics", async (req, res) => {
     try {
-      const allContent = await storage.getAllContent();
+      const allContent = await storage.getAllContent(req.session.userId!);
       
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const recentContent = allContent.filter(c => {
@@ -1680,6 +1720,8 @@ export async function registerRoutes(
 
   app.get("/api/folders/:id/trending-topics", async (req, res) => {
     try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
       const folderContent = await storage.getContentByFolderId(req.params.id);
       
       if (folderContent.length === 0) {
@@ -1696,7 +1738,7 @@ export async function registerRoutes(
 
   app.get("/api/content/sentiment-stats", async (req, res) => {
     try {
-      const allContent = await storage.getAllContent();
+      const allContent = await storage.getAllContent(req.session.userId!);
       
       const analyzed = allContent.filter(c => c.sentiment);
       const positive = analyzed.filter(c => c.sentiment === "positive").length;
@@ -1741,7 +1783,7 @@ export async function registerRoutes(
   // Settings routes
   app.get("/api/settings", async (req, res) => {
     try {
-      const allSettings = await storage.getAllSettings();
+      const allSettings = await storage.getAllSettings(req.session.userId!);
       const settingsObj: Record<string, string | null> = {};
       for (const s of allSettings) {
         settingsObj[s.key] = s.value;
@@ -1758,8 +1800,8 @@ export async function registerRoutes(
       if (!entries || typeof entries !== "object") {
         return res.status(400).json({ error: "Invalid settings data" });
       }
-      await storage.upsertSettings(entries);
-      const allSettings = await storage.getAllSettings();
+      await storage.upsertSettings(entries, req.session.userId!);
+      const allSettings = await storage.getAllSettings(req.session.userId!);
       const settingsObj: Record<string, string | null> = {};
       for (const s of allSettings) {
         settingsObj[s.key] = s.value;
@@ -1772,8 +1814,9 @@ export async function registerRoutes(
 
   app.post("/api/content/:id/broadcast", async (req, res) => {
     try {
-      const { id } = req.params;
-      const result = await broadcastSingleContent(id);
+      const item = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!item) return;
+      const result = await broadcastSingleContent(req.params.id, req.session.userId!);
       if (result.success) {
         res.json(result);
       } else {
@@ -1837,7 +1880,7 @@ export async function registerRoutes(
   // Style Examples (Past Successful Ideas)
   app.get("/api/style-examples", async (req, res) => {
     try {
-      const examples = await storage.getAllStyleExamples();
+      const examples = await storage.getAllStyleExamples(req.session.userId!);
       res.json(examples);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch style examples" });
@@ -1846,7 +1889,7 @@ export async function registerRoutes(
 
   app.post("/api/style-examples", async (req, res) => {
     try {
-      const example = await storage.createStyleExample(req.body);
+      const example = await storage.createStyleExample({ ...req.body, userId: req.session.userId! });
       res.json(example);
     } catch (error) {
       res.status(500).json({ error: "Failed to create style example" });
@@ -1855,7 +1898,7 @@ export async function registerRoutes(
 
   app.delete("/api/style-examples/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteStyleExample(req.params.id);
+      const deleted = await storage.deleteStyleExample(req.params.id, req.session.userId!);
       if (deleted) {
         res.json({ success: true });
       } else {

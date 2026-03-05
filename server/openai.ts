@@ -2,8 +2,9 @@ import OpenAI from "openai";
 import type { Content, IdeaCategory, InsertIdea, PromptTemplate, SentimentType } from "@shared/schema";
 import { storage } from "./storage";
 
-async function getSettingsMap(): Promise<Map<string, string | null>> {
-  const allSettings = await storage.getAllSettings();
+async function getSettingsMap(userId?: string): Promise<Map<string, string | null>> {
+  if (!userId) return new Map();
+  const allSettings = await storage.getAllSettings(userId);
   const map = new Map<string, string | null>();
   for (const s of allSettings) {
     map.set(s.key, s.value);
@@ -11,8 +12,8 @@ async function getSettingsMap(): Promise<Map<string, string | null>> {
   return map;
 }
 
-export async function getAIClient(): Promise<{ client: OpenAI; model: string; miniModel: string }> {
-  const settings = await getSettingsMap();
+export async function getAIClient(userId?: string): Promise<{ client: OpenAI; model: string; miniModel: string }> {
+  const settings = await getSettingsMap(userId);
   const provider = settings.get("ai_provider") || "replit";
 
   if (provider === "custom") {

@@ -26,8 +26,12 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),
     onSuccess: () => {
+      // Clear all cached data to prevent leaking between user sessions
       queryClient.clear();
-      navigate("/login");
+      localStorage.clear();
+      sessionStorage.clear();
+      // Hard reload to reset all in-memory React state
+      window.location.href = "/login";
     },
   });
 
