@@ -44,8 +44,11 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
   }
 
   if (newContentIds.length > 0) {
+    const folderUserId = folder?.userId || null;
     (async () => {
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt"))?.value || null;
+      const aiSystemPrompt = folderUserId
+        ? (await storage.getSetting("ai_system_prompt", folderUserId))?.value || null
+        : null;
       if (aiSystemPrompt) {
         console.log(`[Folder Fetcher] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
       }
@@ -80,10 +83,10 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
         }
       }
       try {
-        if (folder) {
-          await processNewContentNotificationsForFolder(newContentIds, folder);
-        } else {
-          await processNewContentNotifications(newContentIds);
+        if (folder && folderUserId) {
+          await processNewContentNotificationsForFolder(newContentIds, folder, folderUserId);
+        } else if (folderUserId) {
+          await processNewContentNotifications(newContentIds, folderUserId);
         }
       } catch (e) {
         console.error("Error processing notifications:", e);

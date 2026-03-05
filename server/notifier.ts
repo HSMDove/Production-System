@@ -2,8 +2,8 @@ import { storage } from "./storage";
 import { rewriteContent } from "./openai";
 import type { Content, Folder } from "@shared/schema";
 
-async function getSettingsMap(): Promise<Map<string, string | null>> {
-  const allSettings = await storage.getAllSettings();
+async function getSettingsMap(userId: string): Promise<Map<string, string | null>> {
+  const allSettings = await storage.getAllSettings(userId);
   const map = new Map<string, string | null>();
   for (const s of allSettings) {
     map.set(s.key, s.value);
@@ -91,7 +91,7 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-export async function processNewContentNotifications(newContentIds: string[]): Promise<{
+export async function processNewContentNotifications(newContentIds: string[], userId: string): Promise<{
   processed: number;
   notified: number;
   errors: string[];
@@ -100,7 +100,7 @@ export async function processNewContentNotifications(newContentIds: string[]): P
     return { processed: 0, notified: 0, errors: [] };
   }
 
-  const settingsMap = await getSettingsMap();
+  const settingsMap = await getSettingsMap(userId);
   const notificationsEnabled = settingsMap.get("notifications_enabled") === "true";
   
   if (!notificationsEnabled) {
@@ -183,12 +183,12 @@ export async function processNewContentNotifications(newContentIds: string[]): P
   return { processed, notified, errors };
 }
 
-export async function broadcastSingleContent(contentId: string): Promise<{
+export async function broadcastSingleContent(contentId: string, userId: string): Promise<{
   success: boolean;
   channels: string[];
   error?: string;
 }> {
-  const settingsMap = await getSettingsMap();
+  const settingsMap = await getSettingsMap(userId);
 
   const telegramEnabled = settingsMap.get("telegram_enabled") === "true";
   const slackEnabled = settingsMap.get("slack_enabled") === "true";
@@ -249,13 +249,14 @@ export async function broadcastSingleContent(contentId: string): Promise<{
 
 export async function processNewContentNotificationsForFolder(
   newContentIds: string[],
-  folder: Folder
+  folder: Folder,
+  userId: string
 ): Promise<{ processed: number; notified: number; errors: string[] }> {
   if (newContentIds.length === 0) {
     return { processed: 0, notified: 0, errors: [] };
   }
 
-  const settingsMap = await getSettingsMap();
+  const settingsMap = await getSettingsMap(userId);
   const notificationsEnabled = settingsMap.get("notifications_enabled") === "true";
 
   if (!notificationsEnabled) {

@@ -145,6 +145,7 @@ export type IdeaCategory = typeof ideaCategories[number];
 
 export const ideas = pgTable("ideas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   folderId: varchar("folder_id").references(() => folders.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
@@ -165,6 +166,10 @@ export const ideas = pgTable("ideas", {
 });
 
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
+  user: one(users, {
+    fields: [ideas.userId],
+    references: [users.id],
+  }),
   folder: one(folders, {
     fields: [ideas.folderId],
     references: [folders.id],
@@ -208,6 +213,7 @@ export const ideaAssignmentsRelations = relations(ideaAssignments, ({ one }) => 
 // Insert schemas
 export const insertFolderSchema = createInsertSchema(folders).omit({
   id: true,
+  userId: true,
   createdAt: true,
 });
 
@@ -228,6 +234,8 @@ export const insertIdeaSchema = createInsertSchema(ideas).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  userId: z.string().optional(),
 });
 
 export const updateIdeaSchema = createInsertSchema(ideas).omit({
@@ -304,6 +312,7 @@ export type InsertAssistantMessage = z.infer<typeof insertAssistantMessageSchema
 // Prompt Templates - custom AI prompt templates for idea generation
 export const promptTemplates = pgTable("prompt_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   promptContent: text("prompt_content").notNull(),
@@ -315,6 +324,7 @@ export const promptTemplates = pgTable("prompt_templates", {
 
 export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).omit({
   id: true,
+  userId: true,
   isDefault: true,
   createdAt: true,
   updatedAt: true,
@@ -322,6 +332,7 @@ export const insertPromptTemplateSchema = createInsertSchema(promptTemplates).om
 
 export const updatePromptTemplateSchema = createInsertSchema(promptTemplates).omit({
   id: true,
+  userId: true,
   isDefault: true,
   createdAt: true,
 }).partial();
@@ -330,20 +341,25 @@ export type PromptTemplate = typeof promptTemplates.$inferSelect;
 export type InsertPromptTemplate = z.infer<typeof insertPromptTemplateSchema>;
 export type UpdatePromptTemplate = z.infer<typeof updatePromptTemplateSchema>;
 
-// Settings - key-value configuration store
+// Settings - key-value configuration store, scoped per user
 export const settings = pgTable("settings", {
-  key: varchar("key").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  key: varchar("key").notNull(),
   value: text("value"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  pk: { columns: [t.userId, t.key], name: "settings_pkey" },
+}));
 
 export const insertSettingSchema = createInsertSchema(settings);
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = z.infer<typeof insertSettingSchema>;
+export type SettingKey = string;
 
 // Style Examples - past successful video ideas for AI learning
 export const styleExamples = pgTable("style_examples", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description"),
   thumbnailText: text("thumbnail_text"),
@@ -352,6 +368,7 @@ export const styleExamples = pgTable("style_examples", {
 
 export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
   id: true,
+  userId: true,
   createdAt: true,
 });
 
