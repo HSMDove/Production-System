@@ -19,27 +19,31 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
     body: JSON.stringify({
       from: "نَسَق <noreply@nasaqapp.net>",
       to: [email],
-      subject: `رمز الدخول: ${otp} 🛡️`,
+      subject: `رمز التحقق: ${otp} ✨`,
       html: `
         <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f0f; border-radius: 24px; color: #fff; border: 1px solid #333;">
-          <h1 style="font-size: 32px; font-weight: 900; margin-bottom: 16px; background: linear-gradient(to left, #6366f1, #a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">نَسَق</h1>
-          <p style="font-size: 18px; color: #fff; margin-bottom: 32px; line-height: 1.6;">ارحب، هذا رقم التحقق الخاص بك ✌️ سجله في الموقع الحين.</p>
+          <h1 style="font-size: 36px; font-weight: 900; margin-bottom: 24px; background: linear-gradient(to left, #6366f1, #a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center;">نَسَق</h1>
           
-          <div style="background: rgba(99, 102, 241, 0.1); border: 2px solid #6366f1; border-radius: 16px; padding: 40px; text-align: center; margin-bottom: 32px; box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);">
-            <p style="color: #a5b4fc; font-size: 14px; margin: 0 0 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">رمز التحقق</p>
-            <div style="font-size: 48px; font-weight: 900; letter-spacing: 10px; color: #fff; font-family: 'Courier New', Courier, monospace;">
-              ${otp}
+          <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border-radius: 20px; padding: 40px; text-align: center; margin-bottom: 32px; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);">
+            <p style="color: #fff; font-size: 20px; margin: 0 0 24px; font-weight: 800; line-height: 1.6;">
+              حياك الله، شوف هذا رمز التحقق حقك 🌟
+            </p>
+            
+            <div style="background: rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 20px; display: inline-block; min-width: 200px;">
+              <div style="font-size: 52px; font-weight: 900; letter-spacing: 12px; color: #fff; font-family: 'Courier New', Courier, monospace; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+                ${otp}
+              </div>
             </div>
           </div>
           
-          <div style="background: #1a1a1a; border-radius: 12px; padding: 16px; text-align: center;">
-            <p style="color: #ff4d4d; font-size: 15px; margin: 0; font-weight: bold;">
+          <div style="background: #1a1a1a; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #333;">
+            <p style="color: #ff4d4d; font-size: 16px; margin: 0; font-weight: 800;">
               ⚠️ وانتبه يالشيخ ترا مدته بس 5 دقايق
             </p>
           </div>
           
-          <p style="color: #666; font-size: 12px; text-align: center; margin-top: 32px;">
-            إذا لم تطلب هذا الرمز، يمكنك تجاهل هذا البريد بكل بساطة.
+          <p style="color: #666; font-size: 13px; text-align: center; margin-top: 32px; font-weight: 500;">
+            سجله في الموقع الحين واستمتع بالتجربة 🚀
           </p>
         </div>
       `,
