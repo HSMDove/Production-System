@@ -131,25 +131,13 @@ export const ideaStatuses = [
 ] as const;
 export type IdeaStatus = typeof ideaStatuses[number];
 
-export const ideaCategories = [
-  "thalathiyat",
-  "leh",
-  "tech_i_use",
-  "news_roundup",
-  "deep_dive",
-  "comparison",
-  "tutorial",
-  "other"
-] as const;
-export type IdeaCategory = typeof ideaCategories[number];
-
 export const ideas = pgTable("ideas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   folderId: varchar("folder_id").references(() => folders.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
-  category: text("category").notNull().$type<IdeaCategory>(),
+  category: text("category").notNull().default(""),
   status: text("status").notNull().$type<IdeaStatus>().default("raw_idea"),
   estimatedDuration: text("estimated_duration"),
   targetAudience: text("target_audience"),

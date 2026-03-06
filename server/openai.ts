@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { Content, IdeaCategory, InsertIdea, PromptTemplate, SentimentType } from "@shared/schema";
+import type { Content, InsertIdea, PromptTemplate, SentimentType } from "@shared/schema";
 import { storage } from "./storage";
 
 async function getSettingsMap(userId?: string): Promise<Map<string, string | null>> {
@@ -67,7 +67,7 @@ export async function getAIClient(userId?: string): Promise<{ client: OpenAI; mo
 interface GeneratedIdea {
   title: string;
   description: string;
-  category: IdeaCategory;
+  category: string;
   estimatedDuration: string;
   targetAudience: string;
 }
@@ -76,7 +76,7 @@ export interface SmartGeneratedIdea {
   title: string;
   thumbnailText: string;
   script: string;
-  category: IdeaCategory;
+  category: string;
   estimatedDuration: string;
   targetAudience: string;
   sourceIndices: number[];
@@ -87,7 +87,7 @@ export interface SmartIdeaResult {
   thumbnailText: string;
   script: string;
   description: string;
-  category: IdeaCategory;
+  category: string;
   estimatedDuration: string;
   targetAudience: string;
   sourceContentIds: string[];
@@ -106,7 +106,7 @@ const DEFAULT_PROMPT = `أنت منتج محتوى تقني عربي متخصص 
 قم بإنشاء 3-5 أفكار فيديو مبتكرة. لكل فكرة، قدم:
 - عنوان جذاب بالعربية
 - وصف مختصر (2-3 جمل)
-- نوع الفيديو من القائمة التالية فقط: thalathiyat (ثلاثيات - فيديوهات قصيرة), leh (ليه - شرح أسباب), tech_i_use (تقنية أستخدمها), news_roundup (ملخص أخبار), deep_dive (تعمق), comparison (مقارنة), tutorial (شرح), other (أخرى)
+- نوع/فئة الفيديو
 - المدة التقريبية (مثل: 5-8 دقائق)
 - الجمهور المستهدف
 
@@ -750,7 +750,7 @@ ${templatePrompt}
 3. اكتب عنوان فيديو جذاب بالعربية
 4. اكتب نص مصغّر (Thumbnail Text) - عبارة قصيرة جداً مناسبة لصورة مصغرة
 5. اكتب سكريبت/ملخص تفصيلي للفيديو (3-5 فقرات)
-6. حدد نوع الفيديو من: thalathiyat, leh, tech_i_use, news_roundup, deep_dive, comparison, tutorial, other
+6. حدد فئة الفيديو باستخدام اسم السلسلة: "${templateName}"
 
 أجب بصيغة JSON فقط:
 {
@@ -800,7 +800,7 @@ ${templatePrompt}
         thumbnailText: idea.thumbnailText || "",
         script: idea.script || "",
         description: idea.script ? idea.script.substring(0, 200) + "..." : "",
-        category: idea.category || "other",
+        category: templateName,
         estimatedDuration: idea.estimatedDuration || "",
         targetAudience: idea.targetAudience || "",
         sourceContentIds: usedContent.map((c) => c.id),

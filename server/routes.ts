@@ -31,17 +31,6 @@ type AssistantChatRequest = {
   history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
-const ideaCategories = [
-  "thalathiyat",
-  "leh",
-  "tech_i_use",
-  "news_roundup",
-  "deep_dive",
-  "comparison",
-  "tutorial",
-  "other",
-] as const;
-
 function normalizeText(value: string): string {
   return value.toLowerCase().trim();
 }
@@ -196,7 +185,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
           properties: {
             title: { type: "string" },
             description: { type: "string" },
-            category: { type: "string", enum: Array.from(ideaCategories) },
+            category: { type: "string" },
             folderName: { type: "string" },
             estimatedDuration: { type: "string" },
             targetAudience: { type: "string" },
@@ -312,7 +301,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
           content: JSON.stringify({ ok: true, results }),
         } as any);
       } else if (call.function.name === "create_idea_draft") {
-        const safeCategory = ideaCategories.includes(args.category) ? args.category : "other";
+        const safeCategory = String(args.category || "");
         const selectedFolder = folders.find((f) => normalizeText(f.name) === normalizeText(args.folderName || ""));
         const idea = await storage.createIdea({
           userId,

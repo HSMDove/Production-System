@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -38,13 +39,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { IdeaWithFolder, Folder } from "@/lib/types";
-import { ideaStatusLabels, ideaCategoryLabels } from "@/lib/types";
+import { ideaStatusLabels } from "@/lib/types";
+import type { PromptTemplate } from "@shared/schema";
 import { IdeaCollaboration } from "./idea-collaboration";
 
 const ideaFormSchema = z.object({
   title: z.string().min(1, "عنوان الفكرة مطلوب"),
   description: z.string().optional(),
-  category: z.enum(["thalathiyat", "leh", "tech_i_use", "news_roundup", "deep_dive", "comparison", "tutorial", "other"]),
+  category: z.string().default(""),
   status: z.enum(["raw_idea", "needs_research", "ready_for_script", "script_in_progress", "ready_for_filming", "completed"]),
   estimatedDuration: z.string().optional(),
   targetAudience: z.string().optional(),
@@ -72,12 +74,16 @@ export function IdeaDialog({
   onSubmit,
   isLoading,
 }: IdeaDialogProps) {
+  const { data: templates } = useQuery<PromptTemplate[]>({
+    queryKey: ["/api/prompt-templates"],
+  });
+
   const form = useForm<IdeaFormValues>({
     resolver: zodResolver(ideaFormSchema),
     defaultValues: {
       title: "",
       description: "",
-      category: "other",
+      category: "",
       status: "raw_idea",
       estimatedDuration: "",
       targetAudience: "",
@@ -104,7 +110,7 @@ export function IdeaDialog({
       form.reset({
         title: "",
         description: "",
-        category: "other",
+        category: "",
         status: "raw_idea",
         estimatedDuration: "",
         targetAudience: "",
@@ -179,11 +185,17 @@ export function IdeaDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {Object.entries(ideaCategoryLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
+                        {templates && templates.length > 0 ? (
+                          templates.map((t) => (
+                            <SelectItem key={t.id} value={t.name}>
+                              {t.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="" disabled>
+                            لا توجد قوالب — أضف من الإعدادات
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
