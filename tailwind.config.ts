@@ -6,12 +6,12 @@ export default {
   theme: {
     extend: {
       borderRadius: {
-        lg: "0px",
-        md: "0px",
-        sm: "0px",
-        xl: "0px",
-        "2xl": "0px",
-        "3xl": "0px",
+        sm:    "4px",
+        md:    "6px",
+        lg:    "8px",
+        xl:    "10px",
+        "2xl": "12px",
+        "3xl": "16px",
       },
       boxShadow: {
         brutal:    "4px 4px 0px 0px #000000",

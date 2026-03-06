@@ -79,7 +79,7 @@
   --font-sans: Open Sans, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
-  --radius: 0rem;
+  --radius: 0.5rem;
 
   /* Shadows — zeroed out, Neo-Brutalist solid shadows applied via components */
   --shadow-2xs: none;
@@ -227,15 +227,13 @@
     background-color: hsl(var(--card));
     border: 2px solid hsl(var(--border)) !important;
     box-shadow: var(--nb-shadow) !important;
-    border-radius: 0 !important;
   }
 
-  /* Inputs — thick border, square corners */
+  /* Inputs — thick border */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
     border: 2px solid hsl(var(--border)) !important;
-    border-radius: 0 !important;
     box-shadow: none;
     font-weight: 600;
     transition: box-shadow 0.1s ease;
@@ -361,7 +359,28 @@ html, body, #root {
 
 body {
   overflow: hidden;
-  background: hsl(var(--background));
+  background-color: hsl(var(--background));
+  background-image: radial-gradient(circle, rgba(0,0,0,0.20) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+/* Dark mode: golden dots */
+.dark body {
+  background-color: hsl(var(--background));
+  background-image: radial-gradient(circle, rgba(255, 203, 70, 0.22) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+
+/* ── Neo-Brutalist dot grid on all background surfaces ── */
+.bg-background {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.18) 1.2px, transparent 1.2px) !important;
+  background-size: 22px 22px !important;
+}
+
+.dark .bg-background {
+  background-image: radial-gradient(circle, rgba(255, 203, 70, 0.20) 1.2px, transparent 1.2px) !important;
+  background-size: 22px 22px !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
