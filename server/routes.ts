@@ -80,24 +80,39 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
   }
 
   if (provider === "brave") {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
-    const response = await fetch(url, {
-      headers: {
-        "Accept": "application/json",
-        "X-Subscription-Token": apiKey,
-      },
-    });
-    if (!response.ok) {
-      return [{ title: "فشل البحث الخارجي", snippet: `Brave API error: ${response.status}`, url: "" }];
-    }
+    try {
+      const trimmedKey = apiKey.trim();
+      const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&text_decorations=0`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": trimmedKey,
+        },
+      });
 
-    const data = await response.json() as any;
-    const results = data?.web?.results || [];
-    return results.slice(0, 5).map((item: any) => ({
-      title: item.title,
-      snippet: item.description || "",
-      url: item.url,
-    }));
+      if (!response.ok) {
+        let errorBody = "";
+        try { errorBody = await response.text(); } catch {}
+        console.error(`[BraveSearch] HTTP ${response.status}: ${errorBody}`);
+        return [{ title: "فشل البحث الخارجي", snippet: `Brave API error ${response.status}: ${errorBody.slice(0, 200)}`, url: "" }];
+      }
+
+      const data = await response.json() as any;
+      const results = data?.web?.results || data?.results || [];
+      if (results.length === 0) {
+        console.warn("[BraveSearch] No results found. Response keys:", Object.keys(data));
+      }
+      return results.slice(0, 5).map((item: any) => ({
+        title: item.title || item.name || "",
+        snippet: item.description || item.snippet || "",
+        url: item.url || item.link || "",
+      }));
+    } catch (err: any) {
+      console.error("[BraveSearch] Exception:", err?.message);
+      return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
+    }
   }
 
   return [{ title: "مزود بحث غير مدعوم", snippet: `المزود الحالي: ${provider}`, url: "" }];

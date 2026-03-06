@@ -31,7 +31,7 @@ export async function getAIClient(userId?: string): Promise<{ client: OpenAI; mo
 
   const provider = settings.get("ai_provider") || "replit";
 
-  if (provider === "custom") {
+  if (provider === "custom" || provider === "local") {
     const baseURL = settings.get("ai_custom_base_url");
     const apiKey = settings.get("ai_custom_api_key") || "not-needed";
     const model = settings.get("ai_custom_model") || "llama3";

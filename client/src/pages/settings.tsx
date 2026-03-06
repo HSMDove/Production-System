@@ -240,115 +240,180 @@ export default function Settings() {
           </TabsContent>
 
           <TabsContent value="fikri" className="space-y-4">
+            {/* AI Source Selection */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> إعدادات فكري</CardTitle>
-                <CardDescription>تخصيص الـ System Prompt وإجبار الذكاء الاصطناعي على أسلوبك الخاص.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> مصدر الذكاء الاصطناعي</CardTitle>
+                <CardDescription>اختر من أين يأتي الذكاء الاصطناعي الذي يشغّل فكري.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>مزود الذكاء الاصطناعي</Label>
-                  <Select value={localSettings.ai_provider || "replit"} onValueChange={(value) => updateSetting("ai_provider", value)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="replit">Replit AI (افتراضي)</SelectItem>
-                      <SelectItem value="custom">مزود مخصص</SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Source type selector */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    {
+                      value: "replit",
+                      label: "النموذج الافتراضي",
+                      desc: "يعمل مباشرة بدون أي إعداد",
+                      icon: "⚡",
+                    },
+                    {
+                      value: "custom",
+                      label: "API مخصص",
+                      desc: "OpenAI أو Anthropic أو أي مزود",
+                      icon: "🔑",
+                    },
+                    {
+                      value: "local",
+                      label: "نموذج محلي",
+                      desc: "Ollama أو LM Studio على جهازك",
+                      icon: "💻",
+                    },
+                  ].map((opt) => {
+                    const selected = (localSettings.ai_provider || "replit") === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateSetting("ai_provider", opt.value)}
+                        className={`rounded-xl border-2 p-4 text-right transition-all ${
+                          selected
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-border hover:border-primary/40"
+                        }`}
+                        data-testid={`button-ai-source-${opt.value}`}
+                      >
+                        <div className="text-2xl mb-2">{opt.icon}</div>
+                        <div className="font-semibold text-sm">{opt.label}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{opt.desc}</div>
+                      </button>
+                    );
+                  })}
                 </div>
 
+                {/* Fields for custom API */}
                 {localSettings.ai_provider === "custom" && (
-                  <div className="space-y-2">
-                    <Input placeholder="Base URL" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" />
-                    <Input placeholder="API Key" type="password" value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" />
-                    <Input placeholder="Model" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" />
+                  <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
+                    <p className="text-sm font-medium">إعدادات API المخصص</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>API Key</Label>
+                        <Input type="password" placeholder="sk-... أو key-..." value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" data-testid="input-llm-api-key" />
+                        <p className="text-xs text-muted-foreground">مفتاح الوصول للـ API</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>اسم النموذج</Label>
+                        <Input placeholder="gpt-4o / claude-3-5-sonnet" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" data-testid="input-llm-model" />
+                        <p className="text-xs text-muted-foreground">اسم النموذج الذي تريد استخدامه</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Base URL (اختياري)</Label>
+                      <Input placeholder="https://api.openai.com/v1" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" data-testid="input-llm-base-url" />
+                      <p className="text-xs text-muted-foreground">اتركه فارغاً لاستخدام OpenAI المباشر. غيّره للمزودين الآخرين مثل Anthropic أو Together.</p>
+                    </div>
                   </div>
                 )}
 
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>LLM API Key</Label>
-                    <Input
-                      type="password"
-                      placeholder="sk-..."
-                      value={localSettings.llm_api_key || ""}
-                      onChange={(e) => updateSetting("llm_api_key", e.target.value)}
-                      dir="ltr"
-                      data-testid="input-llm-api-key"
-                    />
+                {/* Fields for local model */}
+                {localSettings.ai_provider === "local" && (
+                  <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
+                    <p className="text-sm font-medium">إعدادات النموذج المحلي</p>
+                    <div className="space-y-1">
+                      <Label>رابط الخادم المحلي</Label>
+                      <Input placeholder="http://localhost:11434/v1" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" />
+                      <p className="text-xs text-muted-foreground">
+                        Ollama: <span className="font-mono text-xs">http://localhost:11434/v1</span> — LM Studio: <span className="font-mono text-xs">http://localhost:1234/v1</span>
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>اسم النموذج</Label>
+                        <Input placeholder="llama3 / mistral / phi3" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" />
+                        <p className="text-xs text-muted-foreground">اسم النموذج المثبّت على جهازك</p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>API Key (اختياري)</Label>
+                        <Input type="password" placeholder="not-needed أو اتركه فارغاً" value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" />
+                        <p className="text-xs text-muted-foreground">معظم النماذج المحلية لا تحتاجه</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>LLM Model</Label>
-                    <Input
-                      placeholder="gpt-4o / claude-... / any-model"
-                      value={localSettings.llm_model || ""}
-                      onChange={(e) => updateSetting("llm_model", e.target.value)}
-                      dir="ltr"
-                      data-testid="input-llm-model"
-                    />
+                )}
+
+                {localSettings.ai_provider === "replit" && (
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
+                    <Check className="h-4 w-4 text-green-500 shrink-0" />
+                    <p className="text-sm text-muted-foreground">يعمل تلقائياً — لا تحتاج لأي إعداد إضافي.</p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>LLM Base URL (اختياري)</Label>
-                  <Input
-                    placeholder="https://api.openai.com/v1"
-                    value={localSettings.llm_base_url || ""}
-                    onChange={(e) => updateSetting("llm_base_url", e.target.value)}
-                    dir="ltr"
-                    data-testid="input-llm-base-url"
-                  />
-                </div>
+                )}
+              </CardContent>
+            </Card>
 
-                <Separator />
-
+            {/* Web Search */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">🔍 البحث الخارجي (Web Search)</CardTitle>
+                <CardDescription>يتيح لفكري البحث في الإنترنت للحصول على معلومات حديثة.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>مزود Web Search</Label>
+                  <div className="space-y-1">
+                    <Label>مزود البحث</Label>
                     <Select value={localSettings.web_search_provider || "brave"} onValueChange={(value) => updateSetting("web_search_provider", value)}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="brave">Brave Search</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">الموفر المستخدم لتنفيذ عمليات البحث</p>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <Label>Web Search API Key</Label>
                     <Input
                       type="password"
-                      placeholder="bsk_..."
+                      placeholder="BSA... أو BSP..."
                       value={localSettings.web_search_api_key || ""}
                       onChange={(e) => updateSetting("web_search_api_key", e.target.value)}
                       dir="ltr"
                       data-testid="input-web-search-api-key"
                     />
+                    <p className="text-xs text-muted-foreground">احصل على مفتاح مجاني من <span className="font-mono">api.search.brave.com</span></p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
 
-                <div className="space-y-2">
+            {/* AI Persona */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">🎭 شخصية فكري والأسلوب</CardTitle>
+                <CardDescription>أخبر الذكاء الاصطناعي كيف يتصرف ويتحدث.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1">
                   <Label>System Prompt الأساسي</Label>
-                  <Textarea rows={4} placeholder="تعليمات عامة للنظام" value={localSettings.ai_system_prompt || ""} onChange={(e) => updateSetting("ai_system_prompt", e.target.value)} />
+                  <Textarea rows={4} placeholder="تعليمات عامة للنظام..." value={localSettings.ai_system_prompt || ""} onChange={(e) => updateSetting("ai_system_prompt", e.target.value)} />
+                  <p className="text-xs text-muted-foreground">يُطبَّق على جميع وظائف الذكاء الاصطناعي: إعادة الصياغة، الملخصات، التوليد.</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>أسلوب فكري</Label>
+                <div className="space-y-1">
+                  <Label>أسلوب فكري الخاص بك</Label>
                   <Textarea
-                    rows={5}
-                    placeholder="مثال: ردود قصيرة وواضحة، لهجة عربية سعودية احترافية، ابدأ بخلاصة ثم نقاط تنفيذية..."
+                    rows={4}
+                    placeholder="مثال: ردود قصيرة وواضحة، لهجة سعودية احترافية، ابدأ بخلاصة ثم نقاط..."
                     value={localSettings.fikri_persona_style || ""}
                     onChange={(e) => updateSetting("fikri_persona_style", e.target.value)}
                     data-testid="textarea-fikri-persona-style"
                   />
-                  <p className="text-xs text-muted-foreground">سيتم حقن هذا النص ديناميكيًا في الـ System Prompt لكل تفاعلات فكري الخاصة بحسابك فقط.</p>
+                  <p className="text-xs text-muted-foreground">يُحقن ديناميكياً في System Prompt لهذا الحساب فقط — خاص بك.</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>اختبار سريع</Label>
-                  <Input value={testAiTitle} onChange={(e) => setTestAiTitle(e.target.value)} />
+                  <Label>اختبار سريع للأسلوب</Label>
+                  <Input value={testAiTitle} onChange={(e) => setTestAiTitle(e.target.value)} placeholder="أدخل عنوان خبر لاختبار إعادة الصياغة" />
                   <Button variant="outline" className="gap-2" onClick={() => testAiMutation.mutate()} disabled={testAiMutation.isPending}>
                     {testAiMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} جرّب إعادة الصياغة
                   </Button>
-                  {testAiResult && <Textarea rows={5} value={testAiResult} readOnly />}
+                  {testAiResult && <Textarea rows={5} value={testAiResult} readOnly className="bg-muted/50" />}
                 </div>
               </CardContent>
             </Card>
