@@ -14,6 +14,21 @@ async function getSettingsMap(userId?: string): Promise<Map<string, string | nul
 
 export async function getAIClient(userId?: string): Promise<{ client: OpenAI; model: string; miniModel: string }> {
   const settings = await getSettingsMap(userId);
+  const llmApiKey = settings.get("llm_api_key");
+  const llmModel = settings.get("llm_model");
+  const llmBaseUrl = settings.get("llm_base_url");
+
+  if (llmApiKey && llmModel) {
+    return {
+      client: new OpenAI({
+        apiKey: llmApiKey,
+        ...(llmBaseUrl ? { baseURL: llmBaseUrl } : {}),
+      }),
+      model: llmModel,
+      miniModel: llmModel,
+    };
+  }
+
   const provider = settings.get("ai_provider") || "replit";
 
   if (provider === "custom") {

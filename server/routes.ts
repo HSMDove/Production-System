@@ -1,12 +1,14 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
+import OpenAI from "openai";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent, generateSmartView } from "./openai";
+import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent } from "./folder-fetcher";
 import {
@@ -64,12 +66,53 @@ type AssistantEngineResult = {
   createdIdea?: { id: string; title: string };
 };
 
+type AgentToolResult = {
+  type: "internal_search" | "external_search" | "create_idea";
+  payload: any;
+};
+
+async function runExternalWebSearch(query: string, userId: string): Promise<any[]> {
+  const provider = (await storage.getSetting("web_search_provider", userId))?.value || "brave";
+  const apiKey = (await storage.getSetting("web_search_api_key", userId))?.value || "";
+
+  if (!apiKey) {
+    return [{ title: "Web search غير مفعّل", snippet: "أضف Web Search API Key من الإعدادات لتفعيل البحث الخارجي.", url: "" }];
+  }
+
+  if (provider === "brave") {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
+    const response = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "X-Subscription-Token": apiKey,
+      },
+    });
+    if (!response.ok) {
+      return [{ title: "فشل البحث الخارجي", snippet: `Brave API error: ${response.status}`, url: "" }];
+    }
+
+    const data = await response.json() as any;
+    const results = data?.web?.results || [];
+    return results.slice(0, 5).map((item: any) => ({
+      title: item.title,
+      snippet: item.description || "",
+      url: item.url,
+    }));
+  }
+
+  return [{ title: "مزود بحث غير مدعوم", snippet: `المزود الحالي: ${provider}`, url: "" }];
+}
+
 async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string): Promise<AssistantEngineResult> {
-  const [folders, allContent, allIdeas] = await Promise.all([
+  const [folders, allContent, allIdeas, baseAiPrompt, fikriPersonaStyle] = await Promise.all([
     storage.getAllFolders(userId),
     storage.getAllContent(userId),
     storage.getAllIdeas(userId),
+    storage.getSetting("ai_system_prompt", userId),
+    storage.getSetting("fikri_persona_style", userId),
   ]);
+
+  const composedPrompt = composeAiSystemPrompt(baseAiPrompt?.value || null, fikriPersonaStyle?.value || null);
 
   const folderById = new Map(folders.map((f) => [f.id, f]));
   const sortedContent = [...allContent].sort((a, b) => {
@@ -80,7 +123,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
 
   const compactContext = {
     folders: folders.map((f) => ({ id: f.id, name: f.name })),
-    latestContent: sortedContent.slice(0, 60).map((item) => ({
+    latestContent: sortedContent.slice(0, 40).map((item) => ({
       id: item.id,
       folderName: folderById.get(item.folderId)?.name || "غير معروف",
       title: item.title,
@@ -92,91 +135,198 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     recentIdeas: allIdeas
       .slice()
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 30)
-      .map((idea) => ({
-        id: idea.id,
-        title: idea.title,
-        folderName: idea.folderId ? folderById.get(idea.folderId)?.name || null : null,
-        status: idea.status,
-      })),
+      .slice(0, 20)
+      .map((idea) => ({ id: idea.id, title: idea.title, status: idea.status })),
   };
 
-  const { client, model } = await getAIClient();
-  const planner = await client.chat.completions.create({
-    model,
-    response_format: { type: "json_object" },
-    temperature: 0.2,
-    messages: [
-      {
-        role: "system",
-        content:
-          "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي واسمك \"فكري\". عند أول رد تعرّف بنفسك باسم فكري.  لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
+  const { client, model } = await getAIClient(userId);
+
+  const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+    {
+      type: "function",
+      function: {
+        name: "internal_search",
+        description: "البحث داخل محتوى المستخدم ومجلداته الحالية",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+            limit: { type: "number" },
+          },
+          required: ["query"],
+        },
       },
-      {
-        role: "user",
-        content: `رسالة المستخدم: ${userMessage}
-
-السجل المختصر:${JSON.stringify(history).slice(0, 3000)}
-
-بيانات النظام:${JSON.stringify(compactContext)}`,
+    },
+    {
+      type: "function",
+      function: {
+        name: "external_web_search",
+        description: "البحث الخارجي من خلال Web Search API الخاص بالمستخدم",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
       },
-    ],
-  });
+    },
+    {
+      type: "function",
+      function: {
+        name: "create_idea_draft",
+        description: "حفظ فكرة كمسودة داخل النظام للمستخدم الحالي",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            category: { type: "string", enum: Array.from(ideaCategories) },
+            folderName: { type: "string" },
+            estimatedDuration: { type: "string" },
+            targetAudience: { type: "string" },
+          },
+          required: ["title", "category"],
+        },
+      },
+    },
+  ];
 
-  const payload = planner.choices[0]?.message?.content;
-  if (!payload) {
-    throw new Error("Failed to generate assistant response");
-  }
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: `${composedPrompt ? `${composedPrompt}
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    parsed = { action: "chat", statusLabel: "thinking", answer: payload };
-  }
+` : ""}أنت وكيل ذكي مستقل باسم "فكري" لصناعة المحتوى والأخبار فقط.
+- استخدم الأدوات تلقائياً عند الحاجة.
+- النطاق المسموح: صناعة المحتوى، تحليل الأخبار، توليد/حفظ الأفكار.
+- إذا طُلب منك شيء خارج هذا النطاق (مثل البرمجة العامة أو مواضيع لا تخص المحتوى)، ارفض بلطف ووجّه المستخدم لأسئلة ضمن النطاق.
+- عند استخدام أدوات البحث، اعتمد على النتائج ولا تختلق مصادر.
+- أجب بالعربية وبشكل عملي ومختصر.`,
+    },
+    {
+      role: "system",
+      content: `بيانات المستخدم المتاحة: ${JSON.stringify(compactContext)}`,
+    },
+    ...history.slice(-16),
+    {
+      role: "user",
+      content: userMessage,
+    },
+  ];
 
-  if (parsed.action === "save_idea" && parsed.ideaStructured) {
-    const folderName = normalizeText(parsed.ideaStructured.folderName || "");
-    const selectedFolder = folders.find((f) => normalizeText(f.name) === folderName);
-    const rawCategory = parsed.ideaStructured.category;
-    const safeCategory = ideaCategories.includes(rawCategory) ? rawCategory : "other";
+  const executedTools: AgentToolResult[] = [];
+  let createdIdea: { id: string; title: string } | undefined;
 
-    const createdIdea = await storage.createIdea({
-      userId,
-      folderId: selectedFolder?.id || null,
-      title: parsed.ideaStructured.title || `فكرة من المحادثة - ${new Date().toLocaleDateString("ar")}`,
-      description: parsed.ideaStructured.description || userMessage,
-      category: safeCategory,
-      status: "raw_idea",
-      estimatedDuration: parsed.ideaStructured.estimatedDuration || "5-8 دقائق",
-      targetAudience: parsed.ideaStructured.targetAudience || "متابعو التقنية",
-      notes: "تمت إضافتها عبر المساعد الذكي",
+  for (let i = 0; i < 4; i++) {
+    const completion = await client.chat.completions.create({
+      model,
+      messages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.2,
     });
 
-    return {
-      action: "save_idea",
-      statusLabel: "saving_idea",
-      answer: parsed.answer || `تم حفظ الفكرة بنجاح بعنوان: ${createdIdea.title} في قسم الأفكار.`,
-      createdIdea: { id: createdIdea.id, title: createdIdea.title },
-      matchedContent: [],
-    };
+    const message = completion.choices[0]?.message;
+    if (!message) break;
+
+    messages.push(message as any);
+
+    const toolCalls = message.tool_calls || [];
+    if (toolCalls.length === 0) {
+      const matchedContent = executedTools
+        .filter((t) => t.type === "internal_search")
+        .flatMap((t) => t.payload?.items || [])
+        .slice(0, 8)
+        .map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          originalUrl: item.originalUrl,
+          publishedAt: item.publishedAt,
+          folderName: item.folderName,
+        }));
+
+      return {
+        action: createdIdea ? "save_idea" : matchedContent.length > 0 ? "search_news" : "chat",
+        statusLabel: createdIdea ? "saving_idea" : matchedContent.length > 0 ? "searching_news" : "thinking",
+        answer: message.content || "تمت المعالجة.",
+        matchedContent,
+        createdIdea,
+      };
+    }
+
+    for (const call of toolCalls) {
+      if (call.type !== "function") {
+        continue;
+      }
+      const args = (() => {
+        try { return JSON.parse(call.function.arguments || "{}"); } catch { return {}; }
+      })();
+
+      if (call.function.name === "internal_search") {
+        const query = String(args.query || "").toLowerCase().trim();
+        const limit = Math.min(Number(args.limit || 8), 15);
+        const items = sortedContent
+          .filter((item) => {
+            const hay = `${item.title} ${item.summary || ""} ${item.arabicSummary || ""} ${(item.keywords || []).join(" ")}`.toLowerCase();
+            return !query || hay.includes(query);
+          })
+          .slice(0, limit)
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            summary: item.arabicSummary || item.summary || "",
+            originalUrl: item.originalUrl,
+            publishedAt: item.publishedAt || item.fetchedAt,
+            folderName: folderById.get(item.folderId)?.name || "غير معروف",
+          }));
+
+        executedTools.push({ type: "internal_search", payload: { query, items } });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ ok: true, items }),
+        } as any);
+      } else if (call.function.name === "external_web_search") {
+        const query = String(args.query || "").trim();
+        const results = await runExternalWebSearch(query, userId);
+        executedTools.push({ type: "external_search", payload: { query, results } });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ ok: true, results }),
+        } as any);
+      } else if (call.function.name === "create_idea_draft") {
+        const safeCategory = ideaCategories.includes(args.category) ? args.category : "other";
+        const selectedFolder = folders.find((f) => normalizeText(f.name) === normalizeText(args.folderName || ""));
+        const idea = await storage.createIdea({
+          userId,
+          folderId: selectedFolder?.id || null,
+          title: args.title || `فكرة - ${new Date().toLocaleDateString("ar")}`,
+          description: args.description || userMessage,
+          category: safeCategory,
+          status: "raw_idea",
+          estimatedDuration: args.estimatedDuration || "5-8 دقائق",
+          targetAudience: args.targetAudience || "متابعو التقنية",
+          notes: "تمت إضافتها عبر الوكيل الذكي فكري",
+        });
+        createdIdea = { id: idea.id, title: idea.title };
+        executedTools.push({ type: "create_idea", payload: { id: idea.id, title: idea.title } });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ ok: true, ideaId: idea.id, title: idea.title }),
+        } as any);
+      }
+    }
   }
 
-  const matchedContent = Array.isArray(parsed.matches)
-    ? sortedContent.filter((item) => parsed.matches.includes(item.id)).slice(0, 8)
-    : [];
-
   return {
-    action: parsed.action || "chat",
-    statusLabel: parsed.statusLabel || "thinking",
-    answer: parsed.answer || "تمت المعالجة.",
-    matchedContent: matchedContent.map((item) => ({
-      id: item.id,
-      title: item.title,
-      originalUrl: item.originalUrl,
-      publishedAt: item.publishedAt || item.fetchedAt,
-      folderName: folderById.get(item.folderId)?.name || "غير معروف",
-    })),
+    action: createdIdea ? "save_idea" : "chat",
+    statusLabel: createdIdea ? "saving_idea" : "thinking",
+    answer: createdIdea ? `تم حفظ الفكرة بعنوان: ${createdIdea.title}` : "تعذر إكمال المعالجة الآن.",
+    matchedContent: [],
+    createdIdea,
   };
 }
 
@@ -473,7 +623,7 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", req.session.userId!))?.value;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
       
       const cards = await generateSmartView(contentToUse, aiSystemPrompt);
       
@@ -618,7 +768,7 @@ export async function registerRoutes(
       const folderNames = folders.map((f) => f.name).join("، ");
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", userId))?.value || null;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(userId);
       const styleExamples = await storage.getAllStyleExamples(userId);
       
       const allExistingIdeas = await storage.getAllIdeas(userId);
@@ -783,7 +933,7 @@ export async function registerRoutes(
       const _bgUserId = req.session.userId!;
       if (newContentIds.length > 0) {
         (async () => {
-          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", _bgUserId))?.value || null;
+          const aiSystemPrompt = await getUserComposedSystemPrompt(_bgUserId);
           if (aiSystemPrompt) {
             console.log(`[Source Fetch] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
           }
@@ -1326,6 +1476,12 @@ export async function registerRoutes(
 
   app.delete("/api/comments/:id", async (req, res) => {
     try {
+      const comment = await storage.getCommentById(req.params.id);
+      if (!comment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      const idea = await requireIdeaOwner(comment.ideaId, req.session.userId!, res);
+      if (!idea) return;
       await storage.deleteComment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1365,6 +1521,12 @@ export async function registerRoutes(
 
   app.delete("/api/assignments/:id", async (req, res) => {
     try {
+      const assignment = await storage.getAssignmentById(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ error: "Assignment not found" });
+      }
+      const idea = await requireIdeaOwner(assignment.ideaId, req.session.userId!, res);
+      if (!idea) return;
       await storage.deleteAssignment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1550,8 +1712,7 @@ export async function registerRoutes(
       const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
       if (!contentItem) return;
 
-      const aiSystemPromptSetting = await storage.getSetting("ai_system_prompt", req.session.userId!);
-      const aiSystemPrompt = aiSystemPromptSetting?.value || null;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
       if (aiSystemPrompt) {
         console.log(`[Explain Route] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
       }
@@ -1915,7 +2076,11 @@ export async function registerRoutes(
       if (!title) {
         return res.status(400).json({ error: "Title is required for testing" });
       }
-      const rewritten = await rewriteContent(title, summary || null, systemPrompt || null);
+      const userPrompt = await getUserComposedSystemPrompt(req.session.userId!);
+      const mergedPrompt = (typeof systemPrompt === "string" && systemPrompt.trim().length > 0)
+        ? systemPrompt
+        : userPrompt;
+      const rewritten = await rewriteContent(title, summary || null, mergedPrompt);
       res.json({ success: true, rewrittenContent: rewritten });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });

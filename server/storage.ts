@@ -1,4 +1,5 @@
 import { eq, and, desc, isNull, gt } from "drizzle-orm";
+import crypto from "crypto";
 import { db } from "./db";
 import {
   folders,
@@ -43,6 +44,49 @@ import {
   type AssistantMessage,
   type InsertAssistantMessage,
 } from "@shared/schema";
+
+const ENCRYPTED_PREFIX = "enc:v1:";
+const SENSITIVE_SETTING_KEYS = new Set([
+  "ai_custom_api_key",
+  "llm_api_key",
+  "web_search_api_key",
+  "telegram_bot_token",
+  "slack_webhook_url",
+  "slack_bot_token",
+  "slack_signing_secret",
+]);
+
+function getEncryptionKey(): Buffer {
+  const source = process.env.SETTINGS_ENCRYPTION_KEY || process.env.SESSION_SECRET || "fallback-secret-change-in-production";
+  return crypto.createHash("sha256").update(source).digest();
+}
+
+function encryptIfSensitive(key: string, value: string | null): string | null {
+  if (value === null || !SENSITIVE_SETTING_KEYS.has(key)) return value;
+  if (value.startsWith(ENCRYPTED_PREFIX)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${ENCRYPTED_PREFIX}${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptIfNeeded(key: string, value: string | null): string | null {
+  if (value === null) return null;
+  if (!SENSITIVE_SETTING_KEYS.has(key)) return value;
+  if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
+
+  try {
+    const payload = value.slice(ENCRYPTED_PREFIX.length);
+    const [ivB64, tagB64, dataB64] = payload.split(":");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getEncryptionKey(), Buffer.from(ivB64, "base64"));
+    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]);
+    return decrypted.toString("utf8");
+  } catch {
+    return null;
+  }
+}
 
 export interface IStorage {
   // Auth / Users
@@ -102,10 +146,12 @@ export interface IStorage {
   setDefaultPromptTemplate(id: string, userId: string): Promise<PromptTemplate | undefined>;
 
   getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]>;
+  getCommentById(id: string): Promise<IdeaComment | undefined>;
   createComment(comment: InsertIdeaComment): Promise<IdeaComment>;
   deleteComment(id: string): Promise<boolean>;
 
   getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
+  getAssignmentById(id: string): Promise<IdeaAssignment | undefined>;
   createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
   deleteAssignment(id: string): Promise<boolean>;
 
@@ -416,6 +462,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).orderBy(desc(ideaComments.createdAt));
   }
 
+  async getCommentById(id: string): Promise<IdeaComment | undefined> {
+    const [comment] = await db.select().from(ideaComments).where(eq(ideaComments.id, id));
+    return comment;
+  }
+
   async createComment(comment: InsertIdeaComment): Promise<IdeaComment> {
     const [created] = await db.insert(ideaComments).values(comment).returning();
     return created;
@@ -428,6 +479,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]> {
     return db.select().from(ideaAssignments).where(eq(ideaAssignments.ideaId, ideaId)).orderBy(ideaAssignments.createdAt);
+  }
+
+  async getAssignmentById(id: string): Promise<IdeaAssignment | undefined> {
+    const [assignment] = await db.select().from(ideaAssignments).where(eq(ideaAssignments.id, id));
+    return assignment;
   }
 
   async createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment> {
@@ -443,23 +499,26 @@ export class DatabaseStorage implements IStorage {
   // ─── Settings ─────────────────────────────────────────────────────────────
   async getSetting(key: string, userId: string): Promise<Setting | undefined> {
     const [setting] = await db.select().from(settings).where(and(eq(settings.key, key), eq(settings.userId, userId)));
-    return setting;
+    if (!setting) return undefined;
+    return { ...setting, value: decryptIfNeeded(setting.key, setting.value) };
   }
 
   async getAllSettings(userId: string): Promise<Setting[]> {
-    return db.select().from(settings).where(eq(settings.userId, userId));
+    const all = await db.select().from(settings).where(eq(settings.userId, userId));
+    return all.map((s) => ({ ...s, value: decryptIfNeeded(s.key, s.value) }));
   }
 
   async upsertSetting(key: string, value: string | null, userId: string): Promise<Setting> {
+    const persistedValue = encryptIfSensitive(key, value);
     const [result] = await db
       .insert(settings)
-      .values({ userId, key, value, updatedAt: new Date() })
+      .values({ userId, key, value: persistedValue, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: [settings.userId, settings.key],
-        set: { value, updatedAt: new Date() },
+        set: { value: persistedValue, updatedAt: new Date() },
       })
       .returning();
-    return result;
+    return { ...result, value: decryptIfNeeded(result.key, result.value) };
   }
 
   async upsertSettings(entries: Record<string, string | null>, userId: string): Promise<Setting[]> {

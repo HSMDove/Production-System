@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,17 @@ export function Header() {
   const [location] = useLocation();
   const { setOpen } = useFikriOverlay();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+
+    // Defensive cleanup for mobile Sheet/Dialog side-effects that can linger
+    // on some route transitions in mobile browsers.
+    document.body.style.removeProperty("pointer-events");
+    document.body.style.removeProperty("overflow");
+    document.body.removeAttribute("data-scroll-locked");
+    document.body.removeAttribute("data-aria-hidden");
+  }, [location]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

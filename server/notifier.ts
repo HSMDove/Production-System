@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { rewriteContent } from "./openai";
+import { composeAiSystemPrompt } from "./ai-system-prompt";
 import type { Content, Folder } from "@shared/schema";
 
 async function getSettingsMap(userId: string): Promise<Map<string, string | null>> {
@@ -117,7 +118,7 @@ export async function processNewContentNotifications(newContentIds: string[], us
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = settingsMap.get("ai_system_prompt");
+  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
   if (systemPrompt) {
     console.log(`[Notifier] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
@@ -195,7 +196,7 @@ export async function broadcastSingleContent(contentId: string, userId: string):
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = settingsMap.get("ai_system_prompt");
+  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
   if (systemPrompt) {
     console.log(`[Broadcast] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
@@ -276,7 +277,7 @@ export async function processNewContentNotificationsForFolder(
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = settingsMap.get("ai_system_prompt");
+  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
   if (systemPrompt) {
     console.log(`[Notifier Folder] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
