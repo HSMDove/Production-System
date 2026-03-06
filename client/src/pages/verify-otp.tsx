@@ -124,7 +124,7 @@ export default function VerifyOTPPage() {
               value={digit}
               onChange={(e) => handleDigitChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-12 h-14 text-center text-2xl font-bold p-0"
+              className="w-12 h-14 text-center text-2xl font-bold p-0 flex items-center justify-center"
               disabled={verifyMutation.isPending}
               data-testid={`input-otp-digit-${i}`}
               autoFocus={i === 0}
