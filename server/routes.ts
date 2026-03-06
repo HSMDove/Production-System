@@ -424,6 +424,8 @@ export async function registerRoutes(
 
       if (!user) {
         user = await storage.createUser({ email: normalizedEmail, onboardingCompleted: false });
+      } else if (!user.onboardingCompleted) {
+        user = await storage.updateUser(user.id, { onboardingCompleted: true }) ?? user;
       }
 
       req.session.userId = user.id;
