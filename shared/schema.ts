@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -348,7 +348,7 @@ export const settings = pgTable("settings", {
   value: text("value"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({
-  pk: { columns: [t.userId, t.key], name: "settings_pkey" },
+  pk: primaryKey({ columns: [t.userId, t.key], name: "settings_pkey" }),
 }));
 
 export const insertSettingSchema = createInsertSchema(settings);
