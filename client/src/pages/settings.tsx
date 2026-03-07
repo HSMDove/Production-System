@@ -284,17 +284,22 @@ export default function Settings() {
                     <div className="font-medium">Slack</div>
                     <Switch checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
+                  <p className="text-xs text-muted-foreground">أنشئ Slack App من api.slack.com/apps وفعّل Event Subscriptions. البوت يرد على الرسائل المباشرة والمنشنات بدون ما تحتاج تنادي عليه.</p>
+                  <Separator />
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+                    <Label className="text-xs font-medium">Webhook URL — لإرسال الإشعارات</Label>
                     <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
+                    <p className="text-xs text-muted-foreground">Incoming Webhooks → أنشئ Webhook URL جديد للقناة اللي تبي فيها الإشعارات.</p>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Bot Token</Label>
+                    <Label className="text-xs font-medium">Bot User OAuth Token (xoxb-...)</Label>
                     <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
+                    <p className="text-xs text-muted-foreground">OAuth & Permissions → Bot User OAuth Token. هذا يخلي البوت يرد على رسائلك.</p>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Signing Secret</Label>
+                    <Label className="text-xs font-medium">Signing Secret</Label>
                     <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
+                    <p className="text-xs text-muted-foreground">Basic Information → App Credentials → Signing Secret. يتأكد إن الرسائل فعلاً من Slack.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2">

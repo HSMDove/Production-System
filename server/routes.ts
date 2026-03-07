@@ -1205,9 +1205,25 @@ export async function registerRoutes(
 
       if (!platformUser) {
         console.log(`[Slack] User ${slackUserId} not linked to any platform account`);
-        // Respond immediately then send rejection message
         res.json({ ok: true });
-        // No platform user found — cannot look up settings, skip bot reply
+
+        // Try to find any user's bot token to send rejection message
+        const allUsers = await storage.getAllUsers();
+        for (const u of allUsers) {
+          const token = (await storage.getSetting("slack_bot_token", u.id))?.value;
+          if (token && event.channel) {
+            await fetch("https://slack.com/api/chat.postMessage", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                channel: event.channel,
+                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الحساب\n2. في قسم "ربط حساب Slack" الصق الـ ID حقك\n3. اضغط "ربط"\n\nبعدها أقدر أساعدك! 🤖`,
+                thread_ts: event.thread_ts || event.ts,
+              }),
+            }).catch(err => console.error("[Slack] Failed to send unlinked user message:", err));
+            break;
+          }
+        }
         return;
       }
 
