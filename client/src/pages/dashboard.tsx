@@ -111,8 +111,8 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="space-y-8">
-        <div className="flex items-start justify-between gap-4 flex-wrap bg-primary/5 p-6 rounded-3xl border border-primary/10 shadow-sm relative overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="flex items-start justify-between gap-4 flex-wrap bg-primary/8 backdrop-blur-sm p-6 rounded-3xl border-[3px] border-primary/30 shadow-[0_4px_0_0_hsl(var(--primary)/0.3)] relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-l from-primary/15 via-primary/8 to-transparent" />
           <div className="relative z-10">
             <h1 className="text-3xl font-black tracking-tight" data-testid="text-page-title">
               {welcomePrefix} {user?.name || "مستخدم"} {emoji}
