@@ -14,14 +14,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, Check, Loader2, LogOut, Palette, Save, Send, Sparkles, TestTube, Trash2, User } from "lucide-react";
+import { Bell, Bot, Check, Loader2, LogOut, Moon, Palette, Save, Send, Sparkles, Sun, TestTube, Trash2, User } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
 
 type SettingsData = Record<string, string | null>;
 
 export default function Settings() {
-  const { theme, setTheme } = useTheme();
+  const { theme, colorMode, setTheme, setColorMode } = useTheme();
   const { toast } = useToast();
   const { user, logout, isLoggingOut } = useAuth();
 
@@ -121,9 +121,9 @@ export default function Settings() {
   const slackEnabled = localSettings.slack_enabled === "true";
 
   const themeOptions = useMemo(() => ([
-    { value: "default-dark", label: "الافتراضية الداكنة", color: "bg-blue-500" },
-    { value: "tech-field", label: "Tech Field", color: "bg-rose-400" },
-    { value: "tech-voice", label: "Tech Voice", color: "bg-cyan-400" },
+    { value: "default", label: "الأساسي", color: "#F7CB46" },
+    { value: "tech-field", label: "تيك فيلد", color: "#FE90E8" },
+    { value: "tech-voice", label: "تيك فويس", color: "#C0F7FE" },
   ] as const), []);
 
   if (isLoading) {
@@ -181,15 +181,34 @@ export default function Settings() {
           <TabsContent value="appearance" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Palette className="h-4 w-4" /> المظهر</CardTitle>
-                <CardDescription>تخصيص الألوان البصرية للتطبيق.</CardDescription>
+                <CardTitle className="flex items-center gap-2">{colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} الوضع</CardTitle>
+                <CardDescription>اختر بين الوضع النهاري والليلي.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
+              <CardContent className="grid gap-3 grid-cols-2">
+                <Button variant={colorMode === "light" ? "default" : "outline"} className="justify-center gap-2" onClick={() => setColorMode("light")} data-testid="button-mode-light">
+                  <Sun className="h-4 w-4" />
+                  نهاري
+                  {colorMode === "light" && <Check className="h-4 w-4" />}
+                </Button>
+                <Button variant={colorMode === "dark" ? "default" : "outline"} className="justify-center gap-2" onClick={() => setColorMode("dark")} data-testid="button-mode-dark">
+                  <Moon className="h-4 w-4" />
+                  ليلي
+                  {colorMode === "dark" && <Check className="h-4 w-4" />}
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Palette className="h-4 w-4" /> السمة</CardTitle>
+                <CardDescription>تخصيص ألوان التطبيق.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-3">
                 {themeOptions.map((option) => {
                   const isSelected = theme === option.value;
                   return (
-                    <Button key={option.value} variant={isSelected ? "default" : "outline"} className="justify-between" onClick={() => setTheme(option.value as any)} data-testid={`button-theme-${option.value}`}>
-                      <span className="flex items-center gap-2"><span className={`h-3 w-3 rounded-full ${option.color}`} />{option.label}</span>
+                    <Button key={option.value} variant={isSelected ? "default" : "outline"} className="justify-center gap-2" onClick={() => setTheme(option.value as any)} data-testid={`button-theme-${option.value}`}>
+                      <span className="h-4 w-4 rounded-full border-2 border-foreground/30" style={{ backgroundColor: option.color }} />
+                      {option.label}
                       {isSelected && <Check className="h-4 w-4" />}
                     </Button>
                   );
@@ -461,6 +480,10 @@ export default function Settings() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <div className="text-center text-sm text-muted-foreground py-4 border-t mt-6" data-testid="text-version">
+          نَسَق — الإصدار 1.0.0
+        </div>
       </div>
     </MainLayout>
   );

@@ -65,7 +65,7 @@ Developer: حسام تيك فيلد (Hossam TechField)
 - React Query handles all server state (folders, sources, content, ideas)
 - React Hook Form with Zod validation for form state and validation
 - Local component state with React hooks for UI interactions
-- Context API for theme management (light/dark/system modes)
+- Context API for theme management: ColorMode (light/dark) + AppTheme accent (default/tech-field/tech-voice)
 - AutoRefreshProvider context for managing automatic content updates
 
 **Key Features**
@@ -104,7 +104,8 @@ Developer: حسام تيك فيلد (Hossam TechField)
 - OpenAI API integration for generating video ideas from content
 - Custom AI persona from Settings (`ai_system_prompt` key) applied to ALL AI functions: rewrite, summary, translation, and explanation
 - Structured prompts in Arabic for generating 3-5 ideas per request
-- Returns categorized ideas with titles, descriptions, duration estimates, and target audience
+- Returns ideas with titles, descriptions, duration estimates, and target audience
+- Idea categories are DYNAMIC: derived from user's prompt template names (no hardcoded enum)
 - Configurable content window (last N days) for idea generation
 - Arabic summary generation for non-Arabic content during fetch
 - Detailed AI-powered Arabic explanations for individual news items via `/api/content/:id/explain`

@@ -219,21 +219,23 @@
    ═══════════════════════════════════════════════════════════ */
 @layer components {
 
-  /* Cards — white surface + thick black border + solid shadow */
+  /* Cards — surface + thick border + solid shadow */
   .card,
   .glass-surface {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background-color: hsl(var(--card));
-    border: 2px solid hsl(var(--border)) !important;
+    border: 3px solid hsl(var(--border)) !important;
+    border-radius: 16px !important;
     box-shadow: var(--nb-shadow) !important;
   }
 
-  /* Inputs — thick border */
+  /* Inputs — thick border, rounded */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
     border: 2px solid hsl(var(--border)) !important;
+    border-radius: 12px !important;
     box-shadow: none;
     font-weight: 600;
     transition: box-shadow 0.1s ease;
@@ -244,22 +246,13 @@
     outline: none !important;
     box-shadow: var(--nb-shadow-sm) !important;
   }
+
 }
 
 /* ═══════════════════════════════════════════════════════════
    NEO-BRUTALIST BUTTON PRESS EFFECT
-   Applied globally — buttons "stamp" into the surface
+   Only for buttons with 3D shadow (not ghost/unstyled)
    ═══════════════════════════════════════════════════════════ */
-button:not(:disabled),
-[role="button"]:not([aria-disabled="true"]) {
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
-}
-
-button:not(:disabled):active,
-[role="button"]:not([aria-disabled="true"]):active {
-  transform: translate(3px, 3px) !important;
-  box-shadow: none !important;
-}
 
 /* ═══════════════════════════════════════════════════════════
    ELEVATION SYSTEM (kept for compatibility)
@@ -359,6 +352,7 @@ html, body, #root {
 
 body {
   overflow: hidden;
+  -webkit-overflow-scrolling: touch;
   background-color: hsl(var(--background));
   background-image: radial-gradient(circle, rgba(0,0,0,0.20) 1.2px, transparent 1.2px);
   background-size: 22px 22px;
@@ -386,7 +380,7 @@ body {
 /* ═══════════════════════════════════════════════════════════
    APP THEME ACCENTS (use Neo-Brutalist palette variants)
    ═══════════════════════════════════════════════════════════ */
-[data-app-theme="default-dark"] {
+[data-app-theme="default"] {
   --primary: 44 92% 62%;
   --ring:    44 92% 62%;
   --sidebar-primary: 44 92% 62%;

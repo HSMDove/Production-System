@@ -83,7 +83,7 @@ export function IdeaDialog({
     defaultValues: {
       title: "",
       description: "",
-      category: "",
+      category: "__none__",
       status: "raw_idea",
       estimatedDuration: "",
       targetAudience: "",
@@ -98,7 +98,7 @@ export function IdeaDialog({
       form.reset({
         title: idea.title,
         description: idea.description || "",
-        category: idea.category,
+        category: idea.category || "__none__",
         status: idea.status,
         estimatedDuration: idea.estimatedDuration || "",
         targetAudience: idea.targetAudience || "",
@@ -110,7 +110,7 @@ export function IdeaDialog({
       form.reset({
         title: "",
         description: "",
-        category: "",
+        category: "__none__",
         status: "raw_idea",
         estimatedDuration: "",
         targetAudience: "",
@@ -122,7 +122,10 @@ export function IdeaDialog({
   }, [idea, form]);
 
   const handleSubmit = (values: IdeaFormValues) => {
-    onSubmit(values);
+    onSubmit({
+      ...values,
+      category: values.category === "__none__" ? "" : values.category,
+    });
   };
 
   return (
@@ -185,17 +188,12 @@ export function IdeaDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {templates && templates.length > 0 ? (
-                          templates.map((t) => (
-                            <SelectItem key={t.id} value={t.name}>
-                              {t.name}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="" disabled>
-                            لا توجد قوالب — أضف من الإعدادات
+                        <SelectItem value="__none__">بدون فئة</SelectItem>
+                        {(templates || []).map((t) => (
+                          <SelectItem key={t.id} value={t.name}>
+                            {t.name}
                           </SelectItem>
-                        )}
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
