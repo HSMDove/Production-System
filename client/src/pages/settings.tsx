@@ -474,12 +474,12 @@ export default function Settings() {
                   <Label>أسلوب فكري الخاص بك</Label>
                   <Textarea
                     rows={4}
-                    placeholder="مثال: ردود قصيرة وواضحة، لهجة سعودية احترافية، ابدأ بخلاصة ثم نقاط..."
+                    placeholder="الافتراضي: ردّ بردود تفاعلية وجميلة مع استخدام إيموجي وأيضاً لهجة سعودية"
                     value={localSettings.fikri_persona_style || ""}
                     onChange={(e) => updateSetting("fikri_persona_style", e.target.value)}
                     data-testid="textarea-fikri-persona-style"
                   />
-                  <p className="text-xs text-muted-foreground">يُحقن ديناميكياً في System Prompt لهذا الحساب فقط — خاص بك.</p>
+                  <p className="text-xs text-muted-foreground">لو تركته فاضي، فكري يستخدم الأسلوب الافتراضي: ردود تفاعلية بإيموجي ولهجة سعودية. اكتب أسلوبك الخاص لو تبي تغيّره.</p>
                 </div>
 
                 <div className="space-y-2">
