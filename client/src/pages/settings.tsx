@@ -80,6 +80,12 @@ export default function Settings() {
     onError: () => toast({ title: "خطأ", description: "فشل اختبار Slack", variant: "destructive" }),
   });
 
+  const testSlackBotMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/settings/test-slack-bot", { botToken: localSettings.slack_bot_token }),
+    onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "البوت متصل بنجاح" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
+    onError: () => toast({ title: "خطأ", description: "فشل اختبار بوت Slack", variant: "destructive" }),
+  });
+
   const linkSlackMutation = useMutation({
     mutationFn: async (slackUserId: string) => apiRequest("PATCH", "/api/auth/slack-link", { slackUserId }),
     onSuccess: () => {
@@ -278,10 +284,26 @@ export default function Settings() {
                     <div className="font-medium">Slack</div>
                     <Switch checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
-                  <Input placeholder="Webhook URL" value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} />
-                  <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2">
-                    {testSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار Slack
-                  </Button>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Webhook URL</Label>
+                    <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Bot Token</Label>
+                    <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Signing Secret</Label>
+                    <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2">
+                      {testSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار Webhook
+                    </Button>
+                    <Button variant="outline" onClick={() => testSlackBotMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackBotMutation.isPending} className="gap-2">
+                      {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار البوت
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
