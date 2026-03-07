@@ -190,21 +190,6 @@ export default function Settings() {
                 <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">البريد</span><span className="font-medium">{user?.email || "-"}</span></div>
                 <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">الاسم</span><span className="font-medium">{user?.name || "غير محدد"}</span></div>
                 <Separator />
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2 font-medium"><Link className="h-4 w-4" /> ربط حساب Slack</Label>
-                  <p className="text-sm text-muted-foreground">أرسل أي رسالة للبوت في Slack وراح يعطيك الـ User ID حقك. اكتبه هنا عشان البوت يعرفك.</p>
-                  <div className="flex gap-2">
-                    <Input placeholder="مثال: U0123456789" value={slackIdInput} onChange={(e) => setSlackIdInput(e.target.value)} dir="ltr" className="font-mono" data-testid="input-slack-user-id" />
-                    <Button variant="outline" onClick={() => { if (slackIdInput.trim()) linkSlackMutation.mutate(slackIdInput.trim()); }} disabled={!slackIdInput.trim() || linkSlackMutation.isPending} className="gap-2 shrink-0" data-testid="button-link-slack">
-                      {linkSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
-                      ربط
-                    </Button>
-                  </div>
-                  {user?.slackUserId && (
-                    <p className="text-sm text-green-600 dark:text-green-400">مربوط حالياً: <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{user.slackUserId}</code></p>
-                  )}
-                </div>
-                <Separator />
                 <Button variant="destructive" onClick={() => logout()} disabled={isLoggingOut} className="gap-2" data-testid="button-logout">
                   {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                   تسجيل الخروج
