@@ -21,31 +21,93 @@ export async function sendOTPEmail(email: string, otp: string): Promise<void> {
       to: [email],
       subject: `رمز التحقق: ${otp} ✨`,
       html: `
-        <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f0f; border-radius: 24px; color: #fff; border: 1px solid #333;">
-          <h1 style="font-size: 36px; font-weight: 900; margin-bottom: 24px; background: linear-gradient(to left, #6366f1, #a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center;">نَسَق</h1>
-          
-          <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border-radius: 20px; padding: 40px; text-align: center; margin-bottom: 32px; box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);">
-            <p style="color: #fff; font-size: 20px; margin: 0 0 24px; font-weight: 800; line-height: 1.6;">
-              حياك الله، شوف هذا رمز التحقق حقك 🌟
-            </p>
-            
-            <div style="background: rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 20px; display: inline-block; min-width: 200px;">
-              <div style="font-size: 52px; font-weight: 900; letter-spacing: 12px; color: #fff; font-family: 'Courier New', Courier, monospace; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-                ${otp}
-              </div>
-            </div>
-          </div>
-          
-          <div style="background: #1a1a1a; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #333;">
-            <p style="color: #ff4d4d; font-size: 16px; margin: 0; font-weight: 800;">
-              ⚠️ وانتبه يالشيخ ترا مدته بس 5 دقايق
-            </p>
-          </div>
-          
-          <p style="color: #666; font-size: 13px; text-align: center; margin-top: 32px; font-weight: 500;">
-            سجله في الموقع الحين واستمتع بالتجربة 🚀
-          </p>
-        </div>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet" />
+</head>
+<body style="margin:0;padding:0;background:#111111;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#111111;padding:40px 16px;">
+    <tr>
+      <td align="center">
+
+        <!-- Card -->
+        <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#1c1c1c;border:2.5px solid #F7CB46;box-shadow:5px 5px 0px 0px #F7CB46;">
+          <tr>
+            <td style="padding:36px 36px 0 36px;">
+
+              <!-- Logo -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:28px;border-bottom:2px solid #2a2a2a;">
+                    <div style="display:inline-block;background:#111111;border:2.5px solid #F7CB46;box-shadow:3px 3px 0px 0px #F7CB46;padding:10px 22px;">
+                      <span style="font-family:'Cairo',Arial,sans-serif;font-size:28px;font-weight:900;color:#F7CB46;letter-spacing:2px;">نَسَق</span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:28px 36px 0 36px;">
+              <p style="font-family:'Cairo',Arial,sans-serif;font-size:17px;font-weight:700;color:#e8e8e8;margin:0;line-height:1.8;text-align:right;">
+                حياك الله، شوف هذا رمز التحقق حقك 🌟
+              </p>
+            </td>
+          </tr>
+
+          <!-- OTP Box -->
+          <tr>
+            <td style="padding:24px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <div style="background:#111111;border:2.5px solid #F7CB46;box-shadow:4px 4px 0px 0px #F7CB46;padding:20px 32px;display:inline-block;">
+                      <span style="font-family:'Courier New',Courier,monospace;font-size:54px;font-weight:900;letter-spacing:14px;color:#F7CB46;">${otp}</span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Warning -->
+          <tr>
+            <td style="padding:0 36px 28px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#1f1010;border:2px solid #e53e3e;box-shadow:3px 3px 0px 0px #e53e3e;padding:14px 18px;">
+                    <p style="font-family:'Cairo',Arial,sans-serif;font-size:15px;font-weight:900;color:#fc8181;margin:0;text-align:center;">
+                      ⚠️ وانتبه يالشيخ ترا مدته بس 5 دقايق
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 36px 32px 36px;border-top:2px solid #2a2a2a;">
+              <p style="font-family:'Cairo',Arial,sans-serif;font-size:13px;font-weight:500;color:#555555;margin:0;text-align:center;">
+                سجله في الموقع الحين واستمتع بالتجربة 🚀
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
       `,
     }),
   });
