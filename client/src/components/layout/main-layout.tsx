@@ -23,7 +23,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {showFikriLauncher && (
         <button
-          className="fixed z-[150] flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-3 text-sm font-semibold shadow-lg hover:opacity-90 active:scale-95 transition-all"
+          className="fixed z-[150] flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-3 text-sm font-bold border-[3px] border-foreground/80 shadow-[0_4px_0_0_hsl(var(--foreground)/0.7)] active:translate-y-[3px] active:shadow-[0_1px_0_0_hsl(var(--foreground)/0.7)] transition-all duration-100"
           style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))", left: "1.25rem" }}
           data-testid="button-fikri-fab"
           onClick={() => setOpen(true)}
