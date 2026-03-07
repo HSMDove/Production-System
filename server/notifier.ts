@@ -342,7 +342,7 @@ export async function testTelegramConnection(
   botToken: string,
   chatId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "✅ <b>نظام الإنتاج</b>\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
+  const message = "اهلا وسهلا انا فكري 2.0 من نسق 🤖\n\nبس حبيت اتأكد من الإتصال وهل هو شغال ؟\n\n✅ وحاب ابشرك واقولك إنه <b>شغااال</b>";
   try {
     const sent = await sendTelegramMessage(botToken, chatId, message);
     return sent 
@@ -356,7 +356,7 @@ export async function testTelegramConnection(
 export async function testSlackConnection(
   webhookUrl: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "✅ *نظام الإنتاج*\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
+  const message = "اهلا وسهلا انا فكري 2.0 من نسق 🤖\n\nبس حبيت اتأكد من الإتصال وهل هو شغال ؟\n\n✅ وحاب ابشرك واقولك إنه *شغااال*";
   try {
     const sent = await sendSlackMessage(webhookUrl, message);
     return sent
