@@ -121,7 +121,7 @@ export function FikriOverlay() {
 
       <aside
         dir="rtl"
-        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col bg-background/95 backdrop-blur-xl border-l border-border shadow-2xl"
+        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col bg-card border-l border-border shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">

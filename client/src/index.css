@@ -68,7 +68,7 @@
   --destructive:              0 84% 55%;
   --destructive-foreground:   0 0% 100%;
 
-  --input:                    0 0% 100%;
+  --input:                    0 0% 96%;
   --ring:                     0 0% 0%;
 
   --chart-1:                 44 92% 55%;
@@ -221,7 +221,7 @@
    ═══════════════════════════════════════════════════════════ */
 @layer components {
 
-  /* Cards — surface + thick border + solid shadow */
+  /* Cards — solid surface, no dot bleed-through */
   .card,
   .glass-surface {
     backdrop-filter: none !important;
@@ -230,23 +230,34 @@
     border: 3px solid hsl(var(--border)) !important;
     border-radius: 16px !important;
     box-shadow: var(--nb-shadow) !important;
+    background-image: none !important;
   }
 
-  /* Inputs — thick border, rounded */
+  /* Inputs — solid fill, distinct from card surface */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
+    background-color: hsl(var(--input)) !important;
     border: 2px solid hsl(var(--border)) !important;
     border-radius: 12px !important;
-    box-shadow: none;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.08);
     font-weight: 600;
-    transition: box-shadow 0.1s ease;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    background-image: none !important;
   }
 
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
   textarea:focus {
     outline: none !important;
-    box-shadow: var(--nb-shadow-sm) !important;
+    box-shadow: var(--nb-shadow-sm), inset 0 1px 2px rgba(0,0,0,0.04) !important;
+    border-color: hsl(var(--primary)) !important;
+  }
+
+  /* Popovers, Dialogs, Sheets — solid backgrounds */
+  [data-radix-popper-content-wrapper] > *,
+  [role="dialog"],
+  [data-state="open"].fixed {
+    background-image: none !important;
   }
 
 }
@@ -360,11 +371,6 @@ body {
   background-size: 22px 22px;
 }
 
-/* ── Neo-Brutalist dot grid on all background surfaces ── */
-.bg-background {
-  background-image: radial-gradient(circle, var(--dot-color) 1.2px, transparent 1.2px) !important;
-  background-size: 22px 22px !important;
-}
 
 /* ═══════════════════════════════════════════════════════════
    APP THEME ACCENTS — Full palette overrides

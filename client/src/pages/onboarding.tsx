@@ -38,20 +38,16 @@ export default function OnboardingPage() {
 
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
-            <Sparkles className="h-8 w-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">مرحباً بك! 👋</h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            نحتاج بعض المعلومات البسيطة لنتمكن من تخصيص تجربتك
-            ومخاطبتك بالصيغة الصحيحة (أنتَ / أنتِ) داخل الموقع
-          </p>
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
+          <p className="text-muted-foreground text-sm font-semibold">مرحباً بك! 👋</p>
         </div>
 
-        {/* Form */}
+        <div className="card bg-card p-6 space-y-4">
+        <p className="text-muted-foreground text-sm leading-relaxed text-center">
+          نحتاج بعض المعلومات البسيطة لنتمكن من تخصيص تجربتك
+        </p>
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Name */}
           <div className="space-y-2">
@@ -128,6 +124,7 @@ export default function OnboardingPage() {
             )}
           </Button>
         </form>
+        </div>
       </div>
     </div>
   );

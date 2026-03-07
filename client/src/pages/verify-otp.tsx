@@ -99,18 +99,20 @@ export default function VerifyOTPPage() {
 
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Logo */}
-        <div className="text-center space-y-3">
-          <h1 className="text-4xl font-black tracking-tighter bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent">نَسَق</h1>
-          <p className="text-xl font-bold tracking-tight">تحقق من بريدك</p>
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
+          <p className="text-muted-foreground text-sm font-semibold">تحقق من بريدك</p>
+        </div>
+
+        <div className="card bg-card p-6 space-y-6">
+        <div className="text-center space-y-1">
           <p className="text-muted-foreground text-sm">
             أرسلنا رمزاً مكوناً من 6 أرقام إلى
           </p>
           <p className="text-sm font-medium text-primary" dir="ltr">{email}</p>
         </div>
 
-        {/* OTP Inputs */}
         <div className="flex gap-2 justify-center" dir="ltr" onPaste={handlePaste}>
           {digits.map((digit, i) => (
             <Input
@@ -136,8 +138,8 @@ export default function VerifyOTPPage() {
             جاري التحقق...
           </div>
         )}
+        </div>
 
-        {/* Actions */}
         <div className="space-y-3">
           <Button
             variant="ghost"

@@ -58,7 +58,7 @@ export default function LoginPage() {
         </div>
 
         {/* Form — Neo-Brutalist Card */}
-        <div className="bg-card p-6 space-y-4" style={{border: "2px solid hsl(var(--border))", boxShadow: "var(--nb-shadow)"}}>
+        <div className="card bg-card p-6 space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email-input">

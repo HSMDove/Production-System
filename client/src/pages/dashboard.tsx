@@ -123,7 +123,7 @@ export default function Dashboard() {
           </div>
           <div className="flex gap-3 relative z-10">
             <Link href="/split-view">
-              <Button variant="outline" className="gap-2 bg-background/50 backdrop-blur border-primary/20 hover:border-primary/50 transition-colors shadow-sm" data-testid="button-split-view">
+              <Button variant="outline" className="gap-2 bg-card border-primary/20 hover:border-primary/50 transition-colors shadow-sm" data-testid="button-split-view">
                 <Columns2 className="h-4 w-4 text-primary" />
                 عرض مقسم
               </Button>
