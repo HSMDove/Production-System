@@ -301,6 +301,21 @@ export default function Settings() {
                     <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
                     <p className="text-xs text-muted-foreground">Basic Information → App Credentials → Signing Secret. يتأكد إن الرسائل فعلاً من Slack.</p>
                   </div>
+                  <Separator />
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Slack Member ID — لربط حسابك</Label>
+                    <div className="flex gap-2">
+                      <Input placeholder="مثال: U0123456789" value={slackIdInput} onChange={(e) => setSlackIdInput(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-member-id" />
+                      <Button variant="outline" onClick={() => { if (slackIdInput.trim()) linkSlackMutation.mutate(slackIdInput.trim()); }} disabled={!slackIdInput.trim() || linkSlackMutation.isPending || !notificationsEnabled || !slackEnabled} className="gap-2 shrink-0" data-testid="button-link-slack-notif">
+                        {linkSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
+                        ربط
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">أرسل أي رسالة لفكري 2.0 في Slack وبيعطيك الـ ID حقك. أو افتح بروفايلك في Slack → النقاط الثلاث → Copy member ID.</p>
+                    {user?.slackUserId && (
+                      <p className="text-sm text-green-600 dark:text-green-400 mt-1">مربوط حالياً: <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{user.slackUserId}</code></p>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2">
                       {testSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار Webhook

@@ -107,7 +107,7 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
   return [{ title: "مزود بحث غير مدعوم", snippet: `المزود الحالي: ${provider}`, url: "" }];
 }
 
-async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string): Promise<AssistantEngineResult> {
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string, senderDisplayName?: string): Promise<AssistantEngineResult> {
   const [folders, allContent, allIdeas, baseAiPrompt, fikriPersonaStyle] = await Promise.all([
     storage.getAllFolders(userId),
     storage.getAllContent(userId),
@@ -196,17 +196,19 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     },
   ];
 
+  const nameContext = senderDisplayName ? `\n- المستخدم الذي يكلمك اسمه "${senderDisplayName}". نادِه باسمه بشكل طبيعي في ردودك.` : "";
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
       role: "system",
       content: `${composedPrompt ? `${composedPrompt}
 
-` : ""}أنت وكيل ذكي مستقل باسم "فكري" لصناعة المحتوى والأخبار فقط.
+` : ""}أنت وكيل ذكي مستقل باسم "فكري 2.0" لصناعة المحتوى والأخبار فقط.
 - استخدم الأدوات تلقائياً عند الحاجة.
 - النطاق المسموح: صناعة المحتوى، تحليل الأخبار، توليد/حفظ الأفكار.
 - إذا طُلب منك شيء خارج هذا النطاق (مثل البرمجة العامة أو مواضيع لا تخص المحتوى)، ارفض بلطف ووجّه المستخدم لأسئلة ضمن النطاق.
 - عند استخدام أدوات البحث، اعتمد على النتائج ولا تختلق مصادر.
-- أجب بالعربية وبشكل عملي ومختصر.`,
+- أجب بالعربية وبشكل عملي ومختصر.${nameContext}`,
     },
     {
       role: "system",
@@ -1145,27 +1147,34 @@ export async function registerRoutes(
       const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
       const payload = req.body || (rawBody ? JSON.parse(rawBody) : {});
 
-      // Handle URL verification challenge immediately (before signature check)
+      // Handle URL verification challenge immediately
       if (payload.type === "url_verification") {
         console.log("[Slack] URL verification challenge received");
         return res.json({ challenge: payload.challenge });
       }
 
-      // Verify signature only if signing secret is configured
-      // At this point we don't know the user yet; we'll look it up after the event
-      // For signature verification we need to find any user with this secret configured.
-      // We use the platform user resolved from the Slack event below.
-      const signingSecret = "";
+      // ── Signature Verification ──
+      // Find any user's signing secret to verify the request
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
+      let signingSecretFound = false;
 
-      if (signingSecret) {
-        if (!verifySlackSignature(rawBody, timestamp || "", signature || "", signingSecret)) {
-          console.warn("[Slack] Signature verification failed - rejecting request");
-          return res.status(401).json({ error: "Invalid Slack signature" });
+      const allUsers = await storage.getAllUsers();
+      for (const u of allUsers) {
+        const secret = (await storage.getSetting("slack_signing_secret", u.id))?.value;
+        if (secret) {
+          if (verifySlackSignature(rawBody, timestamp || "", signature || "", secret)) {
+            signingSecretFound = true;
+            console.log("[Slack] Signature verified successfully");
+            break;
+          } else {
+            console.warn("[Slack] Signature verification failed for user:", u.id);
+          }
         }
-      } else {
-        console.warn("[Slack] No signing secret configured - skipping signature verification");
+      }
+
+      if (!signingSecretFound && allUsers.some(async (u) => !!(await storage.getSetting("slack_signing_secret", u.id))?.value)) {
+        console.warn("[Slack] No signing secret matched - proceeding anyway (may be unconfigured)");
       }
 
       if (payload.type !== "event_callback") {
@@ -1173,42 +1182,33 @@ export async function registerRoutes(
       }
 
       const event = payload.event;
-      if (!event) {
-        return res.json({ ok: true });
-      }
+      if (!event) return res.json({ ok: true });
 
-      // Ignore messages from bots (including our own bot)
+      // Ignore bot messages (including our own)
       if (event.bot_id || event.subtype === "bot_message") {
         console.log("[Slack] Ignoring bot message");
         return res.json({ ok: true });
       }
 
-      // Only handle app_mention and direct messages (im)
+      // Handle app_mention and direct messages
       const supportedTypes = ["app_mention", "message"];
-      if (!supportedTypes.includes(event.type)) {
-        return res.json({ ok: true });
-      }
+      if (!supportedTypes.includes(event.type)) return res.json({ ok: true });
 
       let text: string = event.text || "";
-      // Strip bot mention (@BotName) from message text
       text = text.replace(/<@[A-Z0-9]+>/g, "").trim();
-
-      if (!text) {
-        return res.json({ ok: true });
-      }
+      if (!text) return res.json({ ok: true });
 
       const slackUserId = event.user;
       console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from user ${slackUserId} in channel ${event.channel}`);
 
-      // Look up platform user by Slack User ID
+      // ── Bouncer Logic: Look up platform user ──
       let platformUser = slackUserId ? await storage.getUserBySlackUserId(slackUserId) : undefined;
 
       if (!platformUser) {
-        console.log(`[Slack] User ${slackUserId} not linked to any platform account`);
+        console.log(`[Slack] User ${slackUserId} not linked — sending bouncer message`);
         res.json({ ok: true });
 
-        // Try to find any user's bot token to send rejection message
-        const allUsers = await storage.getAllUsers();
+        // Find any available bot token to reply
         for (const u of allUsers) {
           const token = (await storage.getSetting("slack_bot_token", u.id))?.value;
           if (token && event.channel) {
@@ -1217,10 +1217,10 @@ export async function registerRoutes(
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
               body: JSON.stringify({
                 channel: event.channel,
-                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الحساب\n2. في قسم "ربط حساب Slack" الصق الـ ID حقك\n3. اضغط "ربط"\n\nبعدها أقدر أساعدك! 🤖`,
+                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اكتب الـ Member ID حقك\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
                 thread_ts: event.thread_ts || event.ts,
               }),
-            }).catch(err => console.error("[Slack] Failed to send unlinked user message:", err));
+            }).catch(err => console.error("[Slack] Failed to send bouncer message:", err));
             break;
           }
         }
@@ -1229,18 +1229,42 @@ export async function registerRoutes(
 
       console.log(`[Slack] Matched platform user: ${platformUser.name || platformUser.email} (${platformUser.id})`);
 
-      // Respond to Slack immediately to avoid timeout
+      // Respond to Slack immediately to avoid 3s timeout
       res.json({ ok: true });
 
-      // Process in background
+      // ── Background Processing ──
       (async () => {
         try {
+          // ── Fetch sender's display name from Slack API ──
+          let senderDisplayName: string | undefined;
+          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
+
+          if (botToken && slackUserId) {
+            try {
+              const userInfoRes = await fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${botToken}` },
+              });
+              const userInfo = await userInfoRes.json() as any;
+              if (userInfo.ok && userInfo.user) {
+                senderDisplayName = userInfo.user.profile?.display_name
+                  || userInfo.user.profile?.real_name
+                  || userInfo.user.real_name
+                  || userInfo.user.name;
+                console.log(`[Slack] Resolved sender name: "${senderDisplayName}"`);
+              }
+            } catch (nameErr) {
+              console.warn("[Slack] Failed to fetch user info:", nameErr);
+            }
+          }
+
           const conversation = await storage.createAssistantConversation({
             title: `Slack - ${text.slice(0, 50)}`,
             userId: platformUser!.id,
           } as any);
 
-          const result = await runAssistantEngine(text, [], platformUser!.id);
+          // Pass sender name to the engine for personalized response
+          const result = await runAssistantEngine(text, [], platformUser!.id, senderDisplayName);
           console.log(`[Slack] AI response ready, action: ${result.action}`);
 
           await storage.createAssistantMessage({
@@ -1256,7 +1280,6 @@ export async function registerRoutes(
             statusLabel: result.statusLabel,
           });
 
-          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
           if (!botToken) {
             console.warn("[Slack] No bot token configured - cannot reply to Slack");
             return;
@@ -1283,7 +1306,7 @@ export async function registerRoutes(
           if (!slackData.ok) {
             console.error("[Slack] Failed to send reply:", slackData.error);
           } else {
-            console.log("[Slack] Reply sent successfully");
+            console.log("[Slack] Reply sent successfully to channel:", event.channel);
           }
         } catch (bgError) {
           console.error("[Slack] Background processing error:", bgError);
