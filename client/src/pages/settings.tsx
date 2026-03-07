@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, Check, Loader2, LogOut, Moon, Palette, Save, Send, Sparkles, Sun, TestTube, Trash2, User } from "lucide-react";
+import { Bell, Bot, Check, Link, Loader2, LogOut, Moon, Palette, Save, Send, Sparkles, Sun, TestTube, Trash2, User } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -28,6 +28,7 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState<SettingsData>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("account");
+  const [slackIdInput, setSlackIdInput] = useState(user?.slackUserId || "");
 
   const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة");
   const [testAiResult, setTestAiResult] = useState("");
@@ -42,6 +43,10 @@ export default function Settings() {
   useEffect(() => {
     if (settings) setLocalSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (user?.slackUserId) setSlackIdInput(user.slackUserId);
+  }, [user?.slackUserId]);
 
   const updateSetting = (key: string, value: string | null) => {
     setLocalSettings((prev) => ({ ...prev, [key]: value }));
@@ -73,6 +78,15 @@ export default function Settings() {
     mutationFn: async () => apiRequest("POST", "/api/settings/test-slack", { webhookUrl: localSettings.slack_webhook_url }),
     onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "تم إرسال رسالة اختبار إلى Slack" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
     onError: () => toast({ title: "خطأ", description: "فشل اختبار Slack", variant: "destructive" }),
+  });
+
+  const linkSlackMutation = useMutation({
+    mutationFn: async (slackUserId: string) => apiRequest("PATCH", "/api/auth/slack-link", { slackUserId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "تم الربط", description: "تم ربط حساب Slack بنجاح" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل ربط حساب Slack", variant: "destructive" }),
   });
 
   const testAiMutation = useMutation({
@@ -169,6 +183,21 @@ export default function Settings() {
               <CardContent className="space-y-3">
                 <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">البريد</span><span className="font-medium">{user?.email || "-"}</span></div>
                 <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">الاسم</span><span className="font-medium">{user?.name || "غير محدد"}</span></div>
+                <Separator />
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 font-medium"><Link className="h-4 w-4" /> ربط حساب Slack</Label>
+                  <p className="text-sm text-muted-foreground">أرسل أي رسالة للبوت في Slack وراح يعطيك الـ User ID حقك. اكتبه هنا عشان البوت يعرفك.</p>
+                  <div className="flex gap-2">
+                    <Input placeholder="مثال: U0123456789" value={slackIdInput} onChange={(e) => setSlackIdInput(e.target.value)} dir="ltr" className="font-mono" data-testid="input-slack-user-id" />
+                    <Button variant="outline" onClick={() => { if (slackIdInput.trim()) linkSlackMutation.mutate(slackIdInput.trim()); }} disabled={!slackIdInput.trim() || linkSlackMutation.isPending} className="gap-2 shrink-0" data-testid="button-link-slack">
+                      {linkSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
+                      ربط
+                    </Button>
+                  </div>
+                  {user?.slackUserId && (
+                    <p className="text-sm text-green-600 dark:text-green-400">مربوط حالياً: <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{user.slackUserId}</code></p>
+                  )}
+                </div>
                 <Separator />
                 <Button variant="destructive" onClick={() => logout()} disabled={isLoggingOut} className="gap-2" data-testid="button-logout">
                   {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
