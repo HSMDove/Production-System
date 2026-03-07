@@ -24,6 +24,7 @@
   --nb-shadow:    4px 4px 0px 0px #000000;
   --nb-shadow-sm: 2px 2px 0px 0px #000000;
 
+  --dot-color: rgba(0,0,0, 0.20);
   --button-outline: rgba(0,0,0, 0.20);
   --badge-outline:  rgba(0,0,0, 0.12);
   --opaque-button-border-intensity: -12;
@@ -108,6 +109,7 @@
   --nb-shadow:    3px 3px 0px 0px hsl(44 92% 62%);
   --nb-shadow-sm: 2px 2px 0px 0px hsl(44 92% 62%);
 
+  --dot-color: rgba(255, 203, 70, 0.22);
   --button-outline: rgba(255,255,255, 0.15);
   --badge-outline:  rgba(255,255,255, 0.10);
   --opaque-button-border-intensity: 12;
@@ -354,48 +356,144 @@ body {
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
   background-color: hsl(var(--background));
-  background-image: radial-gradient(circle, rgba(0,0,0,0.20) 1.2px, transparent 1.2px);
+  background-image: radial-gradient(circle, var(--dot-color) 1.2px, transparent 1.2px);
   background-size: 22px 22px;
 }
-
-/* Dark mode: golden dots */
-.dark body {
-  background-color: hsl(var(--background));
-  background-image: radial-gradient(circle, rgba(255, 203, 70, 0.22) 1.2px, transparent 1.2px);
-  background-size: 22px 22px;
-}
-
 
 /* ── Neo-Brutalist dot grid on all background surfaces ── */
 .bg-background {
-  background-image: radial-gradient(circle, rgba(0,0,0,0.18) 1.2px, transparent 1.2px) !important;
-  background-size: 22px 22px !important;
-}
-
-.dark .bg-background {
-  background-image: radial-gradient(circle, rgba(255, 203, 70, 0.20) 1.2px, transparent 1.2px) !important;
+  background-image: radial-gradient(circle, var(--dot-color) 1.2px, transparent 1.2px) !important;
   background-size: 22px 22px !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   APP THEME ACCENTS (use Neo-Brutalist palette variants)
+   APP THEME ACCENTS — Full palette overrides
+   Each theme overrides ALL color variables for a cohesive look
    ═══════════════════════════════════════════════════════════ */
+
+/* ─── DEFAULT: Yellow/Gold ─── */
 [data-app-theme="default"] {
-  --primary: 44 92% 62%;
-  --ring:    44 92% 62%;
-  --sidebar-primary: 44 92% 62%;
+  --background:              43 100% 77%;
+  --primary:                 44 92% 62%;
+  --secondary:              307 98% 78%;
+  --accent:                 187 98% 87%;
+  --muted:                   43 60% 90%;
+  --muted-foreground:         0 0% 22%;
+  --ring:                    44 92% 62%;
+  --sidebar-primary:         44 92% 62%;
+  --sidebar-accent:          43 80% 90%;
+  --chart-1:                 44 92% 55%;
+  --chart-2:                307 98% 68%;
+  --chart-3:                109 71% 58%;
+  --chart-4:                187 98% 75%;
+}
+.dark[data-app-theme="default"] {
+  --nb-shadow:    3px 3px 0px 0px hsl(44 92% 62%);
+  --nb-shadow-sm: 2px 2px 0px 0px hsl(44 92% 62%);
+  --background:               0 0% 5%;
+  --border:                  44 92% 62%;
+  --card-border:             44 92% 62%;
+  --sidebar-border:          44 92% 62%;
+  --popover-border:          44 92% 62%;
+  --primary:                 44 92% 62%;
+  --secondary:              307 98% 78%;
+  --accent:                 109 71% 71%;
+  --muted:                    0 0% 13%;
+  --muted-foreground:         0 0% 60%;
+  --ring:                    44 92% 62%;
+  --sidebar-primary:         44 92% 62%;
+  --sidebar-accent:           0 0% 13%;
+  --sidebar-ring:            44 92% 62%;
+  --chart-1:                 44 92% 62%;
+  --chart-2:                307 98% 78%;
+  --chart-3:                109 71% 71%;
+  --chart-4:                187 98% 87%;
 }
 
+/* ─── TECH FIELD: Pink/Magenta ─── */
 [data-app-theme="tech-field"] {
-  --primary: 307 98% 78%;
-  --ring:    307 98% 78%;
-  --sidebar-primary: 307 98% 78%;
+  --dot-color: rgba(0,0,0, 0.16);
+  --background:             320 80% 85%;
+  --primary:                307 98% 65%;
+  --secondary:               44 92% 62%;
+  --accent:                 270 80% 82%;
+  --muted:                  320 40% 90%;
+  --muted-foreground:       320 20% 25%;
+  --ring:                   307 98% 65%;
+  --sidebar-primary:        307 98% 65%;
+  --sidebar-accent:         320 60% 90%;
+  --chart-1:                307 98% 58%;
+  --chart-2:                 44 92% 55%;
+  --chart-3:                270 80% 65%;
+  --chart-4:                340 90% 70%;
+}
+.dark[data-app-theme="tech-field"] {
+  --dot-color: rgba(254, 144, 232, 0.22);
+  --nb-shadow:    3px 3px 0px 0px hsl(307 98% 72%);
+  --nb-shadow-sm: 2px 2px 0px 0px hsl(307 98% 72%);
+  --background:               0 0% 5%;
+  --border:                 307 80% 65%;
+  --card-border:            307 80% 65%;
+  --sidebar-border:         307 80% 65%;
+  --popover-border:         307 80% 65%;
+  --primary:                307 98% 72%;
+  --secondary:               44 92% 62%;
+  --accent:                 270 70% 72%;
+  --muted:                    0 0% 13%;
+  --muted-foreground:         0 0% 60%;
+  --ring:                   307 98% 72%;
+  --sidebar-primary:        307 98% 72%;
+  --sidebar-accent:           0 0% 13%;
+  --sidebar-ring:           307 98% 72%;
+  --chart-1:                307 98% 72%;
+  --chart-2:                 44 92% 62%;
+  --chart-3:                270 70% 72%;
+  --chart-4:                340 90% 75%;
 }
 
+/* ─── TECH VOICE: Blue/Cyan ─── */
 [data-app-theme="tech-voice"] {
-  --primary: 187 98% 85%;
-  --ring:    187 98% 85%;
-  --sidebar-primary: 187 98% 85%;
+  --dot-color: rgba(0,0,0, 0.14);
+  --background:             195 80% 82%;
+  --primary:                187 98% 42%;
+  --primary-foreground:       0 0% 100%;
+  --secondary:              109 71% 58%;
+  --accent:                 220 80% 78%;
+  --muted:                  195 40% 90%;
+  --muted-foreground:       195 20% 22%;
+  --ring:                   187 98% 42%;
+  --sidebar-primary:        187 98% 42%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:         195 60% 90%;
+  --chart-1:                187 98% 40%;
+  --chart-2:                109 71% 50%;
+  --chart-3:                220 80% 60%;
+  --chart-4:                 44 92% 55%;
+}
+.dark[data-app-theme="tech-voice"] {
+  --dot-color: rgba(0, 215, 255, 0.20);
+  --nb-shadow:    3px 3px 0px 0px hsl(187 98% 55%);
+  --nb-shadow-sm: 2px 2px 0px 0px hsl(187 98% 55%);
+  --background:               0 0% 5%;
+  --border:                 187 80% 50%;
+  --card-border:            187 80% 50%;
+  --sidebar-border:         187 80% 50%;
+  --popover-border:         187 80% 50%;
+  --primary:                187 98% 55%;
+  --primary-foreground:       0 0% 0%;
+  --secondary:              109 71% 65%;
+  --accent:                 220 70% 68%;
+  --muted:                    0 0% 13%;
+  --muted-foreground:         0 0% 60%;
+  --ring:                   187 98% 55%;
+  --sidebar-primary:        187 98% 55%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent:           0 0% 13%;
+  --sidebar-ring:           187 98% 55%;
+  --chart-1:                187 98% 55%;
+  --chart-2:                109 71% 65%;
+  --chart-3:                220 70% 68%;
+  --chart-4:                 44 92% 62%;
 }
 
 .container {
