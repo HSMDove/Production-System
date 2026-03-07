@@ -24,7 +24,7 @@
   --nb-shadow:    4px 4px 0px 0px #000000;
   --nb-shadow-sm: 2px 2px 0px 0px #000000;
 
-  --dot-color: rgba(0,0,0, 0.10);
+  --dot-color: rgba(0,0,0, 0.18);
   --button-outline: rgba(0,0,0, 0.20);
   --badge-outline:  rgba(0,0,0, 0.12);
   --opaque-button-border-intensity: -12;
@@ -109,7 +109,7 @@
   --nb-shadow:    3px 3px 0px 0px hsl(44 92% 62%);
   --nb-shadow-sm: 2px 2px 0px 0px hsl(44 92% 62%);
 
-  --dot-color: rgba(255, 203, 70, 0.12);
+  --dot-color: rgba(255, 203, 70, 0.18);
   --button-outline: rgba(255,255,255, 0.15);
   --badge-outline:  rgba(255,255,255, 0.10);
   --opaque-button-border-intensity: 12;
@@ -367,8 +367,8 @@ body {
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
   background-color: hsl(var(--background));
-  background-image: radial-gradient(circle, var(--dot-color) 0.8px, transparent 0.8px);
-  background-size: 28px 28px;
+  background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 
@@ -418,7 +418,7 @@ body {
 
 /* ─── TECH FIELD: Pink/Magenta ─── */
 [data-app-theme="tech-field"] {
-  --dot-color: rgba(0,0,0, 0.08);
+  --dot-color: rgba(0,0,0, 0.14);
   --background:             320 80% 85%;
   --primary:                307 98% 65%;
   --secondary:               44 92% 62%;
@@ -434,7 +434,7 @@ body {
   --chart-4:                340 90% 70%;
 }
 .dark[data-app-theme="tech-field"] {
-  --dot-color: rgba(254, 144, 232, 0.10);
+  --dot-color: rgba(254, 144, 232, 0.18);
   --nb-shadow:    3px 3px 0px 0px hsl(307 98% 72%);
   --nb-shadow-sm: 2px 2px 0px 0px hsl(307 98% 72%);
   --background:               0 0% 5%;
@@ -459,7 +459,7 @@ body {
 
 /* ─── TECH VOICE: Blue/Cyan ─── */
 [data-app-theme="tech-voice"] {
-  --dot-color: rgba(0,0,0, 0.08);
+  --dot-color: rgba(0,0,0, 0.14);
   --background:             195 80% 82%;
   --primary:                187 98% 42%;
   --primary-foreground:       0 0% 100%;
@@ -477,7 +477,7 @@ body {
   --chart-4:                 44 92% 55%;
 }
 .dark[data-app-theme="tech-voice"] {
-  --dot-color: rgba(0, 215, 255, 0.10);
+  --dot-color: rgba(0, 215, 255, 0.16);
   --nb-shadow:    3px 3px 0px 0px hsl(187 98% 55%);
   --nb-shadow-sm: 2px 2px 0px 0px hsl(187 98% 55%);
   --background:               0 0% 5%;
