@@ -177,7 +177,7 @@ export default function Settings() {
             <TabsTrigger value="account">الحساب</TabsTrigger>
             <TabsTrigger value="appearance">المظهر</TabsTrigger>
             <TabsTrigger value="notifications">الإشعارات</TabsTrigger>
-            <TabsTrigger value="fikri">فكري والذكاء</TabsTrigger>
+            <TabsTrigger value="fikri">فكري 2.0 والذكاء</TabsTrigger>
           </TabsList>
 
           <TabsContent value="account" className="space-y-4">
