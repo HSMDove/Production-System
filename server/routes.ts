@@ -483,10 +483,61 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Platform IDs (Multi-ID) ──────────────────────────────────────────────
+  app.get("/api/auth/platform-ids", requireAuth, async (req, res) => {
+    try {
+      const platform = req.query.platform as string | undefined;
+      const ids = await storage.getPlatformIds(req.session.userId!, platform as any);
+      res.json(ids);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to fetch platform IDs" });
+    }
+  });
+
+  app.post("/api/auth/platform-ids", requireAuth, async (req, res) => {
+    try {
+      const { platform, platformId, label } = req.body;
+      if (!platform || !platformId) return res.status(400).json({ error: "platform و platformId مطلوبين" });
+      if (!["slack", "telegram"].includes(platform)) return res.status(400).json({ error: "المنصة غير مدعومة" });
+      const existing = await storage.getPlatformIds(req.session.userId!, platform);
+      if (existing.some(e => e.platformId === platformId)) {
+        return res.status(409).json({ error: "هذا المعرف مضاف مسبقاً" });
+      }
+      const otherUser = await storage.getUserByPlatformId(platform, platformId.trim());
+      if (otherUser && otherUser.id !== req.session.userId!) {
+        return res.status(409).json({ error: "هذا المعرف مستخدم من حساب آخر" });
+      }
+      const created = await storage.addPlatformId(req.session.userId!, platform, platformId.trim(), label?.trim());
+      if (platform === "slack") {
+        await storage.updateUser(req.session.userId!, { slackUserId: platformId.trim() });
+      }
+      res.json(created);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to add platform ID" });
+    }
+  });
+
+  app.delete("/api/auth/platform-ids/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const allIds = await storage.getPlatformIds(userId);
+      const toDelete = allIds.find(p => p.id === req.params.id);
+      const deleted = await storage.removePlatformId(req.params.id, userId);
+      if (!deleted) return res.status(404).json({ error: "المعرف غير موجود" });
+      if (toDelete?.platform === "slack") {
+        const remainingSlack = allIds.filter(p => p.platform === "slack" && p.id !== req.params.id);
+        await storage.updateUser(userId, { slackUserId: remainingSlack[0]?.platformId || null });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to remove platform ID" });
+    }
+  });
+
   // ─── Global auth guard for all non-auth API routes ────────────────────────
   // Applied after auth routes so /api/auth/* remain public.
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/")) {
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/") || req.path.startsWith("/integrations/telegram/")) {
       return next();
     }
     if (!req.session?.userId) {
@@ -1111,7 +1162,8 @@ export async function registerRoutes(
         content: userMessage,
       });
 
-      const result = await runAssistantEngine(userMessage, mergedHistory, userId);
+      const webUser = await storage.getUserById(userId);
+      const result = await runAssistantEngine(userMessage, mergedHistory, userId, webUser?.name || undefined);
 
       await storage.createAssistantMessage({
         conversationId,
@@ -1158,23 +1210,24 @@ export async function registerRoutes(
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
       let signingSecretFound = false;
+      let anySecretConfigured = false;
 
       const allUsers = await storage.getAllUsers();
       for (const u of allUsers) {
         const secret = (await storage.getSetting("slack_signing_secret", u.id))?.value;
         if (secret) {
+          anySecretConfigured = true;
           if (verifySlackSignature(rawBody, timestamp || "", signature || "", secret)) {
             signingSecretFound = true;
             console.log("[Slack] Signature verified successfully");
             break;
-          } else {
-            console.warn("[Slack] Signature verification failed for user:", u.id);
           }
         }
       }
 
-      if (!signingSecretFound && allUsers.some(async (u) => !!(await storage.getSetting("slack_signing_secret", u.id))?.value)) {
-        console.warn("[Slack] No signing secret matched - proceeding anyway (may be unconfigured)");
+      if (anySecretConfigured && !signingSecretFound) {
+        console.warn("[Slack] Signature verification failed — rejecting request");
+        return res.status(401).json({ error: "Invalid Slack signature" });
       }
 
       if (payload.type !== "event_callback") {
@@ -1202,13 +1255,14 @@ export async function registerRoutes(
       console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from user ${slackUserId} in channel ${event.channel}`);
 
       // ── Bouncer Logic: Look up platform user ──
-      let platformUser = slackUserId ? await storage.getUserBySlackUserId(slackUserId) : undefined;
+      let platformUser = slackUserId ? await storage.getUserByPlatformId("slack", slackUserId) : undefined;
 
       if (!platformUser) {
         console.log(`[Slack] User ${slackUserId} not linked — sending bouncer message`);
         res.json({ ok: true });
 
-        // Find any available bot token to reply
+        // Use verified user's bot token (the one whose signing secret matched) to reply
+        // Falls back to first available if no specific match
         for (const u of allUsers) {
           const token = (await storage.getSetting("slack_bot_token", u.id))?.value;
           if (token && event.channel) {
@@ -1316,6 +1370,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error("[Slack] Events endpoint error:", error);
       return res.status(500).json({ error: "Failed to process Slack event" });
+    }
+  });
+
+  // ─── Telegram Incoming Webhook ───────────────────────────────────────────
+  app.post("/api/integrations/telegram/webhook", async (req, res) => {
+    try {
+      const update = req.body;
+
+      if (!update?.message) {
+        return res.json({ ok: true });
+      }
+
+      const msg = update.message;
+      const text = (msg.text || "").trim();
+      const telegramChatId = String(msg.chat?.id || "");
+      const telegramUserId = String(msg.from?.id || "");
+      const senderName = msg.from?.first_name || msg.from?.username || undefined;
+
+      if (!text || !telegramChatId) {
+        return res.json({ ok: true });
+      }
+
+      console.log(`[Telegram] Received message: "${text.slice(0, 80)}..." from chat ${telegramChatId}, user ${telegramUserId}`);
+
+      // Look up platform user by telegram chat ID or user ID
+      let platformUser = await storage.getUserByPlatformId("telegram", telegramChatId);
+      if (!platformUser && telegramUserId !== telegramChatId) {
+        platformUser = await storage.getUserByPlatformId("telegram", telegramUserId);
+      }
+
+      if (!platformUser) {
+        console.log(`[Telegram] User ${telegramChatId} not linked — sending bouncer message`);
+        res.json({ ok: true });
+
+        // Find any available bot token to reply
+        const allUsers = await storage.getAllUsers();
+        for (const u of allUsers) {
+          const token = (await storage.getSetting("telegram_bot_token", u.id))?.value;
+          if (token) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: telegramChatId,
+                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Telegram مو مربوط بالمنصة بعد.\n\n🔑 الـ Chat ID حقك هو: ${telegramChatId}\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Telegram اضغط (+) وأضف الـ Chat ID\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
+                reply_to_message_id: msg.message_id,
+              }),
+            }).catch(err => console.error("[Telegram] Failed to send bouncer message:", err));
+            break;
+          }
+        }
+        return;
+      }
+
+      console.log(`[Telegram] Matched platform user: ${platformUser.name || platformUser.email} (${platformUser.id})`);
+      res.json({ ok: true });
+
+      // Background processing
+      (async () => {
+        try {
+          const botToken = (await storage.getSetting("telegram_bot_token", platformUser!.id))?.value || "";
+
+          const displayName = senderName || platformUser!.name || undefined;
+
+          const conversation = await storage.createAssistantConversation({
+            title: `Telegram - ${text.slice(0, 50)}`,
+            userId: platformUser!.id,
+          } as any);
+
+          const result = await runAssistantEngine(text, [], platformUser!.id, displayName);
+          console.log(`[Telegram] AI response ready, action: ${result.action}`);
+
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "user",
+            content: text,
+          });
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: result.answer,
+            action: result.action,
+            statusLabel: result.statusLabel,
+          });
+
+          if (!botToken) {
+            console.warn("[Telegram] No bot token configured - cannot reply");
+            return;
+          }
+
+          const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: telegramChatId,
+              text: result.answer,
+              reply_to_message_id: msg.message_id,
+            }),
+          });
+          const tgData = await tgRes.json() as any;
+          if (!tgData.ok) {
+            console.error("[Telegram] Failed to send reply:", tgData.description);
+          } else {
+            console.log("[Telegram] Reply sent successfully to chat:", telegramChatId);
+          }
+        } catch (bgError) {
+          console.error("[Telegram] Background processing error:", bgError);
+        }
+      })();
+
+    } catch (error) {
+      console.error("[Telegram] Webhook endpoint error:", error);
+      return res.status(500).json({ error: "Failed to process Telegram update" });
     }
   });
 

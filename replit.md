@@ -27,6 +27,7 @@ Developer: حسام تيك فيلد (Hossam TechField)
 **Database Tables Added:**
 - `users` — redesigned: email (unique), name, age, gender, slack_user_id, onboarding_completed, user_id
 - `otp_codes` — email, code, expires_at, used flag
+- `user_platform_ids` — multi-ID support: userId, platform (slack/telegram), platformId, label, createdAt
 - `folders.user_id` — links folders to users (multi-tenant)
 - `assistant_conversations.user_id` — scopes conversations per user
 
@@ -34,16 +35,22 @@ Developer: حسام تيك فيلد (Hossam TechField)
 - Folders scoped by `userId` in storage layer
 - Ideas scoped by user's folders
 - Assistant conversations scoped by userId
-- Slack: `users.slack_user_id` links Slack User ID to platform account
-- Slack bot: identifies sender via `event.user` → `getUserBySlackUserId()` → rejects unlinked users with instructions
-- `runAssistantEngine()` accepts optional `userId` to scope folders/content/ideas per-user
+- Platform IDs: `user_platform_ids` table stores multiple Slack/Telegram IDs per user
+- Bouncer logic: `getUserByPlatformId(platform, id)` checks `user_platform_ids` first, falls back to legacy `users.slackUserId`
+- Identity awareness: `senderDisplayName` injected into `runAssistantEngine` from ALL channels (Web: user.name, Slack: users.info API, Telegram: from.first_name)
+- `runAssistantEngine()` accepts optional `userId` + `senderDisplayName` to scope and personalize
 - `getAllContent(userId?)` filters content by user's folders when userId provided
+
+**Platform Integration Endpoints:**
+- `POST /api/integrations/slack/events` — Slack Events webhook with signature verification + bouncer
+- `POST /api/integrations/telegram/webhook` — Telegram Bot webhook with bouncer
+- `GET/POST/DELETE /api/auth/platform-ids` — Multi-ID CRUD for linking platform accounts
 
 **Key Files:**
 - `server/auth.ts` — generateOTP(), sendOTPEmail() via Resend
 - `client/src/hooks/use-auth.ts` — useAuth() hook
 - `client/src/components/auth/auth-guard.tsx` — route protection
-- `server/routes.ts` — /api/auth/* endpoints (send-otp, verify-otp, me, logout, profile, slack-link)
+- `server/routes.ts` — /api/auth/* endpoints, platform integration webhooks
 
 ## System Architecture
 

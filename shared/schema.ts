@@ -28,6 +28,27 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
+// User Platform IDs - multiple external platform identifiers per user (Slack/Telegram)
+export const platformTypes = ["slack", "telegram"] as const;
+export type PlatformType = typeof platformTypes[number];
+
+export const userPlatformIds = pgTable("user_platform_ids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull().$type<PlatformType>(),
+  platformId: text("platform_id").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserPlatformIdSchema = createInsertSchema(userPlatformIds).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type UserPlatformId = typeof userPlatformIds.$inferSelect;
+export type InsertUserPlatformId = z.infer<typeof insertUserPlatformIdSchema>;
+
 // OTP Codes - for email-based authentication
 export const otpCodes = pgTable("otp_codes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

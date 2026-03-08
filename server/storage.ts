@@ -43,6 +43,9 @@ import {
   type InsertAssistantConversation,
   type AssistantMessage,
   type InsertAssistantMessage,
+  userPlatformIds,
+  type UserPlatformId,
+  type PlatformType,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -179,6 +182,12 @@ export interface IStorage {
   getAllStyleExamples(userId: string): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample & { userId: string }): Promise<StyleExample>;
   deleteStyleExample(id: string, userId: string): Promise<boolean>;
+
+  // Platform IDs (multi-ID support)
+  getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]>;
+  addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId>;
+  removePlatformId(id: string, userId: string): Promise<boolean>;
+  getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -656,6 +665,46 @@ export class DatabaseStorage implements IStorage {
   async deleteStyleExample(id: string, userId: string): Promise<boolean> {
     const result = await db.delete(styleExamples).where(and(eq(styleExamples.id, id), eq(styleExamples.userId, userId)));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  // ─── Platform IDs (Multi-ID) ──────────────────────────────────────────────
+  async getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]> {
+    if (platform) {
+      return db.select().from(userPlatformIds)
+        .where(and(eq(userPlatformIds.userId, userId), eq(userPlatformIds.platform, platform)))
+        .orderBy(desc(userPlatformIds.createdAt));
+    }
+    return db.select().from(userPlatformIds)
+      .where(eq(userPlatformIds.userId, userId))
+      .orderBy(desc(userPlatformIds.createdAt));
+  }
+
+  async addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId> {
+    const [created] = await db.insert(userPlatformIds).values({
+      userId,
+      platform,
+      platformId,
+      label: label || null,
+    }).returning();
+    return created;
+  }
+
+  async removePlatformId(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(userPlatformIds)
+      .where(and(eq(userPlatformIds.id, id), eq(userPlatformIds.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined> {
+    const [record] = await db.select().from(userPlatformIds)
+      .where(and(eq(userPlatformIds.platform, platform), eq(userPlatformIds.platformId, platformId)));
+    if (record) {
+      return this.getUserById(record.userId);
+    }
+    if (platform === "slack") {
+      return this.getUserBySlackUserId(platformId);
+    }
+    return undefined;
   }
 }
 

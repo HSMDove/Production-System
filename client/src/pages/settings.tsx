@@ -11,12 +11,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, Check, Link, Loader2, LogOut, Moon, Palette, Save, Send, Sparkles, Sun, TestTube, Trash2, User } from "lucide-react";
+import { Bell, Bot, Check, CircleHelp, Copy, Link, Loader2, LogOut, Moon, Palette, Plus, Save, Send, Sparkles, Sun, TestTube, Trash2, User, X } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
+
+type PlatformIdEntry = { id: string; platform: string; platformId: string; label: string | null; createdAt: string };
 
 type SettingsData = Record<string, string | null>;
 
@@ -28,7 +31,10 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState<SettingsData>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [activeTab, setActiveTab] = useState("account");
-  const [slackIdInput, setSlackIdInput] = useState(user?.slackUserId || "");
+  const [newSlackId, setNewSlackId] = useState("");
+  const [newSlackLabel, setNewSlackLabel] = useState("");
+  const [newTelegramId, setNewTelegramId] = useState("");
+  const [newTelegramLabel, setNewTelegramLabel] = useState("");
 
   const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة");
   const [testAiResult, setTestAiResult] = useState("");
@@ -39,14 +45,15 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: styleExamples } = useQuery<any[]>({ queryKey: ["/api/style-examples"] });
+  const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
+
+  const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
+  const telegramIds = useMemo(() => (platformIds || []).filter(p => p.platform === "telegram"), [platformIds]);
 
   useEffect(() => {
     if (settings) setLocalSettings(settings);
   }, [settings]);
 
-  useEffect(() => {
-    if (user?.slackUserId) setSlackIdInput(user.slackUserId);
-  }, [user?.slackUserId]);
 
   const updateSetting = (key: string, value: string | null) => {
     setLocalSettings((prev) => ({ ...prev, [key]: value }));
@@ -86,13 +93,26 @@ export default function Settings() {
     onError: () => toast({ title: "خطأ", description: "فشل اختبار بوت Slack", variant: "destructive" }),
   });
 
-  const linkSlackMutation = useMutation({
-    mutationFn: async (slackUserId: string) => apiRequest("PATCH", "/api/auth/slack-link", { slackUserId }),
-    onSuccess: () => {
+  const addPlatformIdMutation = useMutation({
+    mutationFn: async (data: { platform: string; platformId: string; label?: string }) =>
+      apiRequest("POST", "/api/auth/platform-ids", data),
+    onSuccess: (_data: any, variables: { platform: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "تم الربط", description: "تم ربط حساب Slack بنجاح" });
+      if (variables.platform === "slack") { setNewSlackId(""); setNewSlackLabel(""); }
+      if (variables.platform === "telegram") { setNewTelegramId(""); setNewTelegramLabel(""); }
+      toast({ title: "تم الإضافة", description: "تم إضافة المعرف بنجاح" });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل ربط حساب Slack", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل إضافة المعرف", variant: "destructive" }),
+  });
+
+  const removePlatformIdMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/auth/platform-ids/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
+      toast({ title: "تم الحذف", description: "تم إزالة المعرف" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل إزالة المعرف", variant: "destructive" }),
   });
 
   const testAiMutation = useMutation({
@@ -240,72 +260,175 @@ export default function Settings() {
           <TabsContent value="notifications" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bell className="h-4 w-4" /> الإشعارات الآلية</CardTitle>
-                <CardDescription>جميع المفاتيح هنا مرتبطة مباشرة بمنطق الإرسال في الخلفية.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Bell className="h-4 w-4" /> الإشعارات والمنصات الخارجية</CardTitle>
+                <CardDescription>ربط نَسَق بمنصاتك الخارجية. فكري 2.0 يقدر يرد على رسائلك ويرسل الأخبار تلقائياً.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <p className="font-medium">تفعيل الإشعارات</p>
-                    <p className="text-sm text-muted-foreground">عند الإيقاف لن يتم إرسال تنبيهات تلقائيًا.</p>
+                    <p className="text-sm text-muted-foreground">عند الإيقاف لن يتم إرسال تنبيهات تلقائيًا ولن يرد فكري على الرسائل.</p>
                   </div>
                   <Switch checked={notificationsEnabled} onCheckedChange={(v) => updateSetting("notifications_enabled", v ? "true" : "false")} data-testid="switch-notifications-enabled" />
                 </div>
 
-                <div className="space-y-3 rounded-lg border p-3">
+                {/* ── Telegram Section ── */}
+                <div className="space-y-4 rounded-lg border p-4">
                   <div className="flex items-center justify-between">
                     <div className="font-medium flex items-center gap-2"><Send className="h-4 w-4 text-blue-500" /> تيليجرام</div>
                     <Switch checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
                   </div>
-                  <Input placeholder="Bot Token" value={localSettings.telegram_bot_token || ""} onChange={(e) => updateSetting("telegram_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !telegramEnabled} />
-                  <Input placeholder="Chat ID" value={localSettings.telegram_chat_id || ""} onChange={(e) => updateSetting("telegram_chat_id", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !telegramEnabled} />
-                  <Button variant="outline" onClick={() => testTelegramMutation.mutate()} disabled={!notificationsEnabled || !telegramEnabled || testTelegramMutation.isPending} className="gap-2">
+
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>افتح <a href="https://t.me/BotFather" target="_blank" className="text-primary underline">@BotFather</a> في تيليجرام واكتب <code className="bg-background px-1 rounded">/newbot</code></li>
+                      <li>انسخ الـ Bot Token وضعه هنا</li>
+                      <li>أضف الـ Chat IDs حقك (أرسل <code className="bg-background px-1 rounded">/start</code> للبوت ثم أضف معرفك)</li>
+                      <li>اضبط الـ Webhook من الرابط الظاهر أدناه عشان فكري يرد عليك</li>
+                    </ol>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Bot Token</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">من @BotFather في تيليجرام → /newbot → سيعطيك Token يبدأ بأرقام:حروف</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <Input placeholder="123456789:ABCdef..." type="password" value={localSettings.telegram_bot_token || ""} onChange={(e) => updateSetting("telegram_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-bot-token" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">رابط استقبال الرسائل (Webhook)</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط واضبطه في Telegram عشان فكري يستقبل رسائلك ويرد عليها مباشرة</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input value={`${window.location.origin}/api/integrations/telegram/webhook`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-telegram-webhook-url" />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/telegram/webhook`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-telegram-webhook"><Copy className="h-4 w-4" /></Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">لتفعيل الاستقبال: افتح المتصفح وادخل على:<br /><code className="text-[10px] bg-background px-1 rounded break-all">{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${window.location.origin}/api/integrations/telegram/webhook`}</code></p>
+                  </div>
+
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">معرفات Chat ID المربوطة</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">أرسل رسالة للبوت وفكري بيعطيك الـ Chat ID حقك. أو استخدم @userinfobot في تيليجرام</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    {telegramIds.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {telegramIds.map((entry) => (
+                          <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-telegram-id-${entry.id}`}>
+                            {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
+                            <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-telegram-${entry.id}`}><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Input placeholder="Chat ID (مثال: 123456789)" value={newTelegramId} onChange={(e) => setNewTelegramId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-new-telegram-id" />
+                      <Input placeholder="تسمية (اختياري)" value={newTelegramLabel} onChange={(e) => setNewTelegramLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-new-telegram-label" />
+                      <Button variant="outline" size="icon" className="shrink-0" disabled={!newTelegramId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !telegramEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "telegram", platformId: newTelegramId.trim(), label: newTelegramLabel.trim() || undefined })} data-testid="button-add-telegram-id">
+                        {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Chat ID للإشعارات التلقائية</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">هذا الـ Chat ID اللي بترسل له الإشعارات التلقائية للأخبار الجديدة (ممكن يكون قروب أو قناة)</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <Input placeholder="Chat ID للإشعارات" value={localSettings.telegram_chat_id || ""} onChange={(e) => updateSetting("telegram_chat_id", e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-notif-chat-id" />
+                  </div>
+
+                  <Button variant="outline" onClick={() => testTelegramMutation.mutate()} disabled={!notificationsEnabled || !telegramEnabled || testTelegramMutation.isPending} className="gap-2" data-testid="button-test-telegram">
                     {testTelegramMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار تيليجرام
                   </Button>
                 </div>
 
-                <div className="space-y-3 rounded-lg border p-3">
+                {/* ── Slack Section ── */}
+                <div className="space-y-4 rounded-lg border p-4">
                   <div className="flex items-center justify-between">
                     <div className="font-medium">Slack</div>
                     <Switch checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
-                  <p className="text-xs text-muted-foreground">أنشئ Slack App من api.slack.com/apps وفعّل Event Subscriptions. البوت يرد على الرسائل المباشرة والمنشنات بدون ما تحتاج تنادي عليه.</p>
-                  <Separator />
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Webhook URL — لإرسال الإشعارات</Label>
-                    <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
-                    <p className="text-xs text-muted-foreground">Incoming Webhooks → أنشئ Webhook URL جديد للقناة اللي تبي فيها الإشعارات.</p>
+
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>ادخل <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline">api.slack.com/apps</a> → Create New App → From Scratch</li>
+                      <li>من <strong>OAuth & Permissions</strong> → أضف Scopes: <code className="bg-background px-1 rounded">chat:write</code>, <code className="bg-background px-1 rounded">users:read</code>, <code className="bg-background px-1 rounded">app_mentions:read</code></li>
+                      <li>ثبّت التطبيق → انسخ <strong>Bot Token</strong> و <strong>Signing Secret</strong></li>
+                      <li>من <strong>Event Subscriptions</strong> → فعّلها والصق رابط الاستقبال الظاهر أدناه</li>
+                      <li>من <strong>Incoming Webhooks</strong> → أنشئ Webhook URL للقناة المطلوبة</li>
+                    </ol>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Bot User OAuth Token (xoxb-...)</Label>
-                    <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
-                    <p className="text-xs text-muted-foreground">OAuth & Permissions → Bot User OAuth Token. هذا يخلي البوت يرد على رسائلك.</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Signing Secret</Label>
-                    <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
-                    <p className="text-xs text-muted-foreground">Basic Information → App Credentials → Signing Secret. يتأكد إن الرسائل فعلاً من Slack.</p>
-                  </div>
-                  <Separator />
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Slack Member ID — لربط حسابك</Label>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">رابط استقبال الأحداث (Events URL)</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط والصقه في Slack → Event Subscriptions → Request URL</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
                     <div className="flex gap-2">
-                      <Input placeholder="مثال: U0123456789" value={slackIdInput} onChange={(e) => setSlackIdInput(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-member-id" />
-                      <Button variant="outline" onClick={() => { if (slackIdInput.trim()) linkSlackMutation.mutate(slackIdInput.trim()); }} disabled={!slackIdInput.trim() || linkSlackMutation.isPending || !notificationsEnabled || !slackEnabled} className="gap-2 shrink-0" data-testid="button-link-slack-notif">
-                        {linkSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link className="h-4 w-4" />}
-                        ربط
+                      <Input value={`${window.location.origin}/api/integrations/slack/events`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-slack-events-url" />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/slack/events`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-slack-events-url"><Copy className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+
+                  <Separator />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Webhook URL — لإرسال الإشعارات</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Incoming Webhooks → أنشئ Webhook URL جديد. يُستخدم لإرسال الأخبار التلقائية للقناة</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Bot User OAuth Token (xoxb-...)</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">OAuth & Permissions → Bot User OAuth Token. يمكّن البوت من الرد على رسائلك وجلب معلومات المستخدمين</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Signing Secret</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Basic Information → App Credentials → Signing Secret. يتحقق إن الرسائل اللي توصل فعلاً قادمة من Slack</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
+                  </div>
+
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs font-medium">Slack Member IDs المربوطة</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">افتح بروفايلك في Slack → النقاط الثلاث → Copy member ID. أو أرسل رسالة لفكري في Slack وبيعطيك الـ ID حقك</TooltipContent></Tooltip></TooltipProvider>
+                    </div>
+                    {slackIds.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {slackIds.map((entry) => (
+                          <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-${entry.id}`}>
+                            {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
+                            <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-slack-${entry.id}`}><X className="h-3 w-3" /></button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Input placeholder="مثال: U0123456789" value={newSlackId} onChange={(e) => setNewSlackId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-id" />
+                      <Input placeholder="تسمية (اختياري)" value={newSlackLabel} onChange={(e) => setNewSlackLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-label" />
+                      <Button variant="outline" size="icon" className="shrink-0" disabled={!newSlackId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !slackEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "slack", platformId: newSlackId.trim(), label: newSlackLabel.trim() || undefined })} data-testid="button-add-slack-id">
+                        {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">أرسل أي رسالة لفكري 2.0 في Slack وبيعطيك الـ ID حقك. أو افتح بروفايلك في Slack → النقاط الثلاث → Copy member ID.</p>
-                    {user?.slackUserId && (
-                      <p className="text-sm text-green-600 dark:text-green-400 mt-1">مربوط حالياً: <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{user.slackUserId}</code></p>
-                    )}
                   </div>
+
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2">
+                    <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2" data-testid="button-test-slack-webhook">
                       {testSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار Webhook
                     </Button>
-                    <Button variant="outline" onClick={() => testSlackBotMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackBotMutation.isPending} className="gap-2">
+                    <Button variant="outline" onClick={() => testSlackBotMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackBotMutation.isPending} className="gap-2" data-testid="button-test-slack-bot">
                       {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار البوت
                     </Button>
                   </div>
