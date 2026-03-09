@@ -421,24 +421,37 @@ export default function Settings() {
 
                       <AccordionItem value="step-5" className="border rounded-lg px-3 mt-2">
                         <AccordionTrigger className="text-xs font-medium hover:no-underline">5️⃣ نسخ القيم المطلوبة وإدخالها هنا</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground space-y-3">
-                          <p className="text-xs">بعد التثبيت، انسخ القيم من سلاك والصقها في الحقول أدناه:</p>
-                          
-                          <div className="space-y-1">
+                        <AccordionContent className="text-muted-foreground space-y-4">
+                          <p className="text-xs">بعد التثبيت، ارجع لصفحة تطبيقك في سلاك وانسخ القيم التالية والصقها هنا:</p>
+
+                          <div className="space-y-1.5">
                             <Label className="text-xs font-medium"><span dir="ltr">Webhook URL</span> — لإرسال الإشعارات التلقائية</Label>
-                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">Incoming Webhooks</span> → <span dir="ltr" className="bg-background px-1 rounded">Add New Webhook</span></p>
+                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
+                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">Incoming Webhooks</span></p>
+                              <p>📍 فعّل خيار <span dir="ltr" className="font-mono bg-background px-1 rounded">Activate Incoming Webhooks</span></p>
+                              <p>📍 اضغط <span dir="ltr" className="font-mono bg-background px-1 rounded">Add New Webhook to Workspace</span> واختار القناة</p>
+                              <p>📍 انسخ الـ Webhook URL اللي يبدأ بـ <span dir="ltr" className="font-mono bg-background px-1 rounded">https://hooks.slack.com/services/...</span></p>
+                            </div>
                             <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
                           </div>
 
-                          <div className="space-y-1">
-                            <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token (xoxb-...)</span></Label>
-                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> → <span dir="ltr" className="bg-background px-1 rounded">OAuth Tokens for Your Workspace</span></p>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token</span></Label>
+                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
+                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">OAuth & Permissions</span></p>
+                              <p>📍 انزل لقسم <span dir="ltr" className="font-mono bg-background px-1 rounded">OAuth Tokens for Your Workspace</span></p>
+                              <p>📍 انسخ الـ <span dir="ltr" className="font-mono bg-background px-1 rounded">Bot User OAuth Token</span> اللي يبدأ بـ <span dir="ltr" className="font-mono bg-background px-1 rounded">xoxb-</span></p>
+                            </div>
                             <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
                           </div>
 
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             <Label className="text-xs font-medium"><span dir="ltr">Signing Secret</span></Label>
-                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">Basic Information</span> → <span dir="ltr" className="bg-background px-1 rounded">App Credentials</span></p>
+                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
+                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">Basic Information</span></p>
+                              <p>📍 انزل لقسم <span dir="ltr" className="font-mono bg-background px-1 rounded">App Credentials</span></p>
+                              <p>📍 انسخ قيمة <span dir="ltr" className="font-mono bg-background px-1 rounded">Signing Secret</span> من هناك</p>
+                            </div>
                             <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
                           </div>
 
