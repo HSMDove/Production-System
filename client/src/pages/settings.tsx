@@ -370,75 +370,105 @@ export default function Settings() {
                     <p className="text-xs font-semibold text-muted-foreground">🔧 خطوات إعداد التطبيق:</p>
                     <Accordion type="single" collapsible className="w-full">
                       <AccordionItem value="step-1" className="border rounded-lg px-3">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 1️⃣ : إنشاء التطبيق</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">1️⃣ إنشاء التطبيق</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>اذهب إلى <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a></p>
-                          <p>ثم اضغط <span dir="ltr" className="bg-background px-1 rounded">"Create New App"</span></p>
-                          <p>اختر <span dir="ltr" className="bg-background px-1 rounded">"From Scratch"</span></p>
-                          <p>أدخل اسم التطبيق (مثال: Nasaq) واختر الـ Workspace اللي تبي</p>
+                          <p>أول شيء تحتاج تروح إلى صفحة تطبيقات سلاك عبر الرابط: <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a></p>
+                          <p>ثم تضغط <span dir="ltr" className="bg-background px-1 rounded">Create New App</span> وتختار <span dir="ltr" className="bg-background px-1 rounded">From Scratch</span></p>
+                          <p>وتكتب اسم التطبيق وتحدد الـ Workspace اللي تبي تربطه</p>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-2" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 2️⃣ : إضافة الصلاحيات (مهمة جداً! 🔴)</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">2️⃣ ضبط اسم البوت في App Home</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p className="font-semibold">⚠️ هذي الخطوة لازم تسويها قبل التثبيت!</p>
-                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"OAuth & Permissions"</span></p>
-                          <p>ابحث عن <span dir="ltr" className="bg-background px-1 rounded">"Bot Token Scopes"</span></p>
-                          <p>اضغط <span dir="ltr" className="bg-background px-1 rounded">"Add an OAuth Scope"</span> وأضف هذي الثلاثة (واحد واحد):</p>
-                          <div className="ml-4 space-y-1">
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">users:read</code></p>
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mentions:read</code></p>
-                          </div>
-                          <p className="text-red-500 font-semibold">اذا لم تضيف هذي الـ Scopes = سيظهر خطأ في الخطوة التالية</p>
+                          <p>قبل ما تثبّت التطبيق، ادخل على تبويب <span dir="ltr" className="bg-background px-1 rounded">App Home</span> من القائمة الجانبية</p>
+                          <p>وتأكد من أن خانة <span dir="ltr" className="bg-background px-1 rounded">App Display Name</span> (اسم البوت اللي بيطلع للناس) فيها اسم مناسب ومكتوب بشكل صحيح</p>
+                          <p className="text-red-500">⚠️ لو خانة الاسم فاضية أو فيها مشكلة ممكن ما يظهر البوت بشكل صحيح داخل سلاك</p>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-3" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 3️⃣ : تثبيت التطبيق في الـ Workspace</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">3️⃣ إضافة الصلاحيات (Bot Scopes) 🔴 مهمة جداً</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>بعد إضافة الـ Scopes من الخطوة 2 ستظهر في أعلى الصفحة زر <span dir="ltr" className="bg-background px-1 rounded">"Install to Workspace"</span></p>
-                          <p>اضغط عليه</p>
-                          <p>ثم اضغط <span dir="ltr" className="bg-background px-1 rounded">"Allow"</span></p>
-                          <p className="text-red-500 font-semibold">🚨 لو ظهر خطأ "doesn't have a bot user":</p>
-                          <p className="ml-4 text-red-500">= معناه ما أضفت الـ Scopes بعد. رجّع للخطوة 2 وأضفها أولاً</p>
+                          <p>ادخل على <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> وانزل إلى <span dir="ltr" className="bg-background px-1 rounded">Bot Token Scopes</span></p>
+                          <p>أضف الصلاحيات حسب الطريقة اللي تبي البوت يشتغل فيها:</p>
+                          
+                          <p className="font-semibold mt-2">🔹 لو تبغى البوت يرد فقط لما أحد يمنشنه:</p>
+                          <p>أضف هذي الصلاحيات:</p>
+                          <div className="ml-4 space-y-1">
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mentions:read</code></p>
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
+                          </div>
+
+                          <p className="font-semibold mt-2">🔹 لو تبغى البوت يقرأ كل رسائل القناة ويرد بدون منشن:</p>
+                          <p>أضف هذي الصلاحيات:</p>
+                          <div className="ml-4 space-y-1">
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:history</code></p>
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:read</code></p>
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
+                          </div>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-4" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 4️⃣ : نسخ البيانات الضرورية</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">4️⃣ تثبيت التطبيق على الـ Workspace</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p className="font-semibold">نسخ الـ Bot Token:</p>
-                          <p>في نفس الصفحة (OAuth & Permissions) ابحث عن <span dir="ltr" className="bg-background px-1 rounded">"OAuth Tokens for Your Workspace"</span></p>
-                          <p>ستجد <span dir="ltr" className="bg-background px-1 rounded">"Bot User OAuth Token"</span> (يبدأ بـ xoxb-)</p>
-                          <p>انسخه والصقه في الحقل "Bot User OAuth Token" أدناه</p>
-                          <p className="font-semibold mt-3">نسخ الـ Signing Secret:</p>
-                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Basic Information"</span></p>
-                          <p>تحت <span dir="ltr" className="bg-background px-1 rounded">"App Credentials"</span> ستجد <span dir="ltr" className="bg-background px-1 rounded">"Signing Secret"</span></p>
-                          <p>انسخه والصقه في الحقل "Signing Secret" أدناه</p>
+                          <p>بعد إضافة الصلاحيات، ارجع لأعلى صفحة <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span></p>
+                          <p>واضغط <span dir="ltr" className="bg-background px-1 rounded">Install to Workspace</span> ثم وافق على الأذونات من خلال <span dir="ltr" className="bg-background px-1 rounded">Allow</span></p>
+                          <p className="text-green-600">✅ هذه الخطوة ضرورية عشان سلاك ينشئ لك الـ Bot Token بالصلاحيات اللي اخترتها</p>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-5" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 5️⃣ : تفعيل الأحداث</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">5️⃣ نسخ القيم المطلوبة</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Event Subscriptions"</span></p>
-                          <p>اضغط الزر <span dir="ltr" className="bg-background px-1 rounded">"On"</span></p>
-                          <p>تحت <span dir="ltr" className="bg-background px-1 rounded">"Request URL"</span> ستظهر خانة فارغة</p>
-                          <p>انسخ الرابط الظاهر أدناه تحت "رابط استقبال الأحداث (Events URL)" والصقه في هذي الخانة</p>
-                          <p>سيظهر لك checkmark أخضر = يعني نجحت التوصيلة</p>
+                          <p>بعد التثبيت، من نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> انسخ <span dir="ltr" className="bg-background px-1 rounded">Bot User OAuth Token</span> اللي يبدأ غالبًا بـ <span dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">xoxb-</span></p>
+                          <p>والصقه في الحقل "Bot User OAuth Token" أدناه</p>
+                          
+                          <p className="font-semibold mt-2">ثم:</p>
+                          <p>من صفحة <span dir="ltr" className="bg-background px-1 rounded">Basic Information</span> انسخ <span dir="ltr" className="bg-background px-1 rounded">Signing Secret</span></p>
+                          <p>والصقه في الحقل "Signing Secret" أدناه</p>
+                          <p className="text-xs opacity-75 mt-2">هذي القيم تلصقها في موقعك عشان يقدر يتكلم مع سلاك ويتأكد من صحة الطلبات</p>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-6" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 6️⃣ : إنشاء Webhook (اختياري)</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">6️⃣ تفعيل Event Subscriptions</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>اختياري: لو تبي نَسَق ترسل الأخبار لقناة معينة</p>
-                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Incoming Webhooks"</span></p>
-                          <p>اضغط <span dir="ltr" className="bg-background px-1 rounded">"Add New Webhook to Workspace"</span></p>
-                          <p>اختر القناة اللي تبي ترسل لها الأخبار</p>
-                          <p>انسخ الـ Webhook URL وألصقه في الحقل "Webhook URL — لإرسال الإشعارات" أدناه</p>
+                          <p>الآن ادخل على <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> من القائمة الجانبية</p>
+                          <p>فعّل خيار <span dir="ltr" className="bg-background px-1 rounded">Enable Events</span></p>
+                          <p>وألصق رابط الـ <span dir="ltr" className="bg-background px-1 rounded">Request URL</span> اللي يعطيك إياه موقعك (انسخ الرابط الظاهر أدناه تحت "رابط استقبال الأحداث")</p>
+                          <p>وانتظر لين يظهر لك أنه <span className="text-green-600">Verified</span></p>
+                          <p className="text-xs opacity-75 mt-2">هذا الرابط هو المكان اللي سلاك بيرسل له الأحداث (مثل الرسائل والمنشن) عشان موقعك يقدر يعالجها</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-7" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">7️⃣ اختيار طريقة عمل البوت</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p className="font-semibold">🔹 لو تبغى البوت يرد فقط على المنشن:</p>
+                          <p>في قسم <span dir="ltr" className="bg-background px-1 rounded">Subscribe to bot events</span> أضف الحدث:</p>
+                          <div className="ml-4 my-1">
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mention</code></p>
+                          </div>
+                          <p>بهذا الشكل سلاك يرسل لموقعك كل رسالة فيها منشن للبوت</p>
+
+                          <p className="font-semibold mt-3">🔹 لو تبغى البوت يقرأ كل رسائل القناة بدون منشن:</p>
+                          <p>في نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> أضف الحدث:</p>
+                          <div className="ml-4 my-1">
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">message.channels</code></p>
+                          </div>
+                          <p>وبكذا كل رسالة جديدة في القنوات العامة توصل لموقعك (مع ضرورة وجود صلاحيات <code dir="ltr" className="text-[10px] bg-background px-1">channels:history</code> و <code dir="ltr" className="text-[10px] bg-background px-1">channels:read</code>)</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-8" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">8️⃣ ملاحظات سريعة ⚠️</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p className="font-semibold">📌 أي تعديل على الصلاحيات (Scopes) يحتاج تعيد <span dir="ltr" className="bg-background px-1 rounded">Install to Workspace</span> عشان التوكن يتحدث</p>
+                          
+                          <p className="font-semibold mt-2">📌 تأكد أنك ضفت البوت داخل القناة من سلاك نفسه</p>
+                          <p>البوت ما يقدر يشوف أو يرد في قناة مو مضاف فيها</p>
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
