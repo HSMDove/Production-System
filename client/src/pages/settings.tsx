@@ -373,12 +373,12 @@ export default function Settings() {
                         <p className="text-[11px] mt-1 mr-4 opacity-75">اضغط <span dir="ltr">"Create New App"</span> → اختر <span dir="ltr">"From Scratch"</span> → أدخل اسم التطبيق (مثال: Nasaq) والـ Workspace</p>
                       </li>
                       <li>
-                        <strong>اذهب إلى <span dir="ltr">OAuth & Permissions</span> من القائمة اليسار:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">تحت <span dir="ltr">"Scopes"</span> → <span dir="ltr">"Bot Token Scopes"</span> اضغط <span dir="ltr">"Add an OAuth Scope"</span> وأضف:<br/><code className="text-[10px] bg-background px-1">chat:write</code> · <code className="text-[10px] bg-background px-1">users:read</code> · <code className="text-[10px] bg-background px-1">app_mentions:read</code></p>
+                        <strong>🔴 أهم خطوة: اذهب إلى <span dir="ltr">OAuth & Permissions</span> من القائمة اليسار:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75"><strong>قبل التثبيت، يجب إضافة الـ Scopes:</strong> تحت <span dir="ltr">"Scopes"</span> → <span dir="ltr">"Bot Token Scopes"</span> اضغط <span dir="ltr">"Add an OAuth Scope"</span> وأضف هذي الثلاثة واحد واحد:<br/><code className="text-[10px] bg-background px-1">chat:write</code> ثم <code className="text-[10px] bg-background px-1">users:read</code> ثم <code className="text-[10px] bg-background px-1">app_mentions:read</code></p>
                       </li>
                       <li>
-                        <strong>ثبّت التطبيق في الـ Workspace:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">أعلى الصفحة اضغط <span dir="ltr">"Install to Workspace"</span> ثم <span dir="ltr">"Allow"</span></p>
+                        <strong>بعد إضافة الـ Scopes: ثبّت التطبيق في الـ Workspace:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">الآن أعلى نفس الصفحة بعد إضافة الـ Scopes ستظهر زر <span dir="ltr">"Install to Workspace"</span> → اضغط عليه ثم <span dir="ltr">"Allow"</span><br/><span className="text-red-500">⚠️ لو قالت "doesn't have a bot user" = أنت ما أضفت الـ Scopes بعد. رجّع واضفها من الخطوة 2</span></p>
                       </li>
                       <li>
                         <strong>انسخ البيانات المطلوبة:</strong>
