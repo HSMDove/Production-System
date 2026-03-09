@@ -279,13 +279,25 @@ export default function Settings() {
                     <Switch dir="ltr" checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
                   </div>
 
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>افتح <a href="https://t.me/BotFather" target="_blank" className="text-primary underline" dir="ltr">@BotFather</a> في تيليجرام واكتب <code className="bg-background px-1 rounded" dir="ltr">/newbot</code></li>
-                      <li>انسخ الـ <span dir="ltr">Bot Token</span> وضعه هنا</li>
-                      <li>أضف الـ <span dir="ltr">Chat IDs</span> حقك (أرسل <code className="bg-background px-1 rounded" dir="ltr">/start</code> للبوت ثم أضف معرفك)</li>
-                      <li>اضبط الـ <span dir="ltr">Webhook</span> من الرابط الظاهر أدناه عشان فكري يرد عليك</li>
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">🤖 خطوات إنشاء البوت:</p>
+                    <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal list-inside">
+                      <li>
+                        <strong>افتح <span dir="ltr">@BotFather</span> في تيليجرام:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">اذهب لتطبيق تيليجرام، ابحث عن <span dir="ltr">@BotFather</span> واضغط "Start"</p>
+                      </li>
+                      <li>
+                        <strong>اكتب الأمر <span dir="ltr">/newbot</span> ثم اتبع الخطوات:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">سيطلب منك اسم البوت (مثال: نَسَق-bot)، ثم اسم المستخدم (يجب ينتهي بـ _bot)</p>
+                      </li>
+                      <li>
+                        <strong>انسخ الـ <span dir="ltr">Bot Token</span> من الرسالة:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">سيعطيك رسالة فيها Token طويل (مثال: <code className="text-[10px] bg-background px-1">123456789:ABCdefGHijKLmnoPQRstUVwxyz</code>). انسخه بسرعة وألصقه في الحقل أدناه</p>
+                      </li>
+                      <li>
+                        <strong>ثم اضغط <span dir="ltr">"API TOKEN"</span> واضغط <span dir="ltr">"Edit Webhook"</span></strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">انسخ الرابط الظاهر أدناه والصقه في المتصفح (لتوصيل البوت بـ نَسَق)</p>
+                      </li>
                     </ol>
                   </div>
 
@@ -311,8 +323,8 @@ export default function Settings() {
                   <Separator />
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">معرفات Chat ID المربوطة</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">أرسل رسالة للبوت وفكري بيعطيك الـ Chat ID حقك. أو استخدم @userinfobot في تيليجرام</TooltipContent></Tooltip></TooltipProvider>
+                      <Label className="text-xs font-medium">معرفات <span dir="ltr">Chat ID</span> المربوطة</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>كيف تجد Chat ID:</strong><br/>1️⃣ أرسل رسالة إلى البوت<br/>2️⃣ نَسَق سبرد ترد عليك برسالة فيها Chat ID حقك<br/>أو استخدم @userinfobot</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     {telegramIds.length > 0 && (
                       <div className="flex flex-wrap gap-2">
@@ -335,8 +347,8 @@ export default function Settings() {
 
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Chat ID</span> للإشعارات التلقائية</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">هذا الـ Chat ID اللي بترسل له الإشعارات التلقائية للأخبار الجديدة (ممكن يكون قروب أو قناة)</TooltipContent></Tooltip></TooltipProvider>
+                      <Label className="text-xs font-medium"><span dir="ltr">Chat ID</span> اختياري للإشعارات التلقائية</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>اختياري:</strong> هنا Chat ID للقروب أو القناة اللي بتبي نَسَق ترسل الأخبار الجديدة لها تلقائياً (غير رسائل المحادثة)</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="Chat ID للإشعارات" value={localSettings.telegram_chat_id || ""} onChange={(e) => updateSetting("telegram_chat_id", e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-notif-chat-id" />
                   </div>
@@ -353,14 +365,37 @@ export default function Settings() {
                     <Switch dir="ltr" checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
 
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>ادخل <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a> → <span dir="ltr">Create New App → From Scratch</span></li>
-                      <li>من <strong><span dir="ltr">OAuth & Permissions</span></strong> → أضف <span dir="ltr">Scopes</span>: <code className="bg-background px-1 rounded" dir="ltr">chat:write</code>, <code className="bg-background px-1 rounded" dir="ltr">users:read</code>, <code className="bg-background px-1 rounded" dir="ltr">app_mentions:read</code></li>
-                      <li>ثبّت التطبيق → انسخ <strong><span dir="ltr">Bot Token</span></strong> و <strong><span dir="ltr">Signing Secret</span></strong></li>
-                      <li>من <strong><span dir="ltr">Event Subscriptions</span></strong> → فعّلها والصق رابط الاستقبال الظاهر أدناه</li>
-                      <li>من <strong><span dir="ltr">Incoming Webhooks</span></strong> → أنشئ <span dir="ltr">Webhook URL</span> للقناة المطلوبة</li>
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">🔧 خطوات إعداد التطبيق:</p>
+                    <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal list-inside">
+                      <li>
+                        <strong>اذهب إلى <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a>:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">اضغط <span dir="ltr">"Create New App"</span> → اختر <span dir="ltr">"From Scratch"</span> → أدخل اسم التطبيق (مثال: Nasaq) والـ Workspace</p>
+                      </li>
+                      <li>
+                        <strong>اذهب إلى <span dir="ltr">OAuth & Permissions</span> من القائمة اليسار:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">تحت <span dir="ltr">"Scopes"</span> → <span dir="ltr">"Bot Token Scopes"</span> اضغط <span dir="ltr">"Add an OAuth Scope"</span> وأضف:<br/><code className="text-[10px] bg-background px-1">chat:write</code> · <code className="text-[10px] bg-background px-1">users:read</code> · <code className="text-[10px] bg-background px-1">app_mentions:read</code></p>
+                      </li>
+                      <li>
+                        <strong>ثبّت التطبيق في الـ Workspace:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">أعلى الصفحة اضغط <span dir="ltr">"Install to Workspace"</span> ثم <span dir="ltr">"Allow"</span></p>
+                      </li>
+                      <li>
+                        <strong>انسخ البيانات المطلوبة:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">في نفس الصفحة تحت <span dir="ltr">"OAuth Tokens for Your Workspace"</span> ستجد <span dir="ltr">Bot User OAuth Token</span> (يبدأ بـ xoxb-). انسخه وألصقه أدناه</p>
+                      </li>
+                      <li>
+                        <strong>جد <span dir="ltr">Signing Secret</span> من <span dir="ltr">Basic Information</span>:</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">اذهب لـ <span dir="ltr">"Basic Information"</span> من القائمة → تحت <span dir="ltr">"App Credentials"</span> ستجد <span dir="ltr">Signing Secret</span>. انسخه وألصقه أدناه</p>
+                      </li>
+                      <li>
+                        <strong>فعّل الأحداث (<span dir="ltr">Event Subscriptions</span>):</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">من القائمة اليسار → <span dir="ltr">"Event Subscriptions"</span> → اضغط <span dir="ltr">"On"</span> → في <span dir="ltr">"Request URL"</span> انسخ الرابط الظاهر أدناه والصقه هنا</p>
+                      </li>
+                      <li>
+                        <strong>أنشئ <span dir="ltr">Webhook URL</span> (اختياري):</strong>
+                        <p className="text-[11px] mt-1 mr-4 opacity-75">من القائمة → <span dir="ltr">"Incoming Webhooks"</span> → اضغط <span dir="ltr">"Add New Webhook to Workspace"</span> واختر القناة</p>
+                      </li>
                     </ol>
                   </div>
 
@@ -401,8 +436,8 @@ export default function Settings() {
                   <Separator />
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Slack Member IDs المربوطة</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">افتح بروفايلك في Slack → النقاط الثلاث → Copy member ID. أو أرسل رسالة لفكري في Slack وبيعطيك الـ ID حقك</TooltipContent></Tooltip></TooltipProvider>
+                      <Label className="text-xs font-medium"><span dir="ltr">Slack Member IDs</span> المربوطة</Label>
+                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>كيف تجد Member ID:</strong><br/>1️⃣ في Slack: اضغط على بروفايلك<br/>2️⃣ اضغط الـ 3 نقاط في الأعلى<br/>3️⃣ اختر "Copy member ID"<br/>أو أرسل رسالة لفكري وستجيب برسالة فيها ID حقك</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     {slackIds.length > 0 && (
                       <div className="flex flex-wrap gap-2">
