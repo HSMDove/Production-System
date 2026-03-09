@@ -303,10 +303,9 @@ export default function Settings() {
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط واضبطه في Telegram عشان فكري يستقبل رسائلك ويرد عليها مباشرة</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <div className="flex gap-2">
-                      <Input value={`${window.location.origin}/api/integrations/telegram/webhook`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-telegram-webhook-url" />
-                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/telegram/webhook`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-telegram-webhook"><Copy className="h-4 w-4" /></Button>
+                      <Input value="https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://67115f6f-a3c8-4cb2-9763-c294fe556101-00-3dexi67745dtk.riker.replit.dev/api/integrations/telegram/webhook" readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-telegram-webhook-url" />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText("https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://67115f6f-a3c8-4cb2-9763-c294fe556101-00-3dexi67745dtk.riker.replit.dev/api/integrations/telegram/webhook"); toast({ title: "تم النسخ" }); }} data-testid="button-copy-telegram-webhook"><Copy className="h-4 w-4" /></Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">لتفعيل الاستقبال: افتح المتصفح وادخل على:<br /><code className="text-[10px] bg-background px-1 rounded break-all" dir="ltr">{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${window.location.origin}/api/integrations/telegram/webhook`}</code></p>
                   </div>
 
                   <Separator />
