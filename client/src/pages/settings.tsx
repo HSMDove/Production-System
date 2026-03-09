@@ -420,117 +420,100 @@ export default function Settings() {
                       </AccordionItem>
 
                       <AccordionItem value="step-5" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">5️⃣ نسخ القيم المطلوبة</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>بعد التثبيت، من نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> انسخ <span dir="ltr" className="bg-background px-1 rounded">Bot User OAuth Token</span> اللي يبدأ غالبًا بـ <span dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">xoxb-</span></p>
-                          <p>والصقه في الحقل "Bot User OAuth Token" أدناه</p>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">5️⃣ نسخ القيم المطلوبة وإدخالها هنا</AccordionTrigger>
+                        <AccordionContent className="text-muted-foreground space-y-3">
+                          <p className="text-xs">بعد التثبيت، انسخ القيم من سلاك والصقها في الحقول أدناه:</p>
                           
-                          <p className="font-semibold mt-2">ثم:</p>
-                          <p>من صفحة <span dir="ltr" className="bg-background px-1 rounded">Basic Information</span> انسخ <span dir="ltr" className="bg-background px-1 rounded">Signing Secret</span></p>
-                          <p>والصقه في الحقل "Signing Secret" أدناه</p>
-                          <p className="text-xs opacity-75 mt-2">هذي القيم تلصقها في موقعك عشان يقدر يتكلم مع سلاك ويتأكد من صحة الطلبات</p>
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium"><span dir="ltr">Webhook URL</span> — لإرسال الإشعارات التلقائية</Label>
+                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">Incoming Webhooks</span> → <span dir="ltr" className="bg-background px-1 rounded">Add New Webhook</span></p>
+                            <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token (xoxb-...)</span></Label>
+                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> → <span dir="ltr" className="bg-background px-1 rounded">OAuth Tokens for Your Workspace</span></p>
+                            <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium"><span dir="ltr">Signing Secret</span></Label>
+                            <p className="text-[11px] text-muted-foreground">من <span dir="ltr" className="bg-background px-1 rounded">Basic Information</span> → <span dir="ltr" className="bg-background px-1 rounded">App Credentials</span></p>
+                            <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
+                          </div>
+
+                          <Button onClick={() => saveMutation.mutate(localSettings)} disabled={saveMutation.isPending || !hasChanges} className="w-full gap-2 mt-1" data-testid="button-save-slack-settings">
+                            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            حفظ التغييرات
+                          </Button>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-6" className="border rounded-lg px-3 mt-2">
                         <AccordionTrigger className="text-xs font-medium hover:no-underline">6️⃣ تفعيل Event Subscriptions</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>الآن ادخل على <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> من القائمة الجانبية</p>
-                          <p>فعّل خيار <span dir="ltr" className="bg-background px-1 rounded">Enable Events</span></p>
-                          <p>وألصق رابط الـ <span dir="ltr" className="bg-background px-1 rounded">Request URL</span> اللي يعطيك إياه موقعك (انسخ الرابط الظاهر أدناه تحت "رابط استقبال الأحداث")</p>
-                          <p>وانتظر لين يظهر لك أنه <span className="text-green-600">Verified</span></p>
-                          <p className="text-xs opacity-75 mt-2">هذا الرابط هو المكان اللي سلاك بيرسل له الأحداث (مثل الرسائل والمنشن) عشان موقعك يقدر يعالجها</p>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-7" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">7️⃣ اختيار طريقة عمل البوت</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p className="font-semibold">🔹 لو تبغى البوت يرد فقط على المنشن:</p>
-                          <p>في قسم <span dir="ltr" className="bg-background px-1 rounded">Subscribe to bot events</span> أضف الحدث:</p>
-                          <div className="ml-4 my-1">
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mention</code></p>
+                        <AccordionContent className="text-muted-foreground space-y-3">
+                          <p className="text-xs">الآن ادخل على <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> من القائمة الجانبية</p>
+                          <p className="text-xs">فعّل خيار <span dir="ltr" className="bg-background px-1 rounded">Enable Events</span></p>
+                          <p className="text-xs">انسخ رابط الاستقبال أدناه والصقه في خانة <span dir="ltr" className="bg-background px-1 rounded">Request URL</span></p>
+                          <p className="text-xs">وانتظر لين يظهر لك <span className="text-green-600 font-semibold">Verified</span></p>
+                          
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium">رابط استقبال الأحداث <span dir="ltr">(Events URL)</span></Label>
+                            <div className="flex gap-2">
+                              <Input value={`${window.location.origin}/api/integrations/slack/events`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-slack-events-url" />
+                              <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/slack/events`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-slack-events-url"><Copy className="h-4 w-4" /></Button>
+                            </div>
                           </div>
-                          <p>بهذا الشكل سلاك يرسل لموقعك كل رسالة فيها منشن للبوت</p>
-
-                          <p className="font-semibold mt-3">🔹 لو تبغى البوت يقرأ كل رسائل القناة بدون منشن:</p>
-                          <p>في نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> أضف الحدث:</p>
-                          <div className="ml-4 my-1">
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">message.channels</code></p>
-                          </div>
-                          <p>وبكذا كل رسالة جديدة في القنوات العامة توصل لموقعك (مع ضرورة وجود صلاحيات <code dir="ltr" className="text-[10px] bg-background px-1">channels:history</code> و <code dir="ltr" className="text-[10px] bg-background px-1">channels:read</code>)</p>
                         </AccordionContent>
                       </AccordionItem>
 
                       <AccordionItem value="step-8" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">8️⃣ ملاحظات سريعة ⚠️</AccordionTrigger>
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">7️⃣ اختيار طريقة عمل البوت</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p className="font-semibold">🔹 لو تبغى البوت يرد فقط على المنشن:</p>
+                          <p>في قسم <span dir="ltr" className="bg-background px-1 rounded">Subscribe to bot events</span> أضف الحدث:</p>
+                          <div className="ml-4 my-1"><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mention</code></div>
+                          <p className="font-semibold mt-3">🔹 لو تبغى البوت يقرأ كل رسائل القناة بدون منشن:</p>
+                          <p>في نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> أضف الحدث:</p>
+                          <div className="ml-4 my-1"><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">message.channels</code></div>
+                          <p>(مع ضرورة وجود صلاحيات <code dir="ltr" className="text-[10px] bg-background px-1">channels:history</code> و <code dir="ltr" className="text-[10px] bg-background px-1">channels:read</code>)</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-9" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">8️⃣ ربط معرفاتك بنَسَق</AccordionTrigger>
+                        <AccordionContent className="text-muted-foreground space-y-3">
+                          <p className="text-xs">أضف الـ Member IDs الخاصة بك عشان فكري يتعرف عليك في سلاك:</p>
+                          <p className="text-[11px] text-muted-foreground">كيف تجد Member ID: اضغط على بروفايلك في Slack → الـ 3 نقاط → <span dir="ltr" className="bg-background px-1 rounded">Copy member ID</span></p>
+                          {slackIds.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {slackIds.map((entry) => (
+                                <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-${entry.id}`}>
+                                  {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
+                                  <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-slack-${entry.id}`}><X className="h-3 w-3" /></button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Input placeholder="مثال: U0123456789" value={newSlackId} onChange={(e) => setNewSlackId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-id" />
+                            <Input placeholder="تسمية (اختياري)" value={newSlackLabel} onChange={(e) => setNewSlackLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-label" />
+                            <Button variant="outline" size="icon" className="shrink-0" disabled={!newSlackId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !slackEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "slack", platformId: newSlackId.trim(), label: newSlackLabel.trim() || undefined })} data-testid="button-add-slack-id">
+                              {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-10" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">9️⃣ ملاحظات سريعة ⚠️</AccordionTrigger>
                         <AccordionContent className="text-xs text-muted-foreground space-y-2">
                           <p className="font-semibold">📌 أي تعديل على الصلاحيات (Scopes) يحتاج تعيد <span dir="ltr" className="bg-background px-1 rounded">Install to Workspace</span> عشان التوكن يتحدث</p>
-                          
                           <p className="font-semibold mt-2">📌 تأكد أنك ضفت البوت داخل القناة من سلاك نفسه</p>
                           <p>البوت ما يقدر يشوف أو يرد في قناة مو مضاف فيها</p>
                         </AccordionContent>
                       </AccordionItem>
                     </Accordion>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">رابط استقبال الأحداث <span dir="ltr">(Events URL)</span></Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط والصقه في Slack → Event Subscriptions → Request URL</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input value={`${window.location.origin}/api/integrations/slack/events`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-slack-events-url" />
-                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/slack/events`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-slack-events-url"><Copy className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-
-                  <Separator />
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Webhook URL</span> — لإرسال الإشعارات</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Incoming Webhooks → أنشئ Webhook URL جديد. يُستخدم لإرسال الأخبار التلقائية للقناة</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token (xoxb-...)</span></Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">OAuth & Permissions → Bot User OAuth Token. يمكّن البوت من الرد على رسائلك وجلب معلومات المستخدمين</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Signing Secret</span></Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Basic Information → App Credentials → Signing Secret. يتحقق إن الرسائل اللي توصل فعلاً قادمة من Slack</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
-                  </div>
-
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Slack Member IDs</span> المربوطة</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>كيف تجد Member ID:</strong><br/>1️⃣ في Slack: اضغط على بروفايلك<br/>2️⃣ اضغط الـ 3 نقاط في الأعلى<br/>3️⃣ اختر "Copy member ID"<br/>أو أرسل رسالة لفكري وستجيب برسالة فيها ID حقك</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    {slackIds.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {slackIds.map((entry) => (
-                          <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-${entry.id}`}>
-                            {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
-                            <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-slack-${entry.id}`}><X className="h-3 w-3" /></button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Input placeholder="مثال: U0123456789" value={newSlackId} onChange={(e) => setNewSlackId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-id" />
-                      <Input placeholder="تسمية (اختياري)" value={newSlackLabel} onChange={(e) => setNewSlackLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-label" />
-                      <Button variant="outline" size="icon" className="shrink-0" disabled={!newSlackId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !slackEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "slack", platformId: newSlackId.trim(), label: newSlackLabel.trim() || undefined })} data-testid="button-add-slack-id">
-                        {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      </Button>
-                    </div>
                   </div>
 
                   <div className="flex gap-2">
