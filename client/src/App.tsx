@@ -20,6 +20,7 @@ import OnboardingPage from "@/pages/onboarding";
 import NotFound from "@/pages/not-found";
 import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
 import { FikriOverlay } from "@/components/fikri/fikri-overlay";
+import { TeaserBanner } from "@/components/teaser-banner";
 
 function Router() {
   return (
@@ -51,6 +52,7 @@ function App() {
               <Toaster />
               <Router />
               <FikriOverlay />
+              <TeaserBanner />
             </AuthGuard>
           </FikriOverlayProvider>
         </TooltipProvider>
