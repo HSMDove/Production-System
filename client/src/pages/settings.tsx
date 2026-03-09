@@ -273,7 +273,7 @@ export default function Settings() {
                 </div>
 
                 {/* ── Telegram Section ── */}
-                <div className="space-y-4 rounded-lg border p-4">
+                <div className="space-y-4 rounded-lg border p-4" dir="rtl">
                   <div className="flex items-center justify-between">
                     <div className="font-medium flex items-center gap-2"><Send className="h-4 w-4 text-blue-500" /> تيليجرام</div>
                     <Switch checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
@@ -282,16 +282,16 @@ export default function Settings() {
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
                     <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>افتح <a href="https://t.me/BotFather" target="_blank" className="text-primary underline">@BotFather</a> في تيليجرام واكتب <code className="bg-background px-1 rounded">/newbot</code></li>
-                      <li>انسخ الـ Bot Token وضعه هنا</li>
-                      <li>أضف الـ Chat IDs حقك (أرسل <code className="bg-background px-1 rounded">/start</code> للبوت ثم أضف معرفك)</li>
-                      <li>اضبط الـ Webhook من الرابط الظاهر أدناه عشان فكري يرد عليك</li>
+                      <li>افتح <a href="https://t.me/BotFather" target="_blank" className="text-primary underline" dir="ltr">@BotFather</a> في تيليجرام واكتب <code className="bg-background px-1 rounded" dir="ltr">/newbot</code></li>
+                      <li>انسخ الـ <span dir="ltr">Bot Token</span> وضعه هنا</li>
+                      <li>أضف الـ <span dir="ltr">Chat IDs</span> حقك (أرسل <code className="bg-background px-1 rounded" dir="ltr">/start</code> للبوت ثم أضف معرفك)</li>
+                      <li>اضبط الـ <span dir="ltr">Webhook</span> من الرابط الظاهر أدناه عشان فكري يرد عليك</li>
                     </ol>
                   </div>
 
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Bot Token</Label>
+                      <Label className="text-xs font-medium"><span dir="ltr">Bot Token</span></Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">من @BotFather في تيليجرام → /newbot → سيعطيك Token يبدأ بأرقام:حروف</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="123456789:ABCdef..." type="password" value={localSettings.telegram_bot_token || ""} onChange={(e) => updateSetting("telegram_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-bot-token" />
@@ -299,14 +299,14 @@ export default function Settings() {
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">رابط استقبال الرسائل (Webhook)</Label>
+                      <Label className="text-xs font-medium">رابط استقبال الرسائل <span dir="ltr">(Webhook)</span></Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط واضبطه في Telegram عشان فكري يستقبل رسائلك ويرد عليها مباشرة</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <div className="flex gap-2">
                       <Input value={`${window.location.origin}/api/integrations/telegram/webhook`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-telegram-webhook-url" />
                       <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/telegram/webhook`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-telegram-webhook"><Copy className="h-4 w-4" /></Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">لتفعيل الاستقبال: افتح المتصفح وادخل على:<br /><code className="text-[10px] bg-background px-1 rounded break-all">{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${window.location.origin}/api/integrations/telegram/webhook`}</code></p>
+                    <p className="text-xs text-muted-foreground">لتفعيل الاستقبال: افتح المتصفح وادخل على:<br /><code className="text-[10px] bg-background px-1 rounded break-all" dir="ltr">{`https://api.telegram.org/bot<TOKEN>/setWebhook?url=${window.location.origin}/api/integrations/telegram/webhook`}</code></p>
                   </div>
 
                   <Separator />
@@ -336,7 +336,7 @@ export default function Settings() {
 
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Chat ID للإشعارات التلقائية</Label>
+                      <Label className="text-xs font-medium"><span dir="ltr">Chat ID</span> للإشعارات التلقائية</Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">هذا الـ Chat ID اللي بترسل له الإشعارات التلقائية للأخبار الجديدة (ممكن يكون قروب أو قناة)</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="Chat ID للإشعارات" value={localSettings.telegram_chat_id || ""} onChange={(e) => updateSetting("telegram_chat_id", e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-notif-chat-id" />
@@ -348,7 +348,7 @@ export default function Settings() {
                 </div>
 
                 {/* ── Slack Section ── */}
-                <div className="space-y-4 rounded-lg border p-4">
+                <div className="space-y-4 rounded-lg border p-4" dir="rtl">
                   <div className="flex items-center justify-between">
                     <div className="font-medium">Slack</div>
                     <Switch checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
@@ -357,17 +357,17 @@ export default function Settings() {
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground">خطوات الإعداد:</p>
                     <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>ادخل <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline">api.slack.com/apps</a> → Create New App → From Scratch</li>
-                      <li>من <strong>OAuth & Permissions</strong> → أضف Scopes: <code className="bg-background px-1 rounded">chat:write</code>, <code className="bg-background px-1 rounded">users:read</code>, <code className="bg-background px-1 rounded">app_mentions:read</code></li>
-                      <li>ثبّت التطبيق → انسخ <strong>Bot Token</strong> و <strong>Signing Secret</strong></li>
-                      <li>من <strong>Event Subscriptions</strong> → فعّلها والصق رابط الاستقبال الظاهر أدناه</li>
-                      <li>من <strong>Incoming Webhooks</strong> → أنشئ Webhook URL للقناة المطلوبة</li>
+                      <li>ادخل <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a> → <span dir="ltr">Create New App → From Scratch</span></li>
+                      <li>من <strong><span dir="ltr">OAuth & Permissions</span></strong> → أضف <span dir="ltr">Scopes</span>: <code className="bg-background px-1 rounded" dir="ltr">chat:write</code>, <code className="bg-background px-1 rounded" dir="ltr">users:read</code>, <code className="bg-background px-1 rounded" dir="ltr">app_mentions:read</code></li>
+                      <li>ثبّت التطبيق → انسخ <strong><span dir="ltr">Bot Token</span></strong> و <strong><span dir="ltr">Signing Secret</span></strong></li>
+                      <li>من <strong><span dir="ltr">Event Subscriptions</span></strong> → فعّلها والصق رابط الاستقبال الظاهر أدناه</li>
+                      <li>من <strong><span dir="ltr">Incoming Webhooks</span></strong> → أنشئ <span dir="ltr">Webhook URL</span> للقناة المطلوبة</li>
                     </ol>
                   </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">رابط استقبال الأحداث (Events URL)</Label>
+                      <Label className="text-xs font-medium">رابط استقبال الأحداث <span dir="ltr">(Events URL)</span></Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط والصقه في Slack → Event Subscriptions → Request URL</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <div className="flex gap-2">
@@ -379,21 +379,21 @@ export default function Settings() {
                   <Separator />
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Webhook URL — لإرسال الإشعارات</Label>
+                      <Label className="text-xs font-medium"><span dir="ltr">Webhook URL</span> — لإرسال الإشعارات</Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Incoming Webhooks → أنشئ Webhook URL جديد. يُستخدم لإرسال الأخبار التلقائية للقناة</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Bot User OAuth Token (xoxb-...)</Label>
+                      <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token (xoxb-...)</span></Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">OAuth & Permissions → Bot User OAuth Token. يمكّن البوت من الرد على رسائلك وجلب معلومات المستخدمين</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">Signing Secret</Label>
+                      <Label className="text-xs font-medium"><span dir="ltr">Signing Secret</span></Label>
                       <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">Basic Information → App Credentials → Signing Secret. يتحقق إن الرسائل اللي توصل فعلاً قادمة من Slack</TooltipContent></Tooltip></TooltipProvider>
                     </div>
                     <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
