@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -365,38 +366,82 @@ export default function Settings() {
                     <Switch dir="ltr" checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
 
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-3">
+                  <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground">🔧 خطوات إعداد التطبيق:</p>
-                    <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal list-inside">
-                      <li>
-                        <strong>اذهب إلى <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a>:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">اضغط <span dir="ltr">"Create New App"</span> → اختر <span dir="ltr">"From Scratch"</span> → أدخل اسم التطبيق (مثال: Nasaq) والـ Workspace</p>
-                      </li>
-                      <li>
-                        <strong>🔴 أهم خطوة: اذهب إلى <span dir="ltr">OAuth & Permissions</span> من القائمة اليسار:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75"><strong>قبل التثبيت، يجب إضافة الـ Scopes:</strong> تحت <span dir="ltr">"Scopes"</span> → <span dir="ltr">"Bot Token Scopes"</span> اضغط <span dir="ltr">"Add an OAuth Scope"</span> وأضف هذي الثلاثة واحد واحد:<br/><code className="text-[10px] bg-background px-1">chat:write</code> ثم <code className="text-[10px] bg-background px-1">users:read</code> ثم <code className="text-[10px] bg-background px-1">app_mentions:read</code></p>
-                      </li>
-                      <li>
-                        <strong>بعد إضافة الـ Scopes: ثبّت التطبيق في الـ Workspace:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">الآن أعلى نفس الصفحة بعد إضافة الـ Scopes ستظهر زر <span dir="ltr">"Install to Workspace"</span> → اضغط عليه ثم <span dir="ltr">"Allow"</span><br/><span className="text-red-500">⚠️ لو قالت "doesn't have a bot user" = أنت ما أضفت الـ Scopes بعد. رجّع واضفها من الخطوة 2</span></p>
-                      </li>
-                      <li>
-                        <strong>انسخ البيانات المطلوبة:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">في نفس الصفحة تحت <span dir="ltr">"OAuth Tokens for Your Workspace"</span> ستجد <span dir="ltr">Bot User OAuth Token</span> (يبدأ بـ xoxb-). انسخه وألصقه أدناه</p>
-                      </li>
-                      <li>
-                        <strong>جد <span dir="ltr">Signing Secret</span> من <span dir="ltr">Basic Information</span>:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">اذهب لـ <span dir="ltr">"Basic Information"</span> من القائمة → تحت <span dir="ltr">"App Credentials"</span> ستجد <span dir="ltr">Signing Secret</span>. انسخه وألصقه أدناه</p>
-                      </li>
-                      <li>
-                        <strong>فعّل الأحداث (<span dir="ltr">Event Subscriptions</span>):</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">من القائمة اليسار → <span dir="ltr">"Event Subscriptions"</span> → اضغط <span dir="ltr">"On"</span> → في <span dir="ltr">"Request URL"</span> انسخ الرابط الظاهر أدناه والصقه هنا</p>
-                      </li>
-                      <li>
-                        <strong>أنشئ <span dir="ltr">Webhook URL</span> (اختياري):</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">من القائمة → <span dir="ltr">"Incoming Webhooks"</span> → اضغط <span dir="ltr">"Add New Webhook to Workspace"</span> واختر القناة</p>
-                      </li>
-                    </ol>
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="step-1" className="border rounded-lg px-3">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 1️⃣ : إنشاء التطبيق</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p>اذهب إلى <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a></p>
+                          <p>ثم اضغط <span dir="ltr" className="bg-background px-1 rounded">"Create New App"</span></p>
+                          <p>اختر <span dir="ltr" className="bg-background px-1 rounded">"From Scratch"</span></p>
+                          <p>أدخل اسم التطبيق (مثال: Nasaq) واختر الـ Workspace اللي تبي</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-2" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 2️⃣ : إضافة الصلاحيات (مهمة جداً! 🔴)</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p className="font-semibold">⚠️ هذي الخطوة لازم تسويها قبل التثبيت!</p>
+                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"OAuth & Permissions"</span></p>
+                          <p>ابحث عن <span dir="ltr" className="bg-background px-1 rounded">"Bot Token Scopes"</span></p>
+                          <p>اضغط <span dir="ltr" className="bg-background px-1 rounded">"Add an OAuth Scope"</span> وأضف هذي الثلاثة (واحد واحد):</p>
+                          <div className="ml-4 space-y-1">
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">users:read</code></p>
+                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mentions:read</code></p>
+                          </div>
+                          <p className="text-red-500 font-semibold">اذا لم تضيف هذي الـ Scopes = سيظهر خطأ في الخطوة التالية</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-3" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 3️⃣ : تثبيت التطبيق في الـ Workspace</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p>بعد إضافة الـ Scopes من الخطوة 2 ستظهر في أعلى الصفحة زر <span dir="ltr" className="bg-background px-1 rounded">"Install to Workspace"</span></p>
+                          <p>اضغط عليه</p>
+                          <p>ثم اضغط <span dir="ltr" className="bg-background px-1 rounded">"Allow"</span></p>
+                          <p className="text-red-500 font-semibold">🚨 لو ظهر خطأ "doesn't have a bot user":</p>
+                          <p className="ml-4 text-red-500">= معناه ما أضفت الـ Scopes بعد. رجّع للخطوة 2 وأضفها أولاً</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-4" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 4️⃣ : نسخ البيانات الضرورية</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p className="font-semibold">نسخ الـ Bot Token:</p>
+                          <p>في نفس الصفحة (OAuth & Permissions) ابحث عن <span dir="ltr" className="bg-background px-1 rounded">"OAuth Tokens for Your Workspace"</span></p>
+                          <p>ستجد <span dir="ltr" className="bg-background px-1 rounded">"Bot User OAuth Token"</span> (يبدأ بـ xoxb-)</p>
+                          <p>انسخه والصقه في الحقل "Bot User OAuth Token" أدناه</p>
+                          <p className="font-semibold mt-3">نسخ الـ Signing Secret:</p>
+                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Basic Information"</span></p>
+                          <p>تحت <span dir="ltr" className="bg-background px-1 rounded">"App Credentials"</span> ستجد <span dir="ltr" className="bg-background px-1 rounded">"Signing Secret"</span></p>
+                          <p>انسخه والصقه في الحقل "Signing Secret" أدناه</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-5" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 5️⃣ : تفعيل الأحداث</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Event Subscriptions"</span></p>
+                          <p>اضغط الزر <span dir="ltr" className="bg-background px-1 rounded">"On"</span></p>
+                          <p>تحت <span dir="ltr" className="bg-background px-1 rounded">"Request URL"</span> ستظهر خانة فارغة</p>
+                          <p>انسخ الرابط الظاهر أدناه تحت "رابط استقبال الأحداث (Events URL)" والصقه في هذي الخانة</p>
+                          <p>سيظهر لك checkmark أخضر = يعني نجحت التوصيلة</p>
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="step-6" className="border rounded-lg px-3 mt-2">
+                        <AccordionTrigger className="text-xs font-medium hover:no-underline">خطوة 6️⃣ : إنشاء Webhook (اختياري)</AccordionTrigger>
+                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
+                          <p>اختياري: لو تبي نَسَق ترسل الأخبار لقناة معينة</p>
+                          <p>من القائمة اليسار اضغط <span dir="ltr" className="bg-background px-1 rounded">"Incoming Webhooks"</span></p>
+                          <p>اضغط <span dir="ltr" className="bg-background px-1 rounded">"Add New Webhook to Workspace"</span></p>
+                          <p>اختر القناة اللي تبي ترسل لها الأخبار</p>
+                          <p>انسخ الـ Webhook URL وألصقه في الحقل "Webhook URL — لإرسال الإشعارات" أدناه</p>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   </div>
 
                   <div className="space-y-2">
