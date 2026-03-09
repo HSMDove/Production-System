@@ -45,3 +45,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_database:1.0.0", "javascript_openai_ai_integrations:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+NEON_DATABASE_URL = "postgresql://neondb_owner:npg_UQJmc7tv3BPi@ep-steep-star-ad1raxqp.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require"

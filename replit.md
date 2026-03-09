@@ -127,9 +127,12 @@ Developer: حسام تيك فيلد (Hossam TechField)
 ### Data Storage
 
 **Database**
-- PostgreSQL as the primary relational database
+- PostgreSQL hosted on **Neon** (cloud) — migrated from Replit's built-in Helium DB
+- Connection string stored in `NEON_DATABASE_URL` env var (shared environment)
+- `server/db.ts` and `drizzle.config.ts` prefer `NEON_DATABASE_URL` over `DATABASE_URL`
+- Direct endpoint (non-pooler) used for DDL compatibility
 - Drizzle ORM for type-safe database queries and schema management
-- Connection pooling via node-postgres (pg) for performance
+- Connection pooling via node-postgres (pg) with SSL for Neon
 
 **Schema Design**
 
