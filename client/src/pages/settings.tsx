@@ -276,7 +276,7 @@ export default function Settings() {
                 <div className="space-y-4 rounded-lg border p-4" dir="rtl">
                   <div className="flex items-center justify-between">
                     <div className="font-medium flex items-center gap-2"><Send className="h-4 w-4 text-blue-500" /> تيليجرام</div>
-                    <Switch checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
+                    <Switch dir="ltr" checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
                   </div>
 
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
@@ -351,7 +351,7 @@ export default function Settings() {
                 <div className="space-y-4 rounded-lg border p-4" dir="rtl">
                   <div className="flex items-center justify-between">
                     <div className="font-medium">Slack</div>
-                    <Switch checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
+                    <Switch dir="ltr" checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
                   </div>
 
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
