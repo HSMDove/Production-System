@@ -1,21 +1,15 @@
 import { useState, useEffect } from "react";
 import { X, Sparkles } from "lucide-react";
 
-const STORAGE_KEY = "nasaq2-teaser-dismissed";
-
 export function TeaserBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem(STORAGE_KEY);
-    if (!dismissed) {
-      const timer = setTimeout(() => setVisible(true), 800);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => setVisible(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem(STORAGE_KEY, "true");
     setVisible(false);
   };
 
