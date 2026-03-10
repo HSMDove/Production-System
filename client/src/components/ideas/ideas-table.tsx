@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { IdeaWithFolder } from "@/lib/types";
-import { ideaStatusLabels, getCategoryColor, statusColors } from "@/lib/types";
+import { ideaStatusLabels, ideaCategoryLabels, statusColors, categoryColors } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -84,7 +84,7 @@ export function IdeasTable({
         <TableBody>
           {ideas.map((idea, index) => {
             const statusColor = statusColors[idea.status] || statusColors.raw_idea;
-            const categoryColor = getCategoryColor(idea.category);
+            const categoryColor = categoryColors[idea.category] || categoryColors.other;
             
             return (
               <TableRow
@@ -109,7 +109,7 @@ export function IdeasTable({
                     variant="secondary" 
                     className={`${categoryColor.bg} ${categoryColor.text}`}
                   >
-                    {idea.category || "بدون فئة"}
+                    {ideaCategoryLabels[idea.category] || idea.category}
                   </Badge>
                 </TableCell>
                 <TableCell>

@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { PromptTemplate, Folder, Idea } from "@shared/schema";
-import { getCategoryColor } from "@/lib/types";
+import { ideaCategoryLabels, categoryColors } from "@/lib/types";
 
 interface SmartGenerateDialogProps {
   open: boolean;
@@ -424,7 +424,7 @@ function IdeaResultCard({
   templates?: PromptTemplate[];
 }) {
   const template = templates?.find((t) => t.id === idea.templateId);
-  const catColors = getCategoryColor(idea.category);
+  const catColors = categoryColors[idea.category] || categoryColors.other;
 
   return (
     <Card data-testid={`result-card-${idea.id}`}>
@@ -441,7 +441,7 @@ function IdeaResultCard({
                 </Badge>
               )}
               <Badge className={`${catColors.bg} ${catColors.text} text-xs`}>
-                {idea.category || "بدون فئة"}
+                {ideaCategoryLabels[idea.category] || idea.category}
               </Badge>
               {idea.estimatedDuration && (
                 <span className="text-xs text-muted-foreground">

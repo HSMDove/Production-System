@@ -1,10 +1,9 @@
 import OpenAI from "openai";
-import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
+import type { Content, IdeaCategory, InsertIdea, PromptTemplate, SentimentType } from "@shared/schema";
 import { storage } from "./storage";
 
-async function getSettingsMap(userId?: string): Promise<Map<string, string | null>> {
-  if (!userId) return new Map();
-  const allSettings = await storage.getAllSettings(userId);
+async function getSettingsMap(): Promise<Map<string, string | null>> {
+  const allSettings = await storage.getAllSettings();
   const map = new Map<string, string | null>();
   for (const s of allSettings) {
     map.set(s.key, s.value);
@@ -12,118 +11,47 @@ async function getSettingsMap(userId?: string): Promise<Map<string, string | nul
   return map;
 }
 
-async function getSystemDefaults(): Promise<{ baseURL: string; apiKey: string; model: string; miniModel: string }> {
-  const [baseUrlSetting, apiKeySetting, modelSetting, miniModelSetting] = await Promise.all([
-    storage.getSystemSetting("default_ai_base_url"),
-    storage.getSystemSetting("default_ai_api_key"),
-    storage.getSystemSetting("default_ai_model"),
-    storage.getSystemSetting("default_ai_mini_model"),
-  ]);
-
-  const adminBaseUrl = baseUrlSetting?.value?.trim() || "";
-  const adminApiKey = apiKeySetting?.value?.trim() || "";
-  const adminModel = modelSetting?.value?.trim() || "gpt-4o";
-  const adminMiniModel = miniModelSetting?.value?.trim() || "gpt-4o-mini";
-
-  return {
-    baseURL: adminBaseUrl || process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "",
-    apiKey: adminApiKey || process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "",
-    model: adminModel,
-    miniModel: adminMiniModel,
-  };
-}
-
-export type AIClientResult = { client: OpenAI; model: string; miniModel: string; providerUsed: ApiProviderType };
-
-export async function getAIClient(userId?: string): Promise<AIClientResult> {
-  const userSettings = await getSettingsMap(userId);
-
-  const provider = userSettings.get("ai_provider") || "replit";
+export async function getAIClient(): Promise<{ client: OpenAI; model: string; miniModel: string }> {
+  const settings = await getSettingsMap();
+  const provider = settings.get("ai_provider") || "replit";
 
   if (provider === "custom") {
-    const apiKey = userSettings.get("ai_custom_api_key");
-    const baseURL = userSettings.get("ai_custom_base_url");
-    const model = userSettings.get("ai_custom_model") || "gpt-4o";
+    const baseURL = settings.get("ai_custom_base_url");
+    const apiKey = settings.get("ai_custom_api_key") || "not-needed";
+    const model = settings.get("ai_custom_model") || "llama3";
 
-    if (!apiKey || !apiKey.trim()) {
-      throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
-    }
-
-    const clientOpts: { apiKey: string; baseURL?: string } = { apiKey: apiKey.trim() };
-    if (baseURL && baseURL.trim()) {
-      clientOpts.baseURL = baseURL.trim();
-    }
-
-    return {
-      client: new OpenAI(clientOpts),
-      model,
-      miniModel: model,
-      providerUsed: "custom_api",
-    };
-  }
-
-  if (provider === "local") {
-    const baseURL = userSettings.get("ai_custom_base_url");
-    const apiKey = userSettings.get("ai_custom_api_key") || "local";
-    const model = userSettings.get("ai_custom_model") || "llama3";
-
-    if (!baseURL || !baseURL.trim()) {
-      throw new Error("يرجى إدخال Base URL للنموذج المحلي (مثل: http://localhost:11434/v1)");
+    if (!baseURL) {
+      return {
+        client: new OpenAI({
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        }),
+        model: "gpt-4o",
+        miniModel: "gpt-4o-mini",
+      };
     }
 
     return {
-      client: new OpenAI({ baseURL: baseURL.trim(), apiKey: apiKey.trim() || "local" }),
+      client: new OpenAI({ baseURL, apiKey }),
       model,
       miniModel: model,
-      providerUsed: "custom_api",
     };
   }
 
-  const defaults = await getSystemDefaults();
-  if (!defaults.apiKey) {
-    throw new Error("لم يتم تكوين مزود الذكاء الاصطناعي الافتراضي. يرجى التواصل مع المدير أو اختيار مزود مخصص من الإعدادات.");
-  }
   return {
     client: new OpenAI({
-      baseURL: defaults.baseURL || undefined,
-      apiKey: defaults.apiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
     }),
-    model: defaults.model,
-    miniModel: defaults.miniModel,
-    providerUsed: "system_default",
+    model: "gpt-4o",
+    miniModel: "gpt-4o-mini",
   };
-}
-
-export async function logAIRequest(
-  userId: string,
-  requestType: ApiRequestType,
-  providerUsed: ApiProviderType,
-  model: string | null,
-  success: boolean,
-  startTime: number,
-  errorMessage?: string,
-  tokensUsed?: number
-): Promise<void> {
-  try {
-    await storage.logApiUsage({
-      userId,
-      requestType,
-      providerUsed,
-      model,
-      success,
-      errorMessage: errorMessage || null,
-      tokensUsed: tokensUsed ?? null,
-      responseTimeMs: Date.now() - startTime,
-    });
-  } catch (e) {
-    console.error("[logAIRequest] Failed to log:", e);
-  }
 }
 
 interface GeneratedIdea {
   title: string;
   description: string;
-  category: string;
+  category: IdeaCategory;
   estimatedDuration: string;
   targetAudience: string;
 }
@@ -132,7 +60,7 @@ export interface SmartGeneratedIdea {
   title: string;
   thumbnailText: string;
   script: string;
-  category: string;
+  category: IdeaCategory;
   estimatedDuration: string;
   targetAudience: string;
   sourceIndices: number[];
@@ -143,7 +71,7 @@ export interface SmartIdeaResult {
   thumbnailText: string;
   script: string;
   description: string;
-  category: string;
+  category: IdeaCategory;
   estimatedDuration: string;
   targetAudience: string;
   sourceContentIds: string[];
@@ -162,7 +90,7 @@ const DEFAULT_PROMPT = `أنت منتج محتوى تقني عربي متخصص 
 قم بإنشاء 3-5 أفكار فيديو مبتكرة. لكل فكرة، قدم:
 - عنوان جذاب بالعربية
 - وصف مختصر (2-3 جمل)
-- نوع/فئة الفيديو
+- نوع الفيديو من القائمة التالية فقط: thalathiyat (ثلاثيات - فيديوهات قصيرة), leh (ليه - شرح أسباب), tech_i_use (تقنية أستخدمها), news_roundup (ملخص أخبار), deep_dive (تعمق), comparison (مقارنة), tutorial (شرح), other (أخرى)
 - المدة التقريبية (مثل: 5-8 دقائق)
 - الجمهور المستهدف
 
@@ -188,8 +116,7 @@ export async function generateIdeasFromContent(
   folderName: string,
   folderId: string,
   customTemplate?: PromptTemplate | null,
-  existingTitles?: string[],
-  userId?: string
+  existingTitles?: string[]
 ): Promise<InsertIdea[]> {
   if (contentItems.length === 0) {
     return [];
@@ -226,8 +153,7 @@ export async function generateIdeasFromContent(
   }
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -243,8 +169,6 @@ export async function generateIdeasFromContent(
       response_format: { type: "json_object" },
       temperature: 0.8,
     });
-
-    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -275,8 +199,7 @@ export interface ContentAnalysis {
 }
 
 export async function analyzeContentSentiment(
-  contentItems: Content[],
-  userId?: string
+  contentItems: Content[]
 ): Promise<Map<string, ContentAnalysis>> {
   if (contentItems.length === 0) {
     return new Map();
@@ -310,8 +233,7 @@ ${contentList}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -327,8 +249,6 @@ ${contentList}
       response_format: { type: "json_object" },
       temperature: 0.3,
     });
-
-    if (userId) await logAIRequest(userId, "ai_sentiment", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
 
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
@@ -370,8 +290,7 @@ export interface TrendingTopic {
 export async function generateArabicSummary(
   title: string,
   summary: string | null,
-  customSystemPrompt?: string | null,
-  userId?: string
+  customSystemPrompt?: string | null
 ): Promise<string | null> {
   if (!title && !summary) return null;
   
@@ -391,8 +310,7 @@ export async function generateArabicSummary(
     : defaultSystemMsg;
 
   try {
-    const { client, miniModel, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, miniModel } = await getAIClient();
     const response = await client.chat.completions.create({
       model: miniModel,
       messages: [
@@ -409,7 +327,6 @@ export async function generateArabicSummary(
       max_tokens: 200,
     });
 
-    if (userId) await logAIRequest(userId, "ai_summary", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     return response.choices[0]?.message?.content?.trim() || null;
   } catch (error) {
     console.error("Error generating Arabic summary:", error);
@@ -421,8 +338,7 @@ export async function generateDetailedArabicExplanation(
   title: string,
   summary: string | null,
   url: string | null,
-  customSystemPrompt?: string | null,
-  userId?: string
+  customSystemPrompt?: string | null
 ): Promise<string> {
   const textToExplain = `${title}${summary ? `\n\n${summary}` : ''}`;
 
@@ -445,8 +361,7 @@ export async function generateDetailedArabicExplanation(
   }
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -463,7 +378,6 @@ export async function generateDetailedArabicExplanation(
       max_tokens: 800,
     });
 
-    if (userId) await logAIRequest(userId, "ai_explain", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
     return response.choices[0]?.message?.content?.trim() || "لم نتمكن من توليد الشرح";
   } catch (error) {
     console.error("Error generating detailed explanation:", error);
@@ -479,8 +393,7 @@ export interface ProfessionalTranslation {
 export async function generateProfessionalTranslation(
   title: string,
   summary: string | null,
-  customSystemPrompt?: string | null,
-  userId?: string
+  customSystemPrompt?: string | null
 ): Promise<ProfessionalTranslation | null> {
   if (!title) return null;
   
@@ -510,8 +423,7 @@ export async function generateProfessionalTranslation(
     : defaultTranslationPrompt;
 
   try {
-    const { client, miniModel, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, miniModel } = await getAIClient();
     const response = await client.chat.completions.create({
       model: miniModel,
       messages: [
@@ -538,7 +450,6 @@ ${summary ? `الملخص: ${summary}` : ''}
       max_tokens: 500,
     });
 
-    if (userId) await logAIRequest(userId, "ai_translate", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     const content = response.choices[0]?.message?.content;
     if (!content) return null;
 
@@ -551,8 +462,7 @@ ${summary ? `الملخص: ${summary}` : ''}
 }
 
 export async function detectTrendingTopics(
-  contentItems: Content[],
-  userId?: string
+  contentItems: Content[]
 ): Promise<TrendingTopic[]> {
   if (contentItems.length === 0) {
     return [];
@@ -586,8 +496,7 @@ ${contentSummary}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -604,7 +513,6 @@ ${contentSummary}
       temperature: 0.4,
     });
 
-    if (userId) await logAIRequest(userId, "ai_trends", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
       return [];
@@ -621,8 +529,7 @@ ${contentSummary}
 export async function rewriteContent(
   title: string,
   summary: string | null,
-  systemPrompt?: string | null,
-  userId?: string
+  systemPrompt?: string | null
 ): Promise<string> {
   const defaultPrompt = `أنت حسام من قناة نظام الإنتاج. أسلوبك سعودي تقني كاجوال. أعد كتابة هذا الخبر التقني بأسلوبك الخاص كأنك تحكي لمتابعينك. ركز على المواصفات والتأثير الحقيقي. خلّها قصيرة ومباشرة مناسبة لتيليجرام. لا تضف أي مقدمات أو تحيات - ابدأ مباشرة بالخبر.`;
 
@@ -633,8 +540,7 @@ export async function rewriteContent(
   }
 
   try {
-    const { client, miniModel, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, miniModel } = await getAIClient();
     const response = await client.chat.completions.create({
       model: miniModel,
       messages: [
@@ -648,7 +554,6 @@ export async function rewriteContent(
       max_tokens: 500,
     });
 
-    if (userId) await logAIRequest(userId, "ai_rewrite", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     return response.choices[0]?.message?.content?.trim() || title;
   } catch (error) {
     console.error("Error rewriting content:", error);
@@ -667,8 +572,7 @@ export interface SmartViewCard {
 
 export async function generateSmartView(
   contentItems: Content[],
-  customSystemPrompt?: string | null,
-  userId?: string
+  customSystemPrompt?: string | null
 ): Promise<SmartViewCard[]> {
   if (contentItems.length === 0) return [];
   
@@ -706,8 +610,7 @@ ${numberedItems}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -718,7 +621,6 @@ ${numberedItems}
       temperature: 0.7,
     });
 
-    if (userId) await logAIRequest(userId, "ai_smart_view", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) return [];
 
@@ -752,8 +654,7 @@ export async function generateSmartIdeasForTemplate(
   count: number,
   customSystemPrompt?: string | null,
   styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>,
-  existingTitles?: string[],
-  userId?: string
+  existingTitles?: string[]
 ): Promise<SmartIdeaResult[]> {
   if (contentItems.length === 0) {
     return [];
@@ -833,7 +734,7 @@ ${templatePrompt}
 3. اكتب عنوان فيديو جذاب بالعربية
 4. اكتب نص مصغّر (Thumbnail Text) - عبارة قصيرة جداً مناسبة لصورة مصغرة
 5. اكتب سكريبت/ملخص تفصيلي للفيديو (3-5 فقرات)
-6. حدد فئة الفيديو باستخدام اسم السلسلة: "${templateName}"
+6. حدد نوع الفيديو من: thalathiyat, leh, tech_i_use, news_roundup, deep_dive, comparison, tutorial, other
 
 أجب بصيغة JSON فقط:
 {
@@ -855,8 +756,7 @@ ${templatePrompt}
     : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية المقدمة كأساس لأفكارك، ثم أكمل من معرفتك الخاصة عند الحاجة. أجب دائماً بصيغة JSON صالحة.";
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const { client, model } = await getAIClient();
     const response = await client.chat.completions.create({
       model,
       messages: [
@@ -867,7 +767,6 @@ ${templatePrompt}
       temperature: 0.7,
     });
 
-    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
       return [];
@@ -885,7 +784,7 @@ ${templatePrompt}
         thumbnailText: idea.thumbnailText || "",
         script: idea.script || "",
         description: idea.script ? idea.script.substring(0, 200) + "..." : "",
-        category: templateName,
+        category: idea.category || "other",
         estimatedDuration: idea.estimatedDuration || "",
         targetAudience: idea.targetAudience || "",
         sourceContentIds: usedContent.map((c) => c.id),

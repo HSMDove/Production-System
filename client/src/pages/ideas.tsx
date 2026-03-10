@@ -21,8 +21,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { IdeaWithFolder, Folder, IdeaStatus } from "@/lib/types";
-import { ideaStatusLabels } from "@/lib/types";
+import type { IdeaWithFolder, Folder, IdeaStatus, IdeaCategory } from "@/lib/types";
+import { ideaCategoryLabels, ideaStatusLabels } from "@/lib/types";
 
 type SortField = "title" | "category" | "status" | "createdAt";
 type ViewMode = "kanban" | "table";
@@ -235,9 +235,9 @@ export default function Ideas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">كل الفئات</SelectItem>
-                  {Array.from(new Set((ideas || []).map((i) => i.category).filter(Boolean))).map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {Object.entries(ideaCategoryLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
                     </SelectItem>
                   ))}
                 </SelectContent>

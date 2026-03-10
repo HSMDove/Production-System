@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { IdeaWithFolder, Folder } from "@/lib/types";
-import { getCategoryColor } from "@/lib/types";
+import { ideaCategoryLabels, categoryColors } from "@/lib/types";
 
 type ViewMode = "month" | "week";
 
@@ -198,7 +198,7 @@ export default function ContentCalendar() {
   };
 
   const renderIdeaCard = (idea: IdeaWithFolder, compact = false) => {
-    const colors = getCategoryColor(idea.category);
+    const colors = categoryColors[idea.category] || categoryColors.other;
     
     return (
       <div
@@ -395,14 +395,14 @@ export default function ContentCalendar() {
                         onClick={() => handleEditIdea(idea)}
                         className={cn(
                           "cursor-pointer rounded-md p-3 hover-elevate active-elevate-2",
-                          getCategoryColor(idea.category).bg,
-                          getCategoryColor(idea.category).text
+                          categoryColors[idea.category]?.bg || "bg-muted",
+                          categoryColors[idea.category]?.text || "text-foreground"
                         )}
                         data-testid={`unscheduled-idea-${idea.id}`}
                       >
                         <div className="font-medium line-clamp-2">{idea.title}</div>
                         <div className="mt-1 text-xs opacity-75">
-                          {idea.category || "بدون فئة"}
+                          {ideaCategoryLabels[idea.category]}
                         </div>
                       </div>
                     ))
