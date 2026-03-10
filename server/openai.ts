@@ -37,39 +37,42 @@ export type AIClientResult = { client: OpenAI; model: string; miniModel: string;
 
 export async function getAIClient(userId?: string): Promise<AIClientResult> {
   const userSettings = await getSettingsMap(userId);
-  const llmApiKey = userSettings.get("llm_api_key");
-  const llmModel = userSettings.get("llm_model");
-  const llmBaseUrl = userSettings.get("llm_base_url");
-
-  if (llmApiKey && llmModel) {
-    return {
-      client: new OpenAI({
-        apiKey: llmApiKey,
-        ...(llmBaseUrl ? { baseURL: llmBaseUrl } : {}),
-      }),
-      model: llmModel,
-      miniModel: llmModel,
-      providerUsed: "custom_api",
-    };
-  }
 
   const provider = userSettings.get("ai_provider") || "replit";
 
-  if (provider === "custom" || provider === "local") {
-    const baseURL = userSettings.get("ai_custom_base_url");
+  if (provider === "custom") {
     const apiKey = userSettings.get("ai_custom_api_key");
-    const model = userSettings.get("ai_custom_model") || "llama3";
-
-    if (!baseURL || !baseURL.trim()) {
-      throw new Error("يرجى إدخال Base URL صحيح في إعدادات الذكاء الاصطناعي المخصص");
-    }
+    const baseURL = userSettings.get("ai_custom_base_url");
+    const model = userSettings.get("ai_custom_model") || "gpt-4o";
 
     if (!apiKey || !apiKey.trim()) {
       throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
     }
 
+    const clientOpts: { apiKey: string; baseURL?: string } = { apiKey: apiKey.trim() };
+    if (baseURL && baseURL.trim()) {
+      clientOpts.baseURL = baseURL.trim();
+    }
+
     return {
-      client: new OpenAI({ baseURL: baseURL.trim(), apiKey: apiKey.trim() }),
+      client: new OpenAI(clientOpts),
+      model,
+      miniModel: model,
+      providerUsed: "custom_api",
+    };
+  }
+
+  if (provider === "local") {
+    const baseURL = userSettings.get("ai_custom_base_url");
+    const apiKey = userSettings.get("ai_custom_api_key") || "local";
+    const model = userSettings.get("ai_custom_model") || "llama3";
+
+    if (!baseURL || !baseURL.trim()) {
+      throw new Error("يرجى إدخال Base URL للنموذج المحلي (مثل: http://localhost:11434/v1)");
+    }
+
+    return {
+      client: new OpenAI({ baseURL: baseURL.trim(), apiKey: apiKey.trim() || "local" }),
       model,
       miniModel: model,
       providerUsed: "custom_api",
@@ -77,9 +80,12 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
   }
 
   const defaults = await getSystemDefaults();
+  if (!defaults.apiKey) {
+    throw new Error("لم يتم تكوين مزود الذكاء الاصطناعي الافتراضي. يرجى التواصل مع المدير أو اختيار مزود مخصص من الإعدادات.");
+  }
   return {
     client: new OpenAI({
-      baseURL: defaults.baseURL,
+      baseURL: defaults.baseURL || undefined,
       apiKey: defaults.apiKey,
     }),
     model: defaults.model,
