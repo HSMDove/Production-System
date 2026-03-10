@@ -46,6 +46,11 @@ import {
   userPlatformIds,
   type UserPlatformId,
   type PlatformType,
+  systemSettings,
+  type SystemSetting,
+  apiUsageLogs,
+  type ApiUsageLog,
+  type InsertApiUsageLog,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -188,6 +193,17 @@ export interface IStorage {
   addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId>;
   removePlatformId(id: string, userId: string): Promise<boolean>;
   getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined>;
+
+  // System Settings (global admin controls)
+  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
+  getAllSystemSettings(): Promise<SystemSetting[]>;
+  upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting>;
+
+  // API Usage Logging
+  logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog>;
+
+  // User Activity
+  updateUserLastActive(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -705,6 +721,41 @@ export class DatabaseStorage implements IStorage {
       return this.getUserBySlackUserId(platformId);
     }
     return undefined;
+  }
+
+  // ─── System Settings (Global Admin Controls) ──────────────────────────────
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.key, key));
+    return setting;
+  }
+
+  async getAllSystemSettings(): Promise<SystemSetting[]> {
+    return db.select().from(systemSettings).orderBy(systemSettings.key);
+  }
+
+  async upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting> {
+    const updateSet: any = { value, updatedAt: new Date() };
+    if (description !== undefined) updateSet.description = description;
+    const [result] = await db
+      .insert(systemSettings)
+      .values({ key, value, description: description || null, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: updateSet,
+      })
+      .returning();
+    return result;
+  }
+
+  // ─── API Usage Logging ─────────────────────────────────────────────────────
+  async logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog> {
+    const [log] = await db.insert(apiUsageLogs).values(entry as any).returning();
+    return log;
+  }
+
+  // ─── User Activity ─────────────────────────────────────────────────────────
+  async updateUserLastActive(userId: string): Promise<void> {
+    await db.update(users).set({ lastActiveAt: new Date() } as any).where(eq(users.id, userId));
   }
 }
 

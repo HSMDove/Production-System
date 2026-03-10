@@ -658,19 +658,26 @@ export default function Settings() {
                 <CardDescription>يتيح لفكري البحث في الإنترنت للحصول على معلومات حديثة.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label>مزود البحث</Label>
-                    <Select value={localSettings.web_search_provider || "brave"} onValueChange={(value) => updateSetting("web_search_provider", value)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="brave">Brave Search</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">الموفر المستخدم لتنفيذ عمليات البحث</p>
+                <div className="space-y-1">
+                  <Label>مصدر البحث</Label>
+                  <Select value={localSettings.web_search_provider || "system_default"} onValueChange={(value) => updateSetting("web_search_provider", value)}>
+                    <SelectTrigger data-testid="select-web-search-provider"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="system_default">النموذج الافتراضي للموقع</SelectItem>
+                      <SelectItem value="custom">مفتاح API مخصص</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">اختر النموذج الافتراضي للموقع أو أضف مفتاحك الخاص</p>
+                </div>
+                {localSettings.web_search_provider === "system_default" && (
+                  <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
+                    <Check className="h-4 w-4 text-green-500 shrink-0" />
+                    <p className="text-sm text-muted-foreground">يستخدم مفتاح البحث الافتراضي للموقع — لا تحتاج إعداد إضافي.</p>
                   </div>
+                )}
+                {localSettings.web_search_provider === "custom" && (
                   <div className="space-y-1">
-                    <Label>Web Search API Key</Label>
+                    <Label>Brave Search API Key</Label>
                     <Input
                       type="password"
                       placeholder="BSA... أو BSP..."
@@ -679,9 +686,9 @@ export default function Settings() {
                       dir="ltr"
                       data-testid="input-web-search-api-key"
                     />
-                    <p className="text-xs text-muted-foreground">احصل على مفتاح مجاني من <span className="font-mono">api.search.brave.com</span></p>
+                    <p className="text-xs text-muted-foreground">احصل على مفتاح مجاني من <span className="font-mono" dir="ltr">api.search.brave.com</span></p>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 

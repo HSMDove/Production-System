@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   gender: text("gender").$type<GenderType>(),
   slackUserId: text("slack_user_id").unique(),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -383,3 +384,36 @@ export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
 
 export type StyleExample = typeof styleExamples.$inferSelect;
 export type InsertStyleExample = z.infer<typeof insertStyleExampleSchema>;
+
+// System Settings - global admin-controlled settings (feature flags, default API config)
+export const systemSettings = pgTable("system_settings", {
+  key: varchar("key").primaryKey(),
+  value: text("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SystemSetting = typeof systemSettings.$inferSelect;
+
+// API Usage Logs - tracks every AI/Search request per user
+export const apiRequestTypes = ["ai_chat", "ai_rewrite", "ai_ideas", "ai_explain", "ai_translate", "ai_summary", "ai_smart_view", "ai_sentiment", "ai_trends", "web_search"] as const;
+export type ApiRequestType = typeof apiRequestTypes[number];
+
+export const apiProviderTypes = ["system_default", "custom_api"] as const;
+export type ApiProviderType = typeof apiProviderTypes[number];
+
+export const apiUsageLogs = pgTable("api_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestType: text("request_type").notNull().$type<ApiRequestType>(),
+  providerUsed: text("provider_used").notNull().$type<ApiProviderType>(),
+  model: text("model"),
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  tokensUsed: integer("tokens_used"),
+  responseTimeMs: integer("response_time_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
+export type InsertApiUsageLog = typeof apiUsageLogs.$inferInsert;

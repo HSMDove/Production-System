@@ -7,7 +7,7 @@ import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, generateSmartView } from "./openai";
+import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent } from "./folder-fetcher";
@@ -61,23 +61,40 @@ type AgentToolResult = {
 };
 
 async function runExternalWebSearch(query: string, userId: string): Promise<any[]> {
-  const provider = (await storage.getSetting("web_search_provider", userId))?.value || "brave";
-  const apiKey = (await storage.getSetting("web_search_api_key", userId))?.value || "";
+  const startTime = Date.now();
+  const webSearchProvider = (await storage.getSetting("web_search_provider", userId))?.value || "system_default";
+  const userApiKey = (await storage.getSetting("web_search_api_key", userId))?.value || "";
 
-  if (!apiKey) {
-    return [{ title: "Web search غير مفعّل", snippet: "أضف Web Search API Key من الإعدادات لتفعيل البحث الخارجي.", url: "" }];
+  let apiKey = "";
+  let provider = "brave";
+  let providerUsed: "system_default" | "custom_api" = "system_default";
+
+  if (webSearchProvider === "custom") {
+    if (!userApiKey || !userApiKey.trim()) {
+      await logAIRequest(userId, "web_search", "custom_api", null, false, startTime, "مفتاح API مخصص فارغ");
+      throw new Error("يرجى إدخال مفتاح API صحيح لأداة البحث في الإعدادات");
+    }
+    apiKey = userApiKey.trim();
+    providerUsed = "custom_api";
+  } else {
+    const defaultSearchKey = await storage.getSystemSetting("default_search_api_key");
+    apiKey = defaultSearchKey?.value?.trim() || "";
+    if (!apiKey) {
+      await logAIRequest(userId, "web_search", "system_default", null, false, startTime, "لا يوجد مفتاح بحث افتراضي");
+      return [{ title: "البحث غير مفعّل", snippet: "لم يتم تكوين مفتاح بحث افتراضي. تواصل مع المدير أو اختر 'مفتاح API مخصص' من الإعدادات.", url: "" }];
+    }
+    providerUsed = "system_default";
   }
 
   if (provider === "brave") {
     try {
-      const trimmedKey = apiKey.trim();
       const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&text_decorations=0`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
           "Accept": "application/json",
           "Accept-Encoding": "gzip",
-          "X-Subscription-Token": trimmedKey,
+          "X-Subscription-Token": apiKey,
         },
       });
 
@@ -85,14 +102,13 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
         let errorBody = "";
         try { errorBody = await response.text(); } catch {}
         console.error(`[BraveSearch] HTTP ${response.status}: ${errorBody}`);
+        await logAIRequest(userId, "web_search", providerUsed, null, false, startTime, `HTTP ${response.status}`);
         return [{ title: "فشل البحث الخارجي", snippet: `Brave API error ${response.status}: ${errorBody.slice(0, 200)}`, url: "" }];
       }
 
       const data = await response.json() as any;
       const results = data?.web?.results || data?.results || [];
-      if (results.length === 0) {
-        console.warn("[BraveSearch] No results found. Response keys:", Object.keys(data));
-      }
+      await logAIRequest(userId, "web_search", providerUsed, "brave", true, startTime);
       return results.slice(0, 5).map((item: any) => ({
         title: item.title || item.name || "",
         snippet: item.description || item.snippet || "",
@@ -100,6 +116,7 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
       }));
     } catch (err: any) {
       console.error("[BraveSearch] Exception:", err?.message);
+      await logAIRequest(userId, "web_search", providerUsed, null, false, startTime, err?.message);
       return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
     }
   }
@@ -295,13 +312,22 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
         } as any);
       } else if (call.function.name === "external_web_search") {
         const query = String(args.query || "").trim();
-        const results = await runExternalWebSearch(query, userId);
-        executedTools.push({ type: "external_search", payload: { query, results } });
-        messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: JSON.stringify({ ok: true, results }),
-        } as any);
+        const searchFlag = await storage.getSystemSetting("web_search_enabled");
+        if (searchFlag?.value === "false") {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({ ok: false, error: "البحث الخارجي معطّل حالياً من قبل المدير" }),
+          } as any);
+        } else {
+          const results = await runExternalWebSearch(query, userId);
+          executedTools.push({ type: "external_search", payload: { query, results } });
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({ ok: true, results }),
+          } as any);
+        }
       } else if (call.function.name === "create_idea_draft") {
         const safeCategory = String(args.category || "");
         const selectedFolder = folders.find((f) => normalizeText(f.name) === normalizeText(args.folderName || ""));
@@ -362,10 +388,50 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function checkFeatureFlag(flagName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const setting = await storage.getSystemSetting(flagName);
+      if (setting?.value === "false") {
+        return res.status(503).json({ error: `هذه الميزة معطّلة حالياً من قبل المدير (${flagName})` });
+      }
+      next();
+    } catch (err) {
+      console.error(`[FeatureFlag] Error checking ${flagName}:`, err);
+      next();
+    }
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.use("/api", async (req: Request, _res: Response, next: NextFunction) => {
+    if (req.session?.userId) {
+      storage.updateUserLastActive(req.session.userId).catch(() => {});
+    }
+    next();
+  });
+
+  // ─── System Settings API ──────────────────────────────────────────────────
+
+  
+
+  app.get("/api/system-settings/public-flags", async (_req, res) => {
+    try {
+      const flags = ["fikri_enabled", "registration_enabled", "web_search_enabled", "ai_generation_enabled"];
+      const results: Record<string, string> = {};
+      for (const flag of flags) {
+        const setting = await storage.getSystemSetting(flag);
+        results[flag] = setting?.value || "true";
+      }
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get flags" });
+    }
+  });
 
   // ─── Auth Routes ──────────────────────────────────────────────────────────
 
@@ -414,6 +480,10 @@ export async function registerRoutes(
       const isNew = !user;
 
       if (!user) {
+        const regFlag = await storage.getSystemSetting("registration_enabled");
+        if (regFlag?.value === "false") {
+          return res.status(403).json({ error: "تسجيل المستخدمين الجدد معطّل حالياً" });
+        }
         user = await storage.createUser({ email: normalizedEmail, onboardingCompleted: false });
       } else if (!user.onboardingCompleted) {
         user = await storage.updateUser(user.id, { onboardingCompleted: true }) ?? user;
@@ -654,7 +724,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/folders/:id/smart-view", async (req, res) => {
+  app.post("/api/folders/:id/smart-view", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
@@ -684,7 +754,7 @@ export async function registerRoutes(
 
       const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
       
-      const cards = await generateSmartView(contentToUse, aiSystemPrompt);
+      const cards = await generateSmartView(contentToUse, aiSystemPrompt, req.session.userId!);
       
       res.json({ cards });
     } catch (error: any) {
@@ -693,7 +763,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/folders/:id/generate-ideas", async (req, res) => {
+  app.post("/api/folders/:id/generate-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
@@ -729,7 +799,7 @@ export async function registerRoutes(
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
       
-      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -763,7 +833,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/generate-smart-ideas", async (req, res) => {
+  app.post("/api/generate-smart-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const { folderIds, days, templates: templateRequests } = req.body as {
         folderIds: string[];
@@ -851,7 +921,8 @@ export async function registerRoutes(
           templateReq.count,
           aiSystemPrompt,
           styleExamples,
-          existingTitles
+          existingTitles,
+          userId
         );
 
         for (const idea of ideas) {
@@ -1003,7 +1074,8 @@ export async function registerRoutes(
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
                   contentItem.summary || "",
-                  aiSystemPrompt
+                  aiSystemPrompt,
+                  req.session.userId!
                 );
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
@@ -1012,7 +1084,8 @@ export async function registerRoutes(
                 const translation = await generateProfessionalTranslation(
                   contentItem.title,
                   contentItem.summary || "",
-                  aiSystemPrompt
+                  aiSystemPrompt,
+                  req.session.userId!
                 );
                 if (translation) {
                   await storage.updateContentTranslation(
@@ -1125,7 +1198,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/assistant/chat", async (req, res) => {
+  app.post("/api/assistant/chat", checkFeatureFlag("fikri_enabled"), async (req, res) => {
     try {
       const body = req.body as AssistantChatRequest & { conversationId?: string };
       const userMessage = body?.message?.trim();
@@ -1865,7 +1938,7 @@ export async function registerRoutes(
         return res.json({ success: true, analyzed: 0, message: "No unanalyzed content found" });
       }
 
-      const analyses = await analyzeContentSentiment(contentItems);
+      const analyses = await analyzeContentSentiment(contentItems, req.session.userId!);
       
       let analyzedCount = 0;
       for (const entry of Array.from(analyses.entries())) {
@@ -1897,7 +1970,7 @@ export async function registerRoutes(
         return res.json({ success: true, analyzed: 0, message: "No unanalyzed content in folder" });
       }
 
-      const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20));
+      const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20), req.session.userId!);
       
       let analyzedCount = 0;
       for (const entry of Array.from(analyses.entries())) {
@@ -1919,7 +1992,7 @@ export async function registerRoutes(
   });
 
   // Generate detailed Arabic explanation for a content item
-  app.post("/api/content/:id/explain", async (req, res) => {
+  app.post("/api/content/:id/explain", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
       if (!contentItem) return;
@@ -1933,7 +2006,8 @@ export async function registerRoutes(
         contentItem.title,
         contentItem.summary,
         contentItem.originalUrl,
-        aiSystemPrompt
+        aiSystemPrompt,
+        req.session.userId!
       );
       
       res.json({ explanation });
@@ -1965,7 +2039,9 @@ export async function registerRoutes(
       if (!arabicSummary) {
         arabicSummary = await generateArabicSummary(
           contentItem.title,
-          contentItem.summary || ""
+          contentItem.summary || "",
+          undefined,
+          req.session.userId!
         );
         if (arabicSummary) {
           await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
@@ -1978,7 +2054,9 @@ export async function registerRoutes(
       if (!arabicTitle || !arabicFullSummary) {
         const translation = await generateProfessionalTranslation(
           contentItem.title,
-          contentItem.summary || ""
+          contentItem.summary || "",
+          undefined,
+          req.session.userId!
         );
         if (translation) {
           arabicTitle = translation.arabicTitle;
@@ -2026,7 +2104,9 @@ export async function registerRoutes(
             if (!contentItem.arabicSummary) {
               const arabicSummary = await generateArabicSummary(
                 contentItem.title,
-                contentItem.summary || ""
+                contentItem.summary || "",
+                undefined,
+                req.session.userId!
               );
               if (arabicSummary) {
                 await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
@@ -2037,7 +2117,9 @@ export async function registerRoutes(
             if (!contentItem.arabicTitle || !contentItem.arabicFullSummary) {
               const translation = await generateProfessionalTranslation(
                 contentItem.title,
-                contentItem.summary || ""
+                contentItem.summary || "",
+                undefined,
+                req.session.userId!
               );
               if (translation) {
                 await storage.updateContentTranslation(
@@ -2083,7 +2165,7 @@ export async function registerRoutes(
         return res.json({ topics: [], message: "No recent content to analyze" });
       }
 
-      const topics = await detectTrendingTopics(recentContent);
+      const topics = await detectTrendingTopics(recentContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
       console.error("Trending topics error:", error);
@@ -2101,7 +2183,7 @@ export async function registerRoutes(
         return res.json({ topics: [], message: "No content in folder" });
       }
 
-      const topics = await detectTrendingTopics(folderContent);
+      const topics = await detectTrendingTopics(folderContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
       console.error("Folder trending topics error:", error);
@@ -2292,7 +2374,7 @@ export async function registerRoutes(
       const mergedPrompt = (typeof systemPrompt === "string" && systemPrompt.trim().length > 0)
         ? systemPrompt
         : userPrompt;
-      const rewritten = await rewriteContent(title, summary || null, mergedPrompt);
+      const rewritten = await rewriteContent(title, summary || null, mergedPrompt, req.session.userId!);
       res.json({ success: true, rewrittenContent: rewritten });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });
