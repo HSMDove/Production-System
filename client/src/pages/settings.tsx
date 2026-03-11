@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,63 +10,49 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, Check, CircleHelp, Copy, Link, Loader2, LogOut, Moon, Palette, Plus, Save, Send, Sparkles, Sun, TestTube, Trash2, User, X } from "lucide-react";
+import { 
+  Palette, Check, Sparkles, Database, 
+  Bell, Send, MessageSquare, Bot, Loader2, 
+  Server, Globe, Key, Cpu, Save, TestTube,
+  Star, Plus, Trash2, Image
+} from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
-import { useAuth } from "@/hooks/use-auth";
-
-type PlatformIdEntry = { id: string; platform: string; platformId: string; label: string | null; createdAt: string };
 
 type SettingsData = Record<string, string | null>;
 
 export default function Settings() {
-  const { theme, colorMode, setTheme, setColorMode } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { toast } = useToast();
-  const { user, logout, isLoggingOut } = useAuth();
-
+  
   const [localSettings, setLocalSettings] = useState<SettingsData>({});
   const [hasChanges, setHasChanges] = useState(false);
-  const [activeTab, setActiveTab] = useState("account");
-  const [newSlackId, setNewSlackId] = useState("");
-  const [newSlackLabel, setNewSlackLabel] = useState("");
-  const [newTelegramId, setNewTelegramId] = useState("");
-  const [newTelegramLabel, setNewTelegramLabel] = useState("");
 
-  const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة");
-  const [testAiResult, setTestAiResult] = useState("");
-
-  const [styleTitle, setStyleTitle] = useState("");
-  const [styleDescription, setStyleDescription] = useState("");
-  const [styleThumbnail, setStyleThumbnail] = useState("");
-
-  const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
-  const { data: styleExamples } = useQuery<any[]>({ queryKey: ["/api/style-examples"] });
-  const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
-
-  const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
-  const telegramIds = useMemo(() => (platformIds || []).filter(p => p.platform === "telegram"), [platformIds]);
+  const { data: settings, isLoading } = useQuery<SettingsData>({
+    queryKey: ["/api/settings"],
+  });
 
   useEffect(() => {
-    if (settings) setLocalSettings(settings);
+    if (settings) {
+      setLocalSettings(settings);
+    }
   }, [settings]);
 
-
   const updateSetting = (key: string, value: string | null) => {
-    setLocalSettings((prev) => ({ ...prev, [key]: value }));
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
     setHasChanges(true);
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (data: SettingsData) => apiRequest("PUT", "/api/settings", data),
+    mutationFn: async (data: SettingsData) => {
+      return apiRequest("PUT", "/api/settings", data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       setHasChanges(false);
-      toast({ title: "تم الحفظ", description: "تم تطبيق الإعدادات بنجاح" });
+      toast({ title: "تم الحفظ", description: "تم حفظ الإعدادات بنجاح" });
     },
     onError: () => {
       toast({ title: "خطأ", description: "فشل حفظ الإعدادات", variant: "destructive" });
@@ -74,103 +60,143 @@ export default function Settings() {
   });
 
   const testTelegramMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/settings/test-telegram", {
-      botToken: localSettings.telegram_bot_token,
-      chatId: localSettings.telegram_chat_id,
-    }),
-    onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "تم إرسال رسالة اختبار إلى تيليجرام" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
-    onError: () => toast({ title: "خطأ", description: "فشل اختبار تيليجرام", variant: "destructive" }),
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-telegram", {
+        botToken: localSettings.telegram_bot_token,
+        chatId: localSettings.telegram_chat_id,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "نجاح", description: "تم إرسال رسالة اختبار إلى تيليجرام" });
+      } else {
+        toast({ title: "فشل", description: data.error || "فشل الاتصال بتيليجرام", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار تيليجرام", variant: "destructive" });
+    },
   });
 
   const testSlackMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/settings/test-slack", { webhookUrl: localSettings.slack_webhook_url }),
-    onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "تم إرسال رسالة اختبار إلى Slack" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
-    onError: () => toast({ title: "خطأ", description: "فشل اختبار Slack", variant: "destructive" }),
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-slack", {
+        webhookUrl: localSettings.slack_webhook_url,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({ title: "نجاح", description: "تم إرسال رسالة اختبار إلى Slack" });
+      } else {
+        toast({ title: "فشل", description: data.error || "فشل الاتصال بـ Slack", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار Slack", variant: "destructive" });
+    },
   });
 
   const testSlackBotMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/settings/test-slack-bot", { botToken: localSettings.slack_bot_token }),
-    onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "البوت متصل بنجاح" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
-    onError: () => toast({ title: "خطأ", description: "فشل اختبار بوت Slack", variant: "destructive" }),
-  });
-
-  const addPlatformIdMutation = useMutation({
-    mutationFn: async (data: { platform: string; platformId: string; label?: string }) =>
-      apiRequest("POST", "/api/auth/platform-ids", data),
-    onSuccess: (_data: any, variables: { platform: string }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      if (variables.platform === "slack") { setNewSlackId(""); setNewSlackLabel(""); }
-      if (variables.platform === "telegram") { setNewTelegramId(""); setNewTelegramLabel(""); }
-      toast({ title: "تم الإضافة", description: "تم إضافة المعرف بنجاح" });
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-slack-bot", {
+        botToken: localSettings.slack_bot_token,
+      });
     },
-    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل إضافة المعرف", variant: "destructive" }),
-  });
-
-  const removePlatformIdMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest("DELETE", `/api/auth/platform-ids/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
-      toast({ title: "تم الحذف", description: "تم إزالة المعرف" });
-    },
-    onError: () => toast({ title: "خطأ", description: "فشل إزالة المعرف", variant: "destructive" }),
-  });
-
-  const testAiMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/settings/test-ai", {
-      title: testAiTitle,
-      systemPrompt: localSettings.ai_system_prompt,
-    }),
     onSuccess: (data: any) => {
       if (data.success) {
-        setTestAiResult(data.rewrittenContent || "");
-        toast({ title: "نجاح", description: "تم اختبار أسلوب فكري والـ Prompt بنجاح" });
+        toast({ title: "✅ Bot Token صحيح", description: `البوت: @${data.botName} | الـ workspace: ${data.teamName}` });
+      } else {
+        toast({ title: "❌ Bot Token خاطئ", description: data.error || "تحقق من الـ Token", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار Bot Token", variant: "destructive" });
+    },
+  });
+
+  const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة وشريحة A18 Pro");
+  const [testAiResult, setTestAiResult] = useState("");
+  
+  const testAiMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/settings/test-ai", {
+        title: testAiTitle,
+        systemPrompt: localSettings.ai_system_prompt,
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        setTestAiResult(data.rewrittenContent);
+        toast({ title: "نجاح", description: "تم إعادة كتابة النص بنجاح" });
       } else {
         toast({ title: "فشل", description: data.error || "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
       }
     },
-    onError: () => toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" }),
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate(localSettings);
+  };
+
+  const themeOptions = [
+    { value: "default-dark", label: "السمة الافتراضية الداكنة", color: "bg-blue-500" },
+    { value: "tech-field", label: "تيك فيلد #e86179", color: "bg-rose-400" },
+    { value: "tech-voice", label: "تيك فويس #12d3d8", color: "bg-cyan-400" },
+  ] as const;
+
+  const [styleTitle, setStyleTitle] = useState("");
+  const [styleDescription, setStyleDescription] = useState("");
+  const [styleThumbnail, setStyleThumbnail] = useState("");
+
+  const { data: styleExamples } = useQuery<any[]>({
+    queryKey: ["/api/style-examples"],
   });
 
   const addStyleMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/style-examples", {
-      title: styleTitle,
-      description: styleDescription || undefined,
-      thumbnailText: styleThumbnail || undefined,
-    }),
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/style-examples", {
+        title: styleTitle,
+        description: styleDescription || undefined,
+        thumbnailText: styleThumbnail || undefined,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
       setStyleTitle("");
       setStyleDescription("");
       setStyleThumbnail("");
-      toast({ title: "تمت الإضافة", description: "تم إضافة مثال أسلوبي جديد" });
+      toast({ title: "تمت الإضافة", description: "تم إضافة المثال بنجاح" });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل إضافة المثال", variant: "destructive" }),
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل إضافة المثال", variant: "destructive" });
+    },
   });
 
   const deleteStyleMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest("DELETE", `/api/style-examples/${id}`),
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/style-examples/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
-      toast({ title: "تم الحذف", description: "تم حذف المثال" });
+      toast({ title: "تم الحذف", description: "تم حذف المثال بنجاح" });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل حذف المثال", variant: "destructive" }),
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حذف المثال", variant: "destructive" });
+    },
   });
 
+  const aiProvider = localSettings.ai_provider || "replit";
   const notificationsEnabled = localSettings.notifications_enabled === "true";
   const telegramEnabled = localSettings.telegram_enabled === "true";
   const slackEnabled = localSettings.slack_enabled === "true";
 
-  const themeOptions = useMemo(() => ([
-    { value: "default", label: "الأساسي", color: "#F7CB46" },
-    { value: "tech-field", label: "تيك فيلد", color: "#FE90E8" },
-    { value: "tech-voice", label: "تيك فويس", color: "#C0F7FE" },
-  ] as const), []);
-
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center min-h-[320px]">
+        <div className="flex items-center justify-center min-h-[400px]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </MainLayout>
@@ -179,603 +205,586 @@ export default function Settings() {
 
   return (
     <MainLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-4 pb-24" dir="rtl">
-        <Card>
-          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
-              <p className="text-muted-foreground mt-1">إدارة الحساب، الإشعارات، إعدادات فكري، والمظهر بشكل منظم.</p>
+      <div className="max-w-2xl mx-auto space-y-6 pb-20">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
+            <p className="text-muted-foreground mt-1">
+              إعدادات المنصة والإشعارات والذكاء الاصطناعي
+            </p>
+          </div>
+        </div>
+
+        <Card className="glass-surface">
+          <CardHeader>
+            <CardTitle>لغة العرض</CardTitle>
+            <CardDescription>اختر لغة الواجهة الأساسية للموقع.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-between">
+              <span>اللغة العربية باللهجة السعودية</span>
+              <Badge>مفعّل</Badge>
             </div>
-            <Button onClick={() => saveMutation.mutate(localSettings)} disabled={!hasChanges || saveMutation.isPending} className="gap-2" data-testid="button-save-settings">
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              حفظ التغييرات
-            </Button>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex items-center justify-between opacity-70 cursor-not-allowed" aria-disabled="true">
+              <span>English</span>
+              <Badge variant="secondary">قريباً</Badge>
+            </div>
           </CardContent>
         </Card>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto gap-1">
-            <TabsTrigger value="account">الحساب</TabsTrigger>
-            <TabsTrigger value="appearance">المظهر</TabsTrigger>
-            <TabsTrigger value="notifications">الإشعارات</TabsTrigger>
-            <TabsTrigger value="fikri">فكري 2.0 والذكاء</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="account" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><User className="h-4 w-4" /> معلومات الحساب</CardTitle>
-                <CardDescription>بيانات تسجيل الدخول الحالية.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">البريد</span><span className="font-medium">{user?.email || "-"}</span></div>
-                <div className="rounded-lg border p-3 flex items-center justify-between"><span className="text-muted-foreground">الاسم</span><span className="font-medium">{user?.name || "غير محدد"}</span></div>
-                <Separator />
-                <Button variant="destructive" onClick={() => logout()} disabled={isLoggingOut} className="gap-2" data-testid="button-logout">
-                  {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-                  تسجيل الخروج
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="appearance" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">{colorMode === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} الوضع</CardTitle>
-                <CardDescription>اختر بين الوضع النهاري والليلي.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 grid-cols-2">
-                <Button variant={colorMode === "light" ? "default" : "outline"} className="justify-center gap-2" onClick={() => setColorMode("light")} data-testid="button-mode-light">
-                  <Sun className="h-4 w-4" />
-                  نهاري
-                  {colorMode === "light" && <Check className="h-4 w-4" />}
-                </Button>
-                <Button variant={colorMode === "dark" ? "default" : "outline"} className="justify-center gap-2" onClick={() => setColorMode("dark")} data-testid="button-mode-dark">
-                  <Moon className="h-4 w-4" />
-                  ليلي
-                  {colorMode === "dark" && <Check className="h-4 w-4" />}
-                </Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Palette className="h-4 w-4" /> السمة</CardTitle>
-                <CardDescription>تخصيص ألوان التطبيق.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-3">
-                {themeOptions.map((option) => {
-                  const isSelected = theme === option.value;
-                  return (
-                    <Button key={option.value} variant={isSelected ? "default" : "outline"} className="justify-center gap-2" onClick={() => setTheme(option.value as any)} data-testid={`button-theme-${option.value}`}>
-                      <span className="h-4 w-4 rounded-full border-2 border-foreground/30" style={{ backgroundColor: option.color }} />
-                      {option.label}
-                      {isSelected && <Check className="h-4 w-4" />}
-                    </Button>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="notifications" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bell className="h-4 w-4" /> الإشعارات والمنصات الخارجية</CardTitle>
-                <CardDescription>ربط نَسَق بمنصاتك الخارجية. فكري 2.0 يقدر يرد على رسائلك ويرسل الأخبار تلقائياً.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <p className="font-medium">تفعيل الإشعارات</p>
-                    <p className="text-sm text-muted-foreground">عند الإيقاف لن يتم إرسال تنبيهات تلقائيًا ولن يرد فكري على الرسائل.</p>
-                  </div>
-                  <Switch checked={notificationsEnabled} onCheckedChange={(v) => updateSetting("notifications_enabled", v ? "true" : "false")} data-testid="switch-notifications-enabled" />
-                </div>
-
-                {/* ── Telegram Section ── */}
-                <div className="space-y-4 rounded-lg border p-4" dir="rtl">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium flex items-center gap-2"><Send className="h-4 w-4 text-blue-500" /> تيليجرام</div>
-                    <Switch dir="ltr" checked={telegramEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("telegram_enabled", v ? "true" : "false")} data-testid="switch-telegram-enabled" />
-                  </div>
-
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">🤖 خطوات إنشاء البوت:</p>
-                    <ol className="text-xs text-muted-foreground space-y-2.5 list-decimal list-inside">
-                      <li>
-                        <strong>افتح <span dir="ltr">@BotFather</span> في تيليجرام:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">اذهب لتطبيق تيليجرام، ابحث عن <span dir="ltr">@BotFather</span> واضغط "Start"</p>
-                      </li>
-                      <li>
-                        <strong>اكتب الأمر <span dir="ltr">/newbot</span> ثم اتبع الخطوات:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">سيطلب منك اسم البوت (مثال: نَسَق-bot)، ثم اسم المستخدم (يجب ينتهي بـ _bot)</p>
-                      </li>
-                      <li>
-                        <strong>انسخ الـ <span dir="ltr">Bot Token</span> من الرسالة:</strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">سيعطيك رسالة فيها Token طويل (مثال: <code className="text-[10px] bg-background px-1">123456789:ABCdefGHijKLmnoPQRstUVwxyz</code>). انسخه بسرعة وألصقه في الحقل أدناه</p>
-                      </li>
-                      <li>
-                        <strong>ثم اضغط <span dir="ltr">"API TOKEN"</span> واضغط <span dir="ltr">"Edit Webhook"</span></strong>
-                        <p className="text-[11px] mt-1 mr-4 opacity-75">انسخ الرابط الظاهر أدناه والصقه في المتصفح (لتوصيل البوت بـ نَسَق)</p>
-                      </li>
-                    </ol>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Bot Token</span></Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">من @BotFather في تيليجرام → /newbot → سيعطيك Token يبدأ بأرقام:حروف</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <Input placeholder="123456789:ABCdef..." type="password" value={localSettings.telegram_bot_token || ""} onChange={(e) => updateSetting("telegram_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-bot-token" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">رابط استقبال الرسائل <span dir="ltr">(Webhook)</span></Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs">انسخ هذا الرابط واضبطه في Telegram عشان فكري يستقبل رسائلك ويرد عليها مباشرة</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <div className="flex gap-2">
-                      <Input value="https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://67115f6f-a3c8-4cb2-9763-c294fe556101-00-3dexi67745dtk.riker.replit.dev/api/integrations/telegram/webhook" readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-telegram-webhook-url" />
-                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText("https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://67115f6f-a3c8-4cb2-9763-c294fe556101-00-3dexi67745dtk.riker.replit.dev/api/integrations/telegram/webhook"); toast({ title: "تم النسخ" }); }} data-testid="button-copy-telegram-webhook"><Copy className="h-4 w-4" /></Button>
-                    </div>
-                  </div>
-
-                  <Separator />
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium">معرفات <span dir="ltr">Chat ID</span> المربوطة</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>كيف تجد Chat ID:</strong><br/>1️⃣ أرسل رسالة إلى البوت<br/>2️⃣ نَسَق سبرد ترد عليك برسالة فيها Chat ID حقك<br/>أو استخدم @userinfobot</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    {telegramIds.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {telegramIds.map((entry) => (
-                          <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-telegram-id-${entry.id}`}>
-                            {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
-                            <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-telegram-${entry.id}`}><X className="h-3 w-3" /></button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Input placeholder="Chat ID (مثال: 123456789)" value={newTelegramId} onChange={(e) => setNewTelegramId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-new-telegram-id" />
-                      <Input placeholder="تسمية (اختياري)" value={newTelegramLabel} onChange={(e) => setNewTelegramLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-new-telegram-label" />
-                      <Button variant="outline" size="icon" className="shrink-0" disabled={!newTelegramId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !telegramEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "telegram", platformId: newTelegramId.trim(), label: newTelegramLabel.trim() || undefined })} data-testid="button-add-telegram-id">
-                        {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <Label className="text-xs font-medium"><span dir="ltr">Chat ID</span> اختياري للإشعارات التلقائية</Label>
-                      <TooltipProvider><Tooltip><TooltipTrigger asChild><CircleHelp className="h-3.5 w-3.5 text-muted-foreground cursor-help" /></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs"><strong>اختياري:</strong> هنا Chat ID للقروب أو القناة اللي بتبي نَسَق ترسل الأخبار الجديدة لها تلقائياً (غير رسائل المحادثة)</TooltipContent></Tooltip></TooltipProvider>
-                    </div>
-                    <Input placeholder="Chat ID للإشعارات" value={localSettings.telegram_chat_id || ""} onChange={(e) => updateSetting("telegram_chat_id", e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !telegramEnabled} data-testid="input-telegram-notif-chat-id" />
-                  </div>
-
-                  <Button variant="outline" onClick={() => testTelegramMutation.mutate()} disabled={!notificationsEnabled || !telegramEnabled || testTelegramMutation.isPending} className="gap-2" data-testid="button-test-telegram">
-                    {testTelegramMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار تيليجرام
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5 text-primary" /> محرك السمات</CardTitle>
+            <CardDescription>اختر المظهر المفضل لديك</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              {themeOptions.map((option) => {
+                const isSelected = theme === option.value;
+                return (
+                  <Button
+                    key={option.value}
+                    variant={isSelected ? "default" : "outline"}
+                    className="gap-2"
+                    onClick={() => setTheme(option.value as any)}
+                    data-testid={`button-theme-${option.value}`}
+                  >
+                    <span className={`h-3 w-3 rounded-full ${option.color}`} />
+                    {option.label}
+                    {isSelected && <Check className="h-4 w-4 mr-1" />}
                   </Button>
-                </div>
+                );
+              })}
+              <p className="text-xs text-muted-foreground mt-3">النمط تشغيليًا داكن دائمًا، وذي الخيارات تغيّر شخصية الألوان فقط.</p>
+            </div>
+          </CardContent>
+        </Card>
 
-                {/* ── Slack Section ── */}
-                <div className="space-y-4 rounded-lg border p-4" dir="rtl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              الإشعارات التلقائية
+            </CardTitle>
+            <CardDescription>
+              إرسال الأخبار الجديدة تلقائياً إلى تيليجرام و Slack
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-medium">تفعيل الإشعارات</Label>
+                <p className="text-sm text-muted-foreground">إرسال الأخبار الجديدة تلقائياً عند جلبها</p>
+              </div>
+              <Switch
+                checked={notificationsEnabled}
+                onCheckedChange={(checked) => updateSetting("notifications_enabled", checked ? "true" : "false")}
+                data-testid="switch-notifications-enabled"
+              />
+            </div>
+            
+            {notificationsEnabled && (
+              <>
+                <Separator />
+                
+                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="font-medium">Slack</div>
-                    <Switch dir="ltr" checked={slackEnabled} disabled={!notificationsEnabled} onCheckedChange={(v) => updateSetting("slack_enabled", v ? "true" : "false")} data-testid="switch-slack-enabled" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground">🔧 خطوات إعداد التطبيق:</p>
-                    <Accordion type="single" collapsible className="w-full">
-                      <AccordionItem value="step-1" className="border rounded-lg px-3">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">1️⃣ إنشاء التطبيق</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>أول شيء تحتاج تروح إلى صفحة تطبيقات سلاك عبر الرابط: <a href="https://api.slack.com/apps" target="_blank" className="text-primary underline" dir="ltr">api.slack.com/apps</a></p>
-                          <p>ثم تضغط <span dir="ltr" className="bg-background px-1 rounded">Create New App</span> وتختار <span dir="ltr" className="bg-background px-1 rounded">From Scratch</span></p>
-                          <p>وتكتب اسم التطبيق وتحدد الـ Workspace اللي تبي تربطه</p>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-2" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">2️⃣ ضبط اسم البوت في App Home</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>قبل ما تثبّت التطبيق، ادخل على تبويب <span dir="ltr" className="bg-background px-1 rounded">App Home</span> من القائمة الجانبية</p>
-                          <p>وتأكد من أن خانة <span dir="ltr" className="bg-background px-1 rounded">App Display Name</span> (اسم البوت اللي بيطلع للناس) فيها اسم مناسب ومكتوب بشكل صحيح</p>
-                          <p className="text-red-500">⚠️ لو خانة الاسم فاضية أو فيها مشكلة ممكن ما يظهر البوت بشكل صحيح داخل سلاك</p>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-3" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">3️⃣ إضافة الصلاحيات (Bot Scopes) 🔴 مهمة جداً</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>ادخل على <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> وانزل إلى <span dir="ltr" className="bg-background px-1 rounded">Bot Token Scopes</span></p>
-                          <p>أضف الصلاحيات حسب الطريقة اللي تبي البوت يشتغل فيها:</p>
-                          
-                          <p className="font-semibold mt-2">🔹 لو تبغى البوت يرد فقط لما أحد يمنشنه:</p>
-                          <p>أضف هذي الصلاحيات:</p>
-                          <div className="ml-4 space-y-1">
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mentions:read</code></p>
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
-                          </div>
-
-                          <p className="font-semibold mt-2">🔹 لو تبغى البوت يقرأ كل رسائل القناة ويرد بدون منشن:</p>
-                          <p>أضف هذي الصلاحيات:</p>
-                          <div className="ml-4 space-y-1">
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:history</code></p>
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:read</code></p>
-                            <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-4" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">4️⃣ تثبيت التطبيق على الـ Workspace</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p>بعد إضافة الصلاحيات، ارجع لأعلى صفحة <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span></p>
-                          <p>واضغط <span dir="ltr" className="bg-background px-1 rounded">Install to Workspace</span> ثم وافق على الأذونات من خلال <span dir="ltr" className="bg-background px-1 rounded">Allow</span></p>
-                          <p className="text-green-600">✅ هذه الخطوة ضرورية عشان سلاك ينشئ لك الـ Bot Token بالصلاحيات اللي اخترتها</p>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-5" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">5️⃣ نسخ القيم المطلوبة وإدخالها هنا</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground space-y-4">
-                          <p className="text-xs">بعد التثبيت، ارجع لصفحة تطبيقك في سلاك وانسخ القيم التالية والصقها هنا:</p>
-
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-medium"><span dir="ltr">Webhook URL</span> — لإرسال الإشعارات التلقائية</Label>
-                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
-                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">Incoming Webhooks</span></p>
-                              <p>📍 فعّل خيار <span dir="ltr" className="font-mono bg-background px-1 rounded">Activate Incoming Webhooks</span></p>
-                              <p>📍 اضغط <span dir="ltr" className="font-mono bg-background px-1 rounded">Add New Webhook to Workspace</span> واختار القناة</p>
-                              <p>📍 انسخ الـ Webhook URL اللي يبدأ بـ <span dir="ltr" className="font-mono bg-background px-1 rounded">https://hooks.slack.com/services/...</span></p>
-                            </div>
-                            <Input placeholder="https://hooks.slack.com/services/..." value={localSettings.slack_webhook_url || ""} onChange={(e) => updateSetting("slack_webhook_url", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-webhook" />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-medium"><span dir="ltr">Bot User OAuth Token</span></Label>
-                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
-                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">OAuth & Permissions</span></p>
-                              <p>📍 انزل لقسم <span dir="ltr" className="font-mono bg-background px-1 rounded">OAuth Tokens for Your Workspace</span></p>
-                              <p>📍 انسخ الـ <span dir="ltr" className="font-mono bg-background px-1 rounded">Bot User OAuth Token</span> اللي يبدأ بـ <span dir="ltr" className="font-mono bg-background px-1 rounded">xoxb-</span></p>
-                            </div>
-                            <Input placeholder="xoxb-..." type="password" value={localSettings.slack_bot_token || ""} onChange={(e) => updateSetting("slack_bot_token", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-bot-token" />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-medium"><span dir="ltr">Signing Secret</span></Label>
-                            <div className="text-[11px] space-y-0.5 bg-muted/50 rounded px-2 py-1.5">
-                              <p>📍 من القائمة الجانبية اختر <span dir="ltr" className="font-mono bg-background px-1 rounded">Basic Information</span></p>
-                              <p>📍 انزل لقسم <span dir="ltr" className="font-mono bg-background px-1 rounded">App Credentials</span></p>
-                              <p>📍 انسخ قيمة <span dir="ltr" className="font-mono bg-background px-1 rounded">Signing Secret</span> من هناك</p>
-                            </div>
-                            <Input placeholder="Signing Secret" type="password" value={localSettings.slack_signing_secret || ""} onChange={(e) => updateSetting("slack_signing_secret", e.target.value)} dir="ltr" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-slack-signing-secret" />
-                          </div>
-
-                          <Button onClick={() => saveMutation.mutate(localSettings)} disabled={saveMutation.isPending || !hasChanges} className="w-full gap-2 mt-1" data-testid="button-save-slack-settings">
-                            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            حفظ التغييرات
-                          </Button>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-6" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">6️⃣ تفعيل Event Subscriptions</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground space-y-3">
-                          <p className="text-xs">الآن ادخل على <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> من القائمة الجانبية</p>
-                          <p className="text-xs">فعّل خيار <span dir="ltr" className="bg-background px-1 rounded">Enable Events</span></p>
-                          <p className="text-xs">انسخ رابط الاستقبال أدناه والصقه في خانة <span dir="ltr" className="bg-background px-1 rounded">Request URL</span></p>
-                          <p className="text-xs">وانتظر لين يظهر لك <span className="text-green-600 font-semibold">Verified</span></p>
-                          
-                          <div className="space-y-1">
-                            <Label className="text-xs font-medium">رابط استقبال الأحداث <span dir="ltr">(Events URL)</span></Label>
-                            <div className="flex gap-2">
-                              <Input value={`${window.location.origin}/api/integrations/slack/events`} readOnly dir="ltr" className="font-mono text-xs bg-muted" data-testid="input-slack-events-url" />
-                              <Button variant="outline" size="icon" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/integrations/slack/events`); toast({ title: "تم النسخ" }); }} data-testid="button-copy-slack-events-url"><Copy className="h-4 w-4" /></Button>
-                            </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-8" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">7️⃣ اختيار طريقة عمل البوت</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p className="font-semibold">🔹 لو تبغى البوت يرد فقط على المنشن:</p>
-                          <p>في قسم <span dir="ltr" className="bg-background px-1 rounded">Subscribe to bot events</span> أضف الحدث:</p>
-                          <div className="ml-4 my-1"><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">app_mention</code></div>
-                          <p className="font-semibold mt-3">🔹 لو تبغى البوت يقرأ كل رسائل القناة بدون منشن:</p>
-                          <p>في نفس صفحة <span dir="ltr" className="bg-background px-1 rounded">Event Subscriptions</span> أضف الحدث:</p>
-                          <div className="ml-4 my-1"><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">message.channels</code></div>
-                          <p>(مع ضرورة وجود صلاحيات <code dir="ltr" className="text-[10px] bg-background px-1">channels:history</code> و <code dir="ltr" className="text-[10px] bg-background px-1">channels:read</code>)</p>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-9" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">8️⃣ ربط معرفاتك بنَسَق</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground space-y-3">
-                          <p className="text-xs">أضف الـ Member IDs الخاصة بك عشان فكري يتعرف عليك في سلاك:</p>
-                          <p className="text-[11px] text-muted-foreground">كيف تجد Member ID: اضغط على بروفايلك في Slack → الـ 3 نقاط → <span dir="ltr" className="bg-background px-1 rounded">Copy member ID</span></p>
-                          {slackIds.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {slackIds.map((entry) => (
-                                <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-${entry.id}`}>
-                                  {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
-                                  <button onClick={() => removePlatformIdMutation.mutate(entry.id)} className="hover:text-destructive" data-testid={`button-remove-slack-${entry.id}`}><X className="h-3 w-3" /></button>
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex gap-2">
-                            <Input placeholder="مثال: U0123456789" value={newSlackId} onChange={(e) => setNewSlackId(e.target.value)} dir="ltr" className="font-mono" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-id" />
-                            <Input placeholder="تسمية (اختياري)" value={newSlackLabel} onChange={(e) => setNewSlackLabel(e.target.value)} className="max-w-[140px]" disabled={!notificationsEnabled || !slackEnabled} data-testid="input-new-slack-label" />
-                            <Button variant="outline" size="icon" className="shrink-0" disabled={!newSlackId.trim() || addPlatformIdMutation.isPending || !notificationsEnabled || !slackEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "slack", platformId: newSlackId.trim(), label: newSlackLabel.trim() || undefined })} data-testid="button-add-slack-id">
-                              {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                            </Button>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="step-10" className="border rounded-lg px-3 mt-2">
-                        <AccordionTrigger className="text-xs font-medium hover:no-underline">9️⃣ ملاحظات سريعة ⚠️</AccordionTrigger>
-                        <AccordionContent className="text-xs text-muted-foreground space-y-2">
-                          <p className="font-semibold">📌 أي تعديل على الصلاحيات (Scopes) يحتاج تعيد <span dir="ltr" className="bg-background px-1 rounded">Install to Workspace</span> عشان التوكن يتحدث</p>
-                          <p className="font-semibold mt-2">📌 تأكد أنك ضفت البوت داخل القناة من سلاك نفسه</p>
-                          <p>البوت ما يقدر يشوف أو يرد في قناة مو مضاف فيها</p>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => testSlackMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackMutation.isPending} className="gap-2" data-testid="button-test-slack-webhook">
-                      {testSlackMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار Webhook
-                    </Button>
-                    <Button variant="outline" onClick={() => testSlackBotMutation.mutate()} disabled={!notificationsEnabled || !slackEnabled || testSlackBotMutation.isPending} className="gap-2" data-testid="button-test-slack-bot">
-                      {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار البوت
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="fikri" className="space-y-4">
-            {/* AI Source Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Bot className="h-4 w-4" /> مصدر الذكاء الاصطناعي</CardTitle>
-                <CardDescription>اختر من أين يأتي الذكاء الاصطناعي الذي يشغّل فكري.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Source type selector */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {[
-                    {
-                      value: "replit",
-                      label: "النموذج الافتراضي",
-                      desc: "يعمل مباشرة بدون أي إعداد",
-                      icon: "⚡",
-                    },
-                    {
-                      value: "custom",
-                      label: "API مخصص",
-                      desc: "OpenAI أو Anthropic أو أي مزود",
-                      icon: "🔑",
-                    },
-                    {
-                      value: "local",
-                      label: "نموذج محلي",
-                      desc: "Ollama أو LM Studio على جهازك",
-                      icon: "💻",
-                    },
-                  ].map((opt) => {
-                    const selected = (localSettings.ai_provider || "replit") === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => updateSetting("ai_provider", opt.value)}
-                        className={`rounded-xl border-2 p-4 text-right transition-all ${
-                          selected
-                            ? "border-primary bg-primary/5 shadow-sm"
-                            : "border-border hover:border-primary/40"
-                        }`}
-                        data-testid={`button-ai-source-${opt.value}`}
-                      >
-                        <div className="text-2xl mb-2">{opt.icon}</div>
-                        <div className="font-semibold text-sm">{opt.label}</div>
-                        <div className="text-xs text-muted-foreground mt-1">{opt.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Fields for custom API */}
-                {localSettings.ai_provider === "custom" && (
-                  <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
-                    <p className="text-sm font-medium">إعدادات API المخصص</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label>API Key</Label>
-                        <Input type="password" placeholder="sk-... أو key-..." value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" data-testid="input-llm-api-key" />
-                        <p className="text-xs text-muted-foreground">مفتاح الوصول للـ API</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label>اسم النموذج</Label>
-                        <Input placeholder="gpt-4o / claude-3-5-sonnet" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" data-testid="input-llm-model" />
-                        <p className="text-xs text-muted-foreground">اسم النموذج الذي تريد استخدامه</p>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4 w-4 text-blue-500" />
+                      <Label className="text-base font-medium">تيليجرام</Label>
                     </div>
-                    <div className="space-y-1">
-                      <Label>Base URL (اختياري)</Label>
-                      <Input placeholder="https://api.openai.com/v1" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" data-testid="input-llm-base-url" />
-                      <p className="text-xs text-muted-foreground">اتركه فارغاً لاستخدام OpenAI المباشر. غيّره للمزودين الآخرين مثل Anthropic أو Together.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Fields for local model */}
-                {localSettings.ai_provider === "local" && (
-                  <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
-                    <p className="text-sm font-medium">إعدادات النموذج المحلي</p>
-                    <div className="space-y-1">
-                      <Label>رابط الخادم المحلي</Label>
-                      <Input placeholder="http://localhost:11434/v1" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" />
-                      <p className="text-xs text-muted-foreground">
-                        Ollama: <span className="font-mono text-xs">http://localhost:11434/v1</span> — LM Studio: <span className="font-mono text-xs">http://localhost:1234/v1</span>
-                      </p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label>اسم النموذج</Label>
-                        <Input placeholder="llama3 / mistral / phi3" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" />
-                        <p className="text-xs text-muted-foreground">اسم النموذج المثبّت على جهازك</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label>API Key (اختياري)</Label>
-                        <Input type="password" placeholder="not-needed أو اتركه فارغاً" value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" />
-                        <p className="text-xs text-muted-foreground">معظم النماذج المحلية لا تحتاجه</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {localSettings.ai_provider === "replit" && (
-                  <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
-                    <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    <p className="text-sm text-muted-foreground">يعمل تلقائياً — لا تحتاج لأي إعداد إضافي.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Web Search */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">🔍 البحث الخارجي (Web Search)</CardTitle>
-                <CardDescription>يتيح لفكري البحث في الإنترنت للحصول على معلومات حديثة.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1">
-                  <Label>مصدر البحث</Label>
-                  <Select value={localSettings.web_search_provider || "system_default"} onValueChange={(value) => updateSetting("web_search_provider", value)}>
-                    <SelectTrigger data-testid="select-web-search-provider"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="system_default">النموذج الافتراضي للموقع</SelectItem>
-                      <SelectItem value="custom">مفتاح API مخصص</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">اختر النموذج الافتراضي للموقع أو أضف مفتاحك الخاص</p>
-                </div>
-                {localSettings.web_search_provider === "system_default" && (
-                  <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
-                    <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    <p className="text-sm text-muted-foreground">يستخدم مفتاح البحث الافتراضي للموقع — لا تحتاج إعداد إضافي.</p>
-                  </div>
-                )}
-                {localSettings.web_search_provider === "custom" && (
-                  <div className="space-y-1">
-                    <Label>Brave Search API Key</Label>
-                    <Input
-                      type="password"
-                      placeholder="BSA... أو BSP..."
-                      value={localSettings.web_search_api_key || ""}
-                      onChange={(e) => updateSetting("web_search_api_key", e.target.value)}
-                      dir="ltr"
-                      data-testid="input-web-search-api-key"
+                    <Switch
+                      checked={telegramEnabled}
+                      onCheckedChange={(checked) => updateSetting("telegram_enabled", checked ? "true" : "false")}
+                      data-testid="switch-telegram-enabled"
                     />
-                    <p className="text-xs text-muted-foreground">احصل على مفتاح مجاني من <span className="font-mono" dir="ltr">api.search.brave.com</span></p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* AI Persona */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">🎭 شخصية فكري والأسلوب</CardTitle>
-                <CardDescription>أخبر الذكاء الاصطناعي كيف يتصرف ويتحدث.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-1">
-                  <Label>System Prompt الأساسي</Label>
-                  <Textarea rows={4} placeholder="تعليمات عامة للنظام..." value={localSettings.ai_system_prompt || ""} onChange={(e) => updateSetting("ai_system_prompt", e.target.value)} />
-                  <p className="text-xs text-muted-foreground">يُطبَّق على جميع وظائف الذكاء الاصطناعي: إعادة الصياغة، الملخصات، التوليد.</p>
-                </div>
-
-                <div className="space-y-1">
-                  <Label>أسلوب فكري الخاص بك</Label>
-                  <Textarea
-                    rows={4}
-                    placeholder="الافتراضي: ردّ بردود تفاعلية وجميلة مع استخدام إيموجي وأيضاً لهجة سعودية"
-                    value={localSettings.fikri_persona_style || ""}
-                    onChange={(e) => updateSetting("fikri_persona_style", e.target.value)}
-                    data-testid="textarea-fikri-persona-style"
-                  />
-                  <p className="text-xs text-muted-foreground">لو تركته فاضي، فكري يستخدم الأسلوب الافتراضي: ردود تفاعلية بإيموجي ولهجة سعودية. اكتب أسلوبك الخاص لو تبي تغيّره.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>اختبار سريع للأسلوب</Label>
-                  <Input value={testAiTitle} onChange={(e) => setTestAiTitle(e.target.value)} placeholder="أدخل عنوان خبر لاختبار إعادة الصياغة" />
-                  <Button variant="outline" className="gap-2" onClick={() => testAiMutation.mutate()} disabled={testAiMutation.isPending}>
-                    {testAiMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} جرّب إعادة الصياغة
-                  </Button>
-                  {testAiResult && <Textarea rows={5} value={testAiResult} readOnly className="bg-muted/50" />}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>قوالب الأوامر</CardTitle>
-                <CardDescription>قوالب توليد الأفكار المخصصة لهذا المستخدم.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PromptTemplatesList />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>أمثلة أسلوبية سابقة</CardTitle>
-                <CardDescription>تُستخدم لتحسين أفكار فكري لهذا المستخدم فقط.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="العنوان" value={styleTitle} onChange={(e) => setStyleTitle(e.target.value)} />
-                <Textarea placeholder="الوصف" value={styleDescription} onChange={(e) => setStyleDescription(e.target.value)} rows={3} />
-                <Input placeholder="نص الصورة المصغرة (اختياري)" value={styleThumbnail} onChange={(e) => setStyleThumbnail(e.target.value)} />
-                <Button onClick={() => addStyleMutation.mutate()} disabled={!styleTitle.trim() || addStyleMutation.isPending} className="gap-2">
-                  <Bot className="h-4 w-4" /> إضافة مثال
-                </Button>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  {(styleExamples || []).map((example) => (
-                    <div key={example.id} className="rounded-lg border p-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{example.title}</p>
-                        {example.description && <p className="text-sm text-muted-foreground mt-1">{example.description}</p>}
-                        {example.thumbnailText && <Badge variant="secondary" className="mt-2">{example.thumbnailText}</Badge>}
+                  
+                  {telegramEnabled && (
+                    <div className="space-y-3 pr-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="telegram-token">Bot Token</Label>
+                        <Input
+                          id="telegram-token"
+                          type="password"
+                          placeholder="123456:ABC-DEF..."
+                          value={localSettings.telegram_bot_token || ""}
+                          onChange={(e) => updateSetting("telegram_bot_token", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-telegram-token"
+                        />
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteStyleMutation.mutate(example.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                      <div className="space-y-2">
+                        <Label htmlFor="telegram-chat-id">Chat ID</Label>
+                        <Input
+                          id="telegram-chat-id"
+                          placeholder="-1001234567890"
+                          value={localSettings.telegram_chat_id || ""}
+                          onChange={(e) => updateSetting("telegram_chat_id", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-telegram-chat-id"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testTelegramMutation.mutate()}
+                        disabled={testTelegramMutation.isPending || !localSettings.telegram_bot_token || !localSettings.telegram_chat_id}
+                        data-testid="button-test-telegram"
+                      >
+                        {testTelegramMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <TestTube className="h-4 w-4" />
+                        )}
+                        <span className="mr-2">اختبار الاتصال</span>
                       </Button>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
 
-        <div className="text-center text-sm text-muted-foreground py-4 border-t mt-6" data-testid="text-version">
-          نَسَق — الإصدار 1.0.0
-        </div>
+                <Separator />
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-purple-500" />
+                      <Label className="text-base font-medium">Slack</Label>
+                    </div>
+                    <Switch
+                      checked={slackEnabled}
+                      onCheckedChange={(checked) => updateSetting("slack_enabled", checked ? "true" : "false")}
+                      data-testid="switch-slack-enabled"
+                    />
+                  </div>
+                  
+                  {slackEnabled && (
+                    <div className="space-y-3 pr-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-webhook">Webhook URL (إشعارات الأخبار)</Label>
+                        <Input
+                          id="slack-webhook"
+                          type="password"
+                          placeholder="https://hooks.slack.com/services/..."
+                          value={localSettings.slack_webhook_url || ""}
+                          onChange={(e) => updateSetting("slack_webhook_url", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-webhook"
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="rounded-md border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 p-3 text-sm space-y-1">
+                        <p className="font-semibold text-blue-800 dark:text-blue-300">إعداد شات البوت (استقبال الرسائل)</p>
+                        <p className="text-muted-foreground text-xs">هذه الحقول تتيح للبوت الرد على رسائلك في Slack</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-token">
+                          Bot User OAuth Token (xoxb)
+                          {!localSettings.slack_bot_token && <span className="text-destructive text-xs mr-2">⚠ مطلوب للرد</span>}
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="slack-bot-token"
+                            type="password"
+                            placeholder="xoxb-..."
+                            value={localSettings.slack_bot_token || ""}
+                            onChange={(e) => updateSetting("slack_bot_token", e.target.value)}
+                            dir="ltr"
+                            data-testid="input-slack-bot-token"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => testSlackBotMutation.mutate()}
+                            disabled={testSlackBotMutation.isPending || !localSettings.slack_bot_token}
+                            data-testid="button-test-slack-bot"
+                          >
+                            {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-signing-secret">
+                          Signing Secret
+                          {!localSettings.slack_signing_secret && <span className="text-amber-500 text-xs mr-2">⚠ مطلوب للأمان</span>}
+                        </Label>
+                        <Input
+                          id="slack-signing-secret"
+                          type="password"
+                          placeholder="Slack Signing Secret"
+                          value={localSettings.slack_signing_secret || ""}
+                          onChange={(e) => updateSetting("slack_signing_secret", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-signing-secret"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="slack-bot-user-id">Bot User ID (اختياري)</Label>
+                        <Input
+                          id="slack-bot-user-id"
+                          placeholder="U012345..."
+                          value={localSettings.slack_bot_user_id || ""}
+                          onChange={(e) => updateSetting("slack_bot_user_id", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-slack-bot-user-id"
+                        />
+                      </div>
+
+                      <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-2">
+                        <p className="font-medium">Endpoint (ضعه في Slack → Event Subscriptions):</p>
+                        <code className="block text-xs break-all bg-background border rounded px-2 py-1" dir="ltr">{window.location.origin}/api/integrations/slack/events</code>
+                        <p className="text-xs text-muted-foreground">تأكد من تفعيل: <code>app_mention</code> و <code>message.im</code> في Subscribe to events</p>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => testSlackMutation.mutate()}
+                        disabled={testSlackMutation.isPending || !localSettings.slack_webhook_url}
+                        data-testid="button-test-slack"
+                      >
+                        {testSlackMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <TestTube className="h-4 w-4" />
+                        )}
+                        <span className="mr-2">اختبار الاتصال</span>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              مزود الذكاء الاصطناعي
+            </CardTitle>
+            <CardDescription>
+              اختر بين خدمة OpenAI المدمجة أو خادمك المحلي
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>المزود</Label>
+              <Select 
+                value={aiProvider} 
+                onValueChange={(value) => updateSetting("ai_provider", value)}
+              >
+                <SelectTrigger data-testid="select-ai-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="replit">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      <span>سحابة نظام الإنتاج (الافتراضي)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="custom">
+                    <div className="flex items-center gap-2">
+                      <Server className="h-4 w-4" />
+                      <span>خادم محلي / مخصص (Ollama)</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {aiProvider === "replit" && (
+              <div className="rounded-md border p-4 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    يستخدم الذكاء الاصطناعي المدمج - لا حاجة لمفتاح API خاص
+                  </p>
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
+                    متصل
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {aiProvider === "custom" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="ai-base-url" className="flex items-center gap-2">
+                    <Globe className="h-3 w-3" />
+                    Base URL
+                  </Label>
+                  <Input
+                    id="ai-base-url"
+                    placeholder="https://my-server.ngrok.io/v1"
+                    value={localSettings.ai_custom_base_url || ""}
+                    onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-base-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ai-api-key" className="flex items-center gap-2">
+                    <Key className="h-3 w-3" />
+                    API Key (اختياري)
+                  </Label>
+                  <Input
+                    id="ai-api-key"
+                    type="password"
+                    placeholder="اتركه فارغاً إذا لم يكن مطلوباً"
+                    value={localSettings.ai_custom_api_key || ""}
+                    onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-api-key"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ai-model" className="flex items-center gap-2">
+                    <Cpu className="h-3 w-3" />
+                    Model Name
+                  </Label>
+                  <Input
+                    id="ai-model"
+                    placeholder="llama3, mistral, etc."
+                    value={localSettings.ai_custom_model || ""}
+                    onChange={(e) => updateSetting("ai_custom_model", e.target.value)}
+                    dir="ltr"
+                    data-testid="input-ai-model"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              أسلوب نظام الإنتاج
+            </CardTitle>
+            <CardDescription>
+              حدد شخصية الكتابة - كيف يعيد الذكاء الاصطناعي صياغة الأخبار
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="system-prompt">System Prompt</Label>
+              <Textarea
+                id="system-prompt"
+                className="min-h-[150px] text-sm"
+                placeholder="أنت حسام من قناة نظام الإنتاج. أسلوبك سعودي تقني كاجوال..."
+                value={localSettings.ai_system_prompt || ""}
+                onChange={(e) => updateSetting("ai_system_prompt", e.target.value)}
+                data-testid="textarea-system-prompt"
+              />
+              <p className="text-xs text-muted-foreground">
+                هذا النص يحدد شخصية الذكاء الاصطناعي عند إعادة كتابة الأخبار للنشر
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">اختبار الأسلوب</Label>
+              <Input
+                placeholder="أدخل عنوان خبر للاختبار..."
+                value={testAiTitle}
+                onChange={(e) => setTestAiTitle(e.target.value)}
+                dir="auto"
+                data-testid="input-test-ai-title"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testAiMutation.mutate()}
+                disabled={testAiMutation.isPending || !testAiTitle}
+                data-testid="button-test-ai"
+              >
+                {testAiMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                <span className="mr-2">اختبار إعادة الكتابة</span>
+              </Button>
+              {testAiResult && (
+                <div className="rounded-md border p-4 bg-muted/30">
+                  <p className="text-sm font-medium mb-2">النتيجة:</p>
+                  <p className="text-sm whitespace-pre-wrap" data-testid="text-ai-test-result">{testAiResult}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-primary" />
+              أفكاري الناجحة السابقة
+            </CardTitle>
+            <CardDescription>
+              أضف أمثلة من أفكارك الناجحة ليتعلم الذكاء الاصطناعي أسلوبك
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="style-title">عنوان الفكرة</Label>
+                <Input
+                  id="style-title"
+                  placeholder="مثال: أفضل 3 تطبيقات لازم تجربها"
+                  value={styleTitle}
+                  onChange={(e) => setStyleTitle(e.target.value)}
+                  data-testid="input-style-title"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="style-description">وصف الفكرة</Label>
+                <Textarea
+                  id="style-description"
+                  placeholder="وصف قصير لمحتوى الفكرة..."
+                  value={styleDescription}
+                  onChange={(e) => setStyleDescription(e.target.value)}
+                  data-testid="textarea-style-description"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="style-thumbnail">نص الصورة المصغرة</Label>
+                <Input
+                  id="style-thumbnail"
+                  placeholder="مثال: 3 تطبيقات خرافية!"
+                  value={styleThumbnail}
+                  onChange={(e) => setStyleThumbnail(e.target.value)}
+                  data-testid="input-style-thumbnail"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => addStyleMutation.mutate()}
+                disabled={addStyleMutation.isPending || !styleTitle.trim()}
+                data-testid="button-add-style-example"
+              >
+                {addStyleMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                <span className="mr-2">إضافة مثال</span>
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              {styleExamples && styleExamples.length > 0 ? (
+                styleExamples.map((example: any) => (
+                  <div
+                    key={example.id}
+                    className="flex items-start justify-between gap-2 rounded-md border p-3"
+                    data-testid={`style-example-${example.id}`}
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <p className="font-bold">{example.title}</p>
+                      {example.description && (
+                        <p className="text-sm text-muted-foreground">{example.description}</p>
+                      )}
+                      {example.thumbnailText && (
+                        <p className="text-xs flex items-center gap-1">
+                          <Image className="h-3 w-3" />
+                          {example.thumbnailText}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteStyleMutation.mutate(example.id)}
+                      disabled={deleteStyleMutation.isPending}
+                      data-testid={`button-delete-style-${example.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  لا توجد أمثلة بعد. أضف أفكارك الناجحة السابقة ليتعلم منها الذكاء الاصطناعي
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <PromptTemplatesList />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              قاعدة البيانات
+            </CardTitle>
+            <CardDescription>حالة تخزين البيانات</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">PostgreSQL</p>
+                <p className="text-sm text-muted-foreground">قاعدة بيانات مُدارة</p>
+              </div>
+              <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 no-default-hover-elevate no-default-active-elevate">
+                متصل
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>حول النظام</CardTitle>
+            <CardDescription>معلومات عن المطور والإصدار</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm">
+              <span className="font-medium">منصة نظام الإنتاج</span>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              منصة إدارة المحتوى وتوليد أفكار الفيديو
+            </p>
+            <p className="text-xs text-muted-foreground mt-4">
+              تم تطوير هذا النظام بواسطة <span className="font-bold text-primary">حسام تيك فيلد</span>
+            </p>
+          </CardContent>
+        </Card>
       </div>
+
+      {hasChanges && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background/95 backdrop-blur-sm p-3">
+          <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">لديك تغييرات غير محفوظة</p>
+            <Button 
+              onClick={handleSave} 
+              disabled={saveMutation.isPending}
+              data-testid="button-save-settings"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              <span className="mr-2">حفظ الإعدادات</span>
+            </Button>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

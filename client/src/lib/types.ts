@@ -1,6 +1,6 @@
-import type { Folder, Source, Content, Idea, IdeaStatus, SourceType, IdeaComment, IdeaAssignment } from "@shared/schema";
+import type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType, IdeaComment, IdeaAssignment } from "@shared/schema";
 
-export type { Folder, Source, Content, Idea, IdeaStatus, SourceType, IdeaComment, IdeaAssignment };
+export type { Folder, Source, Content, Idea, IdeaStatus, IdeaCategory, SourceType, IdeaComment, IdeaAssignment };
 
 // Extended types with relations
 export interface FolderWithSources extends Folder {
@@ -30,6 +30,16 @@ export const ideaStatusLabels: Record<string, string> = {
   completed: "مكتملة",
 };
 
+export const ideaCategoryLabels: Record<string, string> = {
+  thalathiyat: "ثلاثيات",
+  leh: "ليه؟",
+  tech_i_use: "Tech I Use",
+  news_roundup: "ملخص الأخبار",
+  deep_dive: "تحليل معمّق",
+  comparison: "مقارنة",
+  tutorial: "شرح",
+  other: "أخرى",
+};
 
 export const sourceTypeLabels: Record<string, string> = {
   rss: "RSS",
@@ -38,26 +48,6 @@ export const sourceTypeLabels: Record<string, string> = {
   twitter: "تويتر/X",
   tiktok: "تيك توك",
 };
-
-const CATEGORY_PALETTE: Array<{ bg: string; text: string }> = [
-  { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-700 dark:text-indigo-300" },
-  { bg: "bg-pink-100 dark:bg-pink-900/30", text: "text-pink-700 dark:text-pink-300" },
-  { bg: "bg-cyan-100 dark:bg-cyan-900/30", text: "text-cyan-700 dark:text-cyan-300" },
-  { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300" },
-  { bg: "bg-violet-100 dark:bg-violet-900/30", text: "text-violet-700 dark:text-violet-300" },
-  { bg: "bg-teal-100 dark:bg-teal-900/30", text: "text-teal-700 dark:text-teal-300" },
-  { bg: "bg-lime-100 dark:bg-lime-900/30", text: "text-lime-700 dark:text-lime-300" },
-  { bg: "bg-orange-100 dark:bg-orange-900/30", text: "text-orange-700 dark:text-orange-300" },
-  { bg: "bg-rose-100 dark:bg-rose-900/30", text: "text-rose-700 dark:text-rose-300" },
-  { bg: "bg-sky-100 dark:bg-sky-900/30", text: "text-sky-700 dark:text-sky-300" },
-];
-
-export function getCategoryColor(category: string): { bg: string; text: string } {
-  if (!category) return { bg: "bg-gray-100 dark:bg-gray-900/30", text: "text-gray-700 dark:text-gray-300" };
-  let hash = 0;
-  for (let i = 0; i < category.length; i++) hash = (hash * 31 + category.charCodeAt(i)) >>> 0;
-  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
-}
 
 // Status colors
 export const statusColors: Record<string, { bg: string; text: string }> = {
@@ -69,3 +59,13 @@ export const statusColors: Record<string, { bg: string; text: string }> = {
   completed: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-300" },
 };
 
+export const categoryColors: Record<string, { bg: string; text: string }> = {
+  thalathiyat: { bg: "bg-indigo-100 dark:bg-indigo-900/30", text: "text-indigo-700 dark:text-indigo-300" },
+  leh: { bg: "bg-pink-100 dark:bg-pink-900/30", text: "text-pink-700 dark:text-pink-300" },
+  tech_i_use: { bg: "bg-cyan-100 dark:bg-cyan-900/30", text: "text-cyan-700 dark:text-cyan-300" },
+  news_roundup: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300" },
+  deep_dive: { bg: "bg-violet-100 dark:bg-violet-900/30", text: "text-violet-700 dark:text-violet-300" },
+  comparison: { bg: "bg-teal-100 dark:bg-teal-900/30", text: "text-teal-700 dark:text-teal-300" },
+  tutorial: { bg: "bg-lime-100 dark:bg-lime-900/30", text: "text-lime-700 dark:text-lime-300" },
+  other: { bg: "bg-gray-100 dark:bg-gray-900/30", text: "text-gray-700 dark:text-gray-300" },
+};

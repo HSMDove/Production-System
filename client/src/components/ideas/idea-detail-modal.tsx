@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import type { IdeaWithFolder } from "@/lib/types";
-import { ideaStatusLabels, getCategoryColor, statusColors } from "@/lib/types";
+import { ideaCategoryLabels, ideaStatusLabels, categoryColors, statusColors } from "@/lib/types";
 
 interface IdeaDetailModalProps {
   idea: IdeaWithFolder | null;
@@ -145,7 +145,7 @@ function EditableField({
 export function IdeaDetailModal({ idea, open, onOpenChange, onUpdate }: IdeaDetailModalProps) {
   if (!idea) return null;
 
-  const categoryColor = getCategoryColor(idea.category);
+  const categoryColor = categoryColors[idea.category] || categoryColors.other;
   const statusColor = statusColors[idea.status] || statusColors.raw_idea;
 
   return (
@@ -157,7 +157,7 @@ export function IdeaDetailModal({ idea, open, onOpenChange, onUpdate }: IdeaDeta
               variant="secondary"
               className={`${categoryColor.bg} ${categoryColor.text}`}
             >
-              {idea.category || "بدون فئة"}
+              {ideaCategoryLabels[idea.category] || idea.category}
             </Badge>
             <Badge
               variant="secondary"

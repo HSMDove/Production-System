@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -39,14 +38,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { IdeaWithFolder, Folder } from "@/lib/types";
-import { ideaStatusLabels } from "@/lib/types";
-import type { PromptTemplate } from "@shared/schema";
+import { ideaStatusLabels, ideaCategoryLabels } from "@/lib/types";
 import { IdeaCollaboration } from "./idea-collaboration";
 
 const ideaFormSchema = z.object({
   title: z.string().min(1, "عنوان الفكرة مطلوب"),
   description: z.string().optional(),
-  category: z.string().default(""),
+  category: z.enum(["thalathiyat", "leh", "tech_i_use", "news_roundup", "deep_dive", "comparison", "tutorial", "other"]),
   status: z.enum(["raw_idea", "needs_research", "ready_for_script", "script_in_progress", "ready_for_filming", "completed"]),
   estimatedDuration: z.string().optional(),
   targetAudience: z.string().optional(),
@@ -74,16 +72,12 @@ export function IdeaDialog({
   onSubmit,
   isLoading,
 }: IdeaDialogProps) {
-  const { data: templates } = useQuery<PromptTemplate[]>({
-    queryKey: ["/api/prompt-templates"],
-  });
-
   const form = useForm<IdeaFormValues>({
     resolver: zodResolver(ideaFormSchema),
     defaultValues: {
       title: "",
       description: "",
-      category: "__none__",
+      category: "other",
       status: "raw_idea",
       estimatedDuration: "",
       targetAudience: "",
@@ -98,7 +92,7 @@ export function IdeaDialog({
       form.reset({
         title: idea.title,
         description: idea.description || "",
-        category: idea.category || "__none__",
+        category: idea.category,
         status: idea.status,
         estimatedDuration: idea.estimatedDuration || "",
         targetAudience: idea.targetAudience || "",
@@ -110,7 +104,7 @@ export function IdeaDialog({
       form.reset({
         title: "",
         description: "",
-        category: "__none__",
+        category: "other",
         status: "raw_idea",
         estimatedDuration: "",
         targetAudience: "",
@@ -122,10 +116,7 @@ export function IdeaDialog({
   }, [idea, form]);
 
   const handleSubmit = (values: IdeaFormValues) => {
-    onSubmit({
-      ...values,
-      category: values.category === "__none__" ? "" : values.category,
-    });
+    onSubmit(values);
   };
 
   return (
@@ -188,10 +179,9 @@ export function IdeaDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="__none__">بدون فئة</SelectItem>
-                        {(templates || []).map((t) => (
-                          <SelectItem key={t.id} value={t.name}>
-                            {t.name}
+                        {Object.entries(ideaCategoryLabels).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
                           </SelectItem>
                         ))}
                       </SelectContent>
