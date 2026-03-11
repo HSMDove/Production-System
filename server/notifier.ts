@@ -58,6 +58,52 @@ async function sendSlackMessage(
   }
 }
 
+function markdownToTelegramHtml(text: string): string {
+  const tokens: { start: number; end: number; replacement: string }[] = [];
+  const addToken = (regex: RegExp, wrap: (inner: string) => string) => {
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      tokens.push({ start: m.index, end: m.index + m[0].length, replacement: wrap(escapeHtml(m[1])) });
+    }
+  };
+
+  addToken(/\*\*(.+?)\*\*/g, (s) => `<b>${s}</b>`);
+  addToken(/__(.+?)__/g, (s) => `<b>${s}</b>`);
+  addToken(/`([^`]+)`/g, (s) => `<code>${s}</code>`);
+
+  tokens.sort((a, b) => b.start - a.start);
+  const filtered: typeof tokens = [];
+  let minStart = Infinity;
+  for (const t of tokens) {
+    if (t.end <= minStart) { filtered.push(t); minStart = t.start; }
+  }
+
+  let result = text;
+  for (const t of filtered) {
+    result = result.slice(0, t.start) + t.replacement + result.slice(t.end);
+  }
+
+  result = result.replace(/(?<=^|[^*])(?<!\w)\*(?!\*)(.+?)(?<!\*)\*(?!\*)(?=$|[^*])/gm, (_, inner) => `<i>${escapeHtml(inner)}</i>`);
+
+  const lines = result.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (/^#{1,3}\s+/.test(raw)) {
+      lines[i] = `<b>${escapeHtml(raw.replace(/^#{1,3}\s+/, ""))}</b>`;
+    } else if (/^[-*]\s+/.test(raw)) {
+      lines[i] = raw.replace(/^[-*]\s+/, "• ");
+    }
+  }
+  result = lines.join("\n");
+
+  const remaining = result.replace(/<\/?[a-z]+>/g, "");
+  if (remaining.includes("&") || remaining.includes("<") || remaining.includes(">")) {
+    result = result.replace(/&(?!amp;|lt;|gt;)/g, "&amp;");
+  }
+
+  return result;
+}
+
 function formatTelegramMessage(contentItem: Content, rewrittenText: string): string {
   const title = contentItem.arabicTitle || contentItem.title;
   const text = rewrittenText || contentItem.arabicSummary || contentItem.summary || "";
@@ -66,21 +112,38 @@ function formatTelegramMessage(contentItem: Content, rewrittenText: string): str
   if (text !== title) {
     message += `<b>${escapeHtml(title)}</b>\n\n`;
   }
-  message += escapeHtml(text);
+  message += markdownToTelegramHtml(text);
   if (contentItem.originalUrl) {
-    message += `\n\n<a href="${contentItem.originalUrl}">المصدر</a>`;
+    const safeUrl = contentItem.originalUrl.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    message += `\n\n<a href="${safeUrl}">المصدر</a>`;
   }
   message += `\n\n#نظام_الإنتاج`;
   return message;
 }
 
+function escapeSlackMrkdwn(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function markdownToSlackMrkdwn(text: string): string {
+  let result = text;
+  result = result.replace(/\*\*(.+?)\*\*/g, "*$1*");
+  result = result.replace(/__(.+?)__/g, "*$1*");
+  result = result.replace(/`([^`]+)`/g, "`$1`");
+  result = result.replace(/^#{1,3}\s+(.+)$/gm, "*$1*");
+  result = result.replace(/^[-•]\s+/gm, "• ");
+  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>");
+  return result;
+}
+
 function formatSlackMessage(contentItem: Content, rewrittenText: string): string {
-  const title = contentItem.arabicTitle || contentItem.title;
+  const title = escapeSlackMrkdwn(contentItem.arabicTitle || contentItem.title);
   const text = rewrittenText || contentItem.arabicSummary || contentItem.summary || "";
   
-  let message = `*${title}*\n\n${text}`;
+  let message = `*${title}*\n\n${markdownToSlackMrkdwn(text)}`;
   if (contentItem.originalUrl) {
-    message += `\n\n<${contentItem.originalUrl}|المصدر>`;
+    const safeUrl = contentItem.originalUrl.replace(/[<>]/g, "");
+    message += `\n\n<${safeUrl}|المصدر>`;
   }
   return message;
 }

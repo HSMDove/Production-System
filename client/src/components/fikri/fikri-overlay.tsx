@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import ReactMarkdown from "react-markdown";
 import { Bot, Check, Edit2, Loader2, MessageSquarePlus, Plus, Send, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,14 @@ export function FikriOverlay() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, []);
 
   const { data: conversations } = useQuery<ConversationItem[]>({
     queryKey: ["/api/assistant/conversations"],
@@ -97,6 +106,7 @@ export function FikriOverlay() {
     if (!text || chatMutation.isPending) return;
 
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "36px";
     const convId = activeConversationId || "new";
     chatMutation.mutate(
       { message: text, conversationId: convId === "new" ? "" : convId },
@@ -233,7 +243,27 @@ export function FikriOverlay() {
                         : "bg-primary text-primary-foreground mr-6"
                     }`}
                   >
-                    {m.content}
+                    {m.role === "assistant" ? (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="mr-2">{children}</li>,
+                          h1: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
+                          h2: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
+                          h3: ({ children }) => <h3 className="font-bold text-sm mb-1">{children}</h3>,
+                          code: ({ children }) => <code className="bg-background/50 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                    ) : (
+                      m.content
+                    )}
                   </div>
                 ))}
                 {chatMutation.isPending && (
@@ -257,7 +287,7 @@ export function FikriOverlay() {
             </ScrollArea>
 
             {/* Input Area */}
-            <div className="flex gap-2 border-t border-border p-3 shrink-0">
+            <div className="flex gap-2 border-t border-border p-3 shrink-0 items-end">
               <Button
                 onClick={handleSend}
                 disabled={chatMutation.isPending || !input.trim()}
@@ -267,12 +297,20 @@ export function FikriOverlay() {
               >
                 {chatMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
-              <Input
+              <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                onChange={(e) => { setInput(e.target.value); autoResize(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
                 placeholder="اسأل فكري..."
-                className="flex-1"
+                rows={1}
+                className="flex-1 resize-none rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto"
+                style={{ minHeight: "36px", maxHeight: "160px" }}
                 data-testid="input-fikri-message"
               />
             </div>
