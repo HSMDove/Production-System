@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@900&amp;display=swap');
+    </style>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#1a1a1a"/>
+  <rect width="64" height="64" rx="14" fill="none" stroke="#F7CB46" stroke-width="3"/>
+  <text
+    x="50%"
+    y="52%"
+    dominant-baseline="middle"
+    text-anchor="middle"
+    font-family="Cairo, Arial, sans-serif"
+    font-weight="900"
+    font-size="38"
+    fill="#F7CB46"
+  >ن</text>
+</svg>

@@ -44,16 +44,6 @@ const statusLabels: Record<string, string> = {
   completed: "مكتمل",
 };
 
-const categoryLabels: Record<string, string> = {
-  thalathiyat: "ثلاثيات",
-  leh: "ليه",
-  tech_i_use: "تقنية أستخدمها",
-  news_roundup: "جولة أخبار",
-  deep_dive: "تعمق",
-  comparison: "مقارنة",
-  tutorial: "شرح",
-  other: "أخرى",
-};
 
 const sourceTypeLabels: Record<string, string> = {
   rss: "RSS",
@@ -109,7 +99,7 @@ export default function Analytics() {
   }));
 
   const categoryData = Object.entries(data.ideasByCategory).map(([key, value]) => ({
-    name: categoryLabels[key] || key,
+    name: key || "بدون فئة",
     value,
   }));
 
