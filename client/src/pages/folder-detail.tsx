@@ -82,10 +82,11 @@ export default function FolderDetail() {
     let filtered = [...content];
     
     if (selectedFilterSourceId) {
+      // if a specific source is chosen we ignore the type filter because
+      // the sidebar already constrained results
       filtered = filtered.filter((item) => item.sourceId === selectedFilterSourceId);
-    }
-    
-    if (sourceTypeFilter !== "all") {
+    } else if (sourceTypeFilter !== "all") {
+      // only apply type-based filtering when "all" sources are shown
       filtered = filtered.filter((item) => item.source?.type === sourceTypeFilter);
     }
     
@@ -384,7 +385,10 @@ export default function FolderDetail() {
                 variant={selectedFilterSourceId === null ? "default" : "outline"}
                 size="sm"
                 className="flex-shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => setSelectedFilterSourceId(null)}
+                onClick={() => {
+                  setSelectedFilterSourceId(null);
+                  setSourceTypeFilter("all");
+                }}
               >
                 <Layers className="h-3.5 w-3.5" />
                 الكل
@@ -417,7 +421,10 @@ export default function FolderDetail() {
               <SourcesSidebar
                 sources={sources || []}
                 selectedSourceId={selectedFilterSourceId}
-                onSourceSelect={setSelectedFilterSourceId}
+                onSourceSelect={(id) => {
+                  setSelectedFilterSourceId(id);
+                  if (id === null) setSourceTypeFilter("all");
+                }}
               />
               
               {/* Content area */}

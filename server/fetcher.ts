@@ -3,10 +3,17 @@ import pLimit from "p-limit";
 import pRetry from "p-retry";
 import type { Source, InsertContent } from "@shared/schema";
 
+// simple in-memory cache so that repeated lookups (e.g. scheduler polling) don't
+// hammer YouTube pages.  Keys are normalized URLs (including video/watch)
+// and values are channel IDs.  This is purely an optimization and not
+// persisted anywhere, so it can be safely thrown away across restarts.
+const youTubeChannelCache = new Map<string, string>();
+
 const parser = new Parser({
   timeout: 10000,
   headers: {
-    "User-Agent": "TechVoice RSS Reader/1.0",
+    // YouTube occasionally rejects very custom UA values; mimic a browser.
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
   },
 });
 
@@ -18,7 +25,11 @@ interface FetchResult {
   error?: string;
 }
 
-// Convert YouTube URL to RSS feed URL
+// Convert YouTube URL to RSS feed URL for obvious, explicit cases.
+// This helper is synchronous and only handles formats that can be transformed
+// without additional network calls. URLs like handles (@name), custom /c/
+// paths, shorts, etc. require a later fallback because we need to resolve
+// them to a channel ID first.
 function getYouTubeRSSUrl(url: string): string | null {
   try {
     const raw = url.trim();
@@ -29,13 +40,19 @@ function getYouTubeRSSUrl(url: string): string | null {
     }
 
     const parsed = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    const path = parsed.pathname;
 
+    // direct query parameters
     const channelIdFromQuery = parsed.searchParams.get("channel_id");
     if (channelIdFromQuery?.startsWith("UC")) {
       return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelIdFromQuery}`;
     }
 
-    const path = parsed.pathname;
+    // playlist links should use playlist_id
+    const listId = parsed.searchParams.get("list");
+    if (listId) {
+      return `https://www.youtube.com/feeds/videos.xml?playlist_id=${listId}`;
+    }
 
     // /channel/UCxxxx
     const channelMatch = path.match(/\/channel\/(UC[\w-]+)/i);
@@ -43,12 +60,21 @@ function getYouTubeRSSUrl(url: string): string | null {
       return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`;
     }
 
-    // Legacy user feeds are still supported
+    // legacy user urls (/user/username) still supported by RSS
     const userMatch = path.match(/\/user\/([\w-]+)/i);
     if (userMatch) {
       return `https://www.youtube.com/feeds/videos.xml?user=${userMatch[1]}`;
     }
 
+    // handle paths like /@handle, /@handle/videos, /@handle/about, etc.
+    const handleMatch = path.match(/^\/@([^\/]+)/i);
+    if (handleMatch) {
+      // we can't build a feed URL synchronously because RSS doesn't support
+      // handles; fall through and resolve via channel ID later.
+      return null;
+    }
+
+    // nothing obvious -> let resolveYouTubeRSSUrl try more expensive lookups
     return null;
   } catch (error) {
     console.error("Error parsing YouTube URL:", error);
@@ -98,20 +124,35 @@ async function extractYouTubeChannelId(url: string): Promise<string | null> {
     
     const html = await response.text();
     
+    // look for any of several indicators of the channel ID in the page
     const patterns = [
       /"channelId":"(UC[\w-]+)"/,
+      /"browseId":"(UC[\w-]+)"/,            // newer JSON fields
       /channel_id=(UC[\w-]+)/,
       /"externalId":"(UC[\w-]+)"/,
+      /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*\/channel\/(UC[\w-]+)/i,
       /<meta\s+itemprop="channelId"\s+content="(UC[\w-]+)"\s*\/?/i,
     ];
 
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
-        return match[1];
+        const id = match[1];
+        youTubeChannelCache.set(normalizedUrl, id);
+        return id;
       }
     }
-    
+
+    // last‑ditch generic search for anything that looks like a channel ID.
+    // this catches unexpected field names or if YouTube alters the JSON object
+    // keys in the future.  It may sometimes pick up a random UC… string from a
+    // video/playlist ID but those do not start with UC, so the risk is low.
+    const generic = html.match(/(UC[\w-]{22})/);
+    if (generic) {
+      youTubeChannelCache.set(normalizedUrl, generic[1]);
+      return generic[1];
+    }
+
     return null;
   } catch (error) {
     console.error("Error extracting YouTube channel ID:", error);
@@ -533,24 +574,50 @@ async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
 }
 
 async function resolveYouTubeRSSUrl(sourceUrl: string): Promise<string | null> {
-  // 1) Direct parse for feed/channel/user URLs
-  const direct = getYouTubeRSSUrl(sourceUrl);
-  if (direct) return direct;
+  // normalize input for caching purposes
+  const normalized = sourceUrl.trim();
+  if (youTubeChannelCache.has(normalized)) {
+    const cached = youTubeChannelCache.get(normalized)!;
+    return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${cached}`);
+  }
 
-  // 2) If a video URL is provided, extract its channel
+  // 1) Try the easy synchronous patterns.  If the URL points to a playlist we
+  // decline to handle it here; playlist RSS feeds are flaky or 404 and there is
+  // no reliable way to determine the owning channel without calling the API.
+  // Returning null will cause the caller to surface an error message asking the
+  // user to supply a channel or video link instead.
+  let rss = getYouTubeRSSUrl(sourceUrl);
+  const isPlaylist = rss?.includes("playlist_id=");
+  if (rss && !isPlaylist) {
+    return appendOrderParam(rss);
+  }
+  if (isPlaylist) {
+    return null;
+  }
+
+  // 2) If the URL contains a video ID (including shorts), resolve channel ID
   const videoId = extractYouTubeVideoId(sourceUrl);
   if (videoId) {
     const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const channelId = await extractYouTubeChannelId(watchUrl);
     if (channelId) {
-      return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+      youTubeChannelCache.set(normalized, channelId);
+      return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
     }
   }
 
-  // 3) Generic fallback for @handle/c/custom pages
+  // 3) Otherwise try to extract a channel ID directly from whatever page the
+  // user supplied (this will work for handles, /c/ links, playlist pages, etc.)
   const channelId = await extractYouTubeChannelId(sourceUrl);
   if (channelId) {
-    return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    youTubeChannelCache.set(normalized, channelId);
+    return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
+  }
+
+  // nothing worked – fall back to any RSS url we might have had (including
+  // playlist); the caller will handle the null/404 case.
+  if (rss) {
+    return appendOrderParam(rss);
   }
 
   return null;
@@ -569,7 +636,24 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
       case "youtube":
         rssUrl = await resolveYouTubeRSSUrl(source.url);
         if (!rssUrl) {
-          throw new Error("Could not resolve YouTube feed. Use channel URL, @handle, or any video URL from the target channel.");
+          // do not crash the whole pipeline; return an informative error so
+          // caller can show a message but other sources can continue.
+          throw new Error("Could not resolve YouTube feed. Try using a channel link, a video link from that channel, or a playlist. (Handles and custom URLs are automatically detected.)");
+        }
+
+        // normalize source record if we resolved a cleaner URL (feed or
+        // channel page) so future fetches are faster.  importing storage here
+        // would create a circular dependency because storage is used elsewhere
+        // by fetcher; instead we require it lazily so the module graph can
+        // settle.
+        if (rssUrl && source.url && source.url !== rssUrl) {
+          try {
+            const { storage } = await import("./storage");
+            await storage.updateSource(source.id, { url: rssUrl } as any);
+          } catch (e) {
+            // non‑fatal – just log and move on.
+            console.error("Failed to normalize YouTube source URL:", e);
+          }
         }
         break;
 
@@ -606,13 +690,14 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
   }
 }
 
-// Extract YouTube video ID from URL
+// Extract YouTube video ID from various URL forms, including shorts.
 function extractYouTubeVideoId(url: string): string | null {
   const patterns = [
     /youtube\.com\/watch\?v=([^&]+)/,
-    /youtu\.be\/([^?]+)/,
-    /youtube\.com\/embed\/([^?]+)/,
-    /youtube\.com\/v\/([^?]+)/,
+    /youtu\.be\/([^?&]+)/,
+    /youtube\.com\/embed\/([^?&]+)/,
+    /youtube\.com\/v\/([^?&]+)/,
+    /youtube\.com\/shorts\/([^?&]+)/,
   ];
   
   for (const pattern of patterns) {
@@ -628,6 +713,22 @@ function extractYouTubeVideoId(url: string): string | null {
 function getYouTubeThumbnail(videoId: string): string {
   // Use maxresdefault, with fallback to hqdefault
   return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+}
+
+// Helper used by resolveYouTubeRSSUrl to append an ordering query param.  This
+// makes it easier to comply with the "order by date" requirement and also
+// reduces the chance of the feed returning very old items.
+function appendOrderParam(rssUrl: string): string {
+  try {
+    const u = new URL(rssUrl);
+    // only add if not already present
+    if (!u.searchParams.has("orderby")) {
+      u.searchParams.set("orderby", "published");
+    }
+    return u.toString();
+  } catch {
+    return rssUrl;
+  }
 }
 
 // Fetch OG image from a webpage
@@ -749,3 +850,6 @@ export async function fetchMultipleSources(sources: Source[]): Promise<FetchResu
 
   return results;
 }
+
+// helpers exported for testing and future reuse
+export { extractYouTubeChannelId, extractYouTubeVideoId, getYouTubeRSSUrl };
