@@ -304,53 +304,99 @@ export async function generateIdeasFromContent(
     .replace("{{FOLDER_NAME}}", folderName)
     .replace("{{CONTENT_SUMMARY}}", contentSummary);
 
-  if (styleMatrix && styleMatrix.trim()) {
-    prompt += `\n\n🎨 مصفوفة الأسلوب الشخصي (التزم بها في صياغة العناوين والوصف):
-${styleMatrix}`;
-  }
-
-  if (existingTitles && existingTitles.length > 0) {
-    const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
-    prompt += `\n\n⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}`;
-  }
+  const systemContent = "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. المحتوى المقدم يشمل أخبار مواقع، فيديوهات يوتيوب، تغريدات X، وتيك توك - استخدم جميع أنواع المحتوى في توليد الأفكار ولا تتجاهل أي نوع. أجب دائماً بصيغة JSON صالحة.";
 
   try {
     const { client, model, providerUsed } = await getAIClient(userId);
+
+    // ═══ Stage 1: Angle Discovery ═══
+    let anglePrompt = `حلّل المحتوى التالي واكتشف زوايا فريدة يمكن تحويلها لأفكار فيديوهات في مجلد "${folderName}".
+
+المحتوى المتاح:
+${contentSummary}
+`;
+
+    if (existingTitles && existingTitles.length > 0) {
+      const titlesList = existingTitles.slice(0, 50).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      anglePrompt += `\n⛔ زوايا يجب تجنبها (أفكار موجودة):\n${titlesList}\n`;
+    }
+
+    anglePrompt += `\nحدد الزوايا الفريدة الممكنة. أجب بصيغة JSON:
+{
+  "angles": [
+    { "concept": "وصف الزاوية", "sourceItems": [1, 2], "uniqueness": "ما يميزها" }
+  ]
+}`;
+
     const startTime = Date.now();
-    const response = await client.chat.completions.create({
+    const stage1Response = await client.chat.completions.create({
       model,
       messages: [
-        {
-          role: "system",
-          content: "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. المحتوى المقدم يشمل أخبار مواقع، فيديوهات يوتيوب، تغريدات X، وتيك توك - استخدم جميع أنواع المحتوى في توليد الأفكار ولا تتجاهل أي نوع. أجب دائماً بصيغة JSON صالحة."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
+        { role: "system", content: systemContent },
+        { role: "user", content: anglePrompt }
       ],
       response_format: { type: "json_object" },
       temperature: 0.8,
     });
 
-    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, stage1Response.usage?.total_tokens);
+
+    let anglesContext = "";
+    const stage1Content = stage1Response.choices[0]?.message?.content;
+    if (stage1Content) {
+      try {
+        const parsed = JSON.parse(stage1Content) as { angles: Array<{ concept: string; sourceItems: number[]; uniqueness: string }> };
+        anglesContext = parsed.angles.map((a, i) =>
+          `زاوية ${i + 1}: ${a.concept} (تميّز: ${a.uniqueness})`
+        ).join("\n");
+      } catch { anglesContext = stage1Content; }
+    }
+
+    // ═══ Stage 2: Idea Generation with Angles + Style ═══
+    let stage2Prompt = prompt;
+    stage2Prompt += `\n\n🔍 الزوايا الفريدة المكتشفة (استخدمها كأساس لأفكارك):
+${anglesContext}`;
+
+    if (styleMatrix && styleMatrix.trim()) {
+      stage2Prompt += `\n\n🎨 بصمة الأسلوب الشخصي (التزم بها في صياغة العناوين والوصف):
+${styleMatrix}`;
+    }
+
+    if (existingTitles && existingTitles.length > 0) {
+      const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      stage2Prompt += `\n\n⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}`;
+    }
+
+    const startTime2 = Date.now();
+    const response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemContent },
+        { role: "user", content: stage2Prompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.8,
+    });
+
+    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime2, undefined, response.usage?.total_tokens);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return [];
     }
 
-    const parsed = JSON.parse(content) as { ideas: GeneratedIdea[] };
+    const parsed = JSON.parse(content) as { ideas?: GeneratedIdea[] };
+    const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
     
-    return parsed.ideas.map((idea) => ({
+    return ideas.map((idea) => ({
       folderId,
-      title: idea.title,
-      description: idea.description,
-      category: idea.category,
+      title: idea.title || "",
+      description: idea.description || "",
+      category: idea.category || "",
       status: "raw_idea" as const,
-      estimatedDuration: idea.estimatedDuration,
-      targetAudience: idea.targetAudience,
-    }));
+      estimatedDuration: idea.estimatedDuration || "",
+      targetAudience: idea.targetAudience || "",
+    })).filter(i => i.title);
   } catch (error) {
     console.error("Error generating ideas:", error);
     throw new Error("Failed to generate ideas from AI");
@@ -887,45 +933,115 @@ ${examples}
 
   const hasUserInstructions = templatePrompt && templatePrompt.trim().length > 0;
 
-  let userPrompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
+  const systemMessage = customSystemPrompt
+    ? `${customSystemPrompt}\n\nأنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية كأساس ثم أكمل من معرفتك عند الحاجة. أجب دائماً بصيغة JSON صالحة.`
+    : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية المقدمة كأساس لأفكارك، ثم أكمل من معرفتك الخاصة عند الحاجة. أجب دائماً بصيغة JSON صالحة.";
+
+  try {
+    const { client, model, providerUsed } = await getAIClient(userId);
+
+    // ═══ Stage 1: Angle Analysis ═══
+    let stage1Prompt = `حلّل الأخبار والمحتوى التالي واكتشف ${count} زاوية/منظور فريد يصلح لفيديو في سلسلة "${templateName}".
+
+📰 الأخبار المتاحة:
+${numberedContent}
+`;
+
+    if (hasUserInstructions) {
+      stage1Prompt += `\nتعليمات السلسلة: ${templatePrompt}\n`;
+    }
+
+    if (existingTitles && existingTitles.length > 0) {
+      const titlesList = existingTitles.slice(0, 50).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      stage1Prompt += `\n⛔ زوايا يجب تجنبها (أفكار موجودة بالفعل):\n${titlesList}\n`;
+    }
+
+    stage1Prompt += `
+لكل زاوية حدد:
+- الفكرة الأساسية للزاوية
+- أرقام الأخبار المستخدمة (sourceIndices)
+- ما الذي يجعل هذه الزاوية فريدة ومثيرة للاهتمام
+- هل تحتاج معلومات إضافية من معرفتك
+
+أجب بصيغة JSON:
+{
+  "angles": [
+    {
+      "concept": "وصف مختصر للزاوية",
+      "sourceIndices": [1, 3],
+      "uniqueness": "ما يميز هذه الزاوية",
+      "needsExtraKnowledge": true
+    }
+  ]
+}`;
+
+    const startTime = Date.now();
+    const stage1Response = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: systemMessage },
+        { role: "user", content: stage1Prompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.8,
+    });
+
+    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, stage1Response.usage?.total_tokens);
+
+    const stage1Content = stage1Response.choices[0]?.message?.content;
+    let anglesContext = "";
+    if (stage1Content) {
+      try {
+        const parsed = JSON.parse(stage1Content) as { angles: Array<{ concept: string; sourceIndices: number[]; uniqueness: string }> };
+        anglesContext = parsed.angles.map((a, i) =>
+          `زاوية ${i + 1}: ${a.concept} (مصادر: ${a.sourceIndices.join(",")} | تميّز: ${a.uniqueness})`
+        ).join("\n");
+      } catch { anglesContext = stage1Content; }
+    }
+
+    // ═══ Stage 2: Full Idea Generation with Style ═══
+    let stage2Prompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
 
 سلسلة المحتوى: "${templateName}"
 المجلدات: "${folderNames}"
 عدد الأفكار المطلوبة: ${count}
+
+🔍 المرحلة 1 - الزوايا الفريدة المكتشفة (استخدمها كأساس):
+${anglesContext}
+
 ${styleSection}
-📰 المرحلة 2 - الأخبار الحقيقية المتاحة (مرقمة):
+📰 الأخبار الحقيقية المتاحة (مرقمة):
 
 ${numberedContent}
 
 `;
 
-  if (hasUserInstructions) {
-    userPrompt += `تعليمات إضافية من المنتج لهذه السلسلة:
+    if (hasUserInstructions) {
+      stage2Prompt += `تعليمات إضافية من المنتج لهذه السلسلة:
 ${templatePrompt}
 
 `;
-  }
+    }
 
-  if (styleMatrix && styleMatrix.trim()) {
-    userPrompt += `🎨 مصفوفة الأسلوب الشخصي (التزم بها بدقة في صياغة العنوان والوصف والسكريبت ونص المصغرة):
+    if (styleMatrix && styleMatrix.trim()) {
+      stage2Prompt += `🎨 بصمة الأسلوب الشخصي (التزم بها بدقة في صياغة العنوان والوصف والسكريبت ونص المصغرة):
 ${styleMatrix}
 
 `;
-  }
+    }
 
-  if (existingTitles && existingTitles.length > 0) {
-    const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
-    userPrompt += `⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}\n\n`;
-  }
+    if (existingTitles && existingTitles.length > 0) {
+      const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      stage2Prompt += `⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}\n\n`;
+    }
 
-  userPrompt += `مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
+    stage2Prompt += `مطلوب: بناءً على الزوايا الفريدة المكتشفة أعلاه، أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".
 
-🧠 المرحلة 3 - توسيع المعرفة:
+🧠 توسيع المعرفة:
 إذا كانت الأخبار المتاحة غير كافية لإكمال الفكرة، استخدم معرفتك الخاصة لإكمالها وإثرائها.
-مثلاً: إذا طُلب "أفضل 3 تطبيقات" وهناك خبر واحد فقط عن تطبيق، أكمل بتطبيقين آخرين من معرفتك.
 
 قواعد مهمة:
-1. ابدأ من الأخبار الحقيقية المتاحة كأساس، ثم أكمل من معرفتك عند الحاجة
+1. استخدم الزوايا الفريدة المكتشفة في المرحلة الأولى كأساس لكل فكرة
 2. في حقل "sourceIndices" ضع أرقام الأخبار الحقيقية التي استخدمتها (مثل [1, 3, 5]) - اتركه فارغاً [] إذا اعتمدت على معرفتك فقط
 3. اكتب عنوان فيديو جذاب بالعربية
 4. اكتب نص مصغّر (Thumbnail Text) - عبارة قصيرة جداً مناسبة لصورة مصغرة
@@ -947,32 +1063,27 @@ ${styleMatrix}
   ]
 }`;
 
-  const systemMessage = customSystemPrompt
-    ? `${customSystemPrompt}\n\nأنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية كأساس ثم أكمل من معرفتك عند الحاجة. أجب دائماً بصيغة JSON صالحة.`
-    : "أنت مساعد متخصص في إنشاء أفكار محتوى تقني عربي. استخدم الأخبار الحقيقية المقدمة كأساس لأفكارك، ثم أكمل من معرفتك الخاصة عند الحاجة. أجب دائماً بصيغة JSON صالحة.";
-
-  try {
-    const { client, model, providerUsed } = await getAIClient(userId);
-    const startTime = Date.now();
+    const startTime2 = Date.now();
     const response = await client.chat.completions.create({
       model,
       messages: [
         { role: "system", content: systemMessage },
-        { role: "user", content: userPrompt }
+        { role: "user", content: stage2Prompt }
       ],
       response_format: { type: "json_object" },
       temperature: 0.7,
     });
 
-    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+    if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime2, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
       return [];
     }
 
-    const parsed = JSON.parse(responseContent) as { ideas: SmartGeneratedIdea[] };
+    const parsed = JSON.parse(responseContent) as { ideas?: SmartGeneratedIdea[] };
+    const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
 
-    return parsed.ideas.map((idea) => {
+    return ideas.filter(idea => idea.title).map((idea) => {
       const usedContent = (idea.sourceIndices || [])
         .filter((idx) => idx >= 1 && idx <= contentItems.length)
         .map((idx) => contentItems[idx - 1]);

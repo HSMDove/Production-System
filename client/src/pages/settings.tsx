@@ -813,6 +813,42 @@ export default function Settings() {
                   </div>
                   <div className="space-y-1">
                     <Label>المحتوى النصي</Label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="cursor-pointer inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors" data-testid="button-upload-training-file">
+                        <Upload className="h-3.5 w-3.5" />
+                        رفع ملف نصي
+                        <input
+                          type="file"
+                          accept=".txt,.md,.text,.csv,.srt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 500000) {
+                              toast({ title: "خطأ", description: "الملف كبير جداً (الحد الأقصى 500 كيلوبايت)", variant: "destructive" });
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const text = ev.target?.result as string;
+                              if (text) {
+                                setTrainingSampleContent(text);
+                                if (!trainingSampleTitle.trim()) {
+                                  setTrainingSampleTitle(file.name.replace(/\.[^.]+$/, ""));
+                                }
+                              }
+                            };
+                            reader.onerror = () => {
+                              toast({ title: "خطأ", description: "فشل قراءة الملف، تأكد من أنه ملف نصي صالح", variant: "destructive" });
+                            };
+                            reader.readAsText(file);
+                            e.target.value = "";
+                          }}
+                          data-testid="input-upload-training-file"
+                        />
+                      </label>
+                      <span className="text-xs text-muted-foreground">أو الصق المحتوى مباشرة</span>
+                    </div>
                     <Textarea
                       rows={6}
                       placeholder="الصق هنا نص السكربت أو الوصف أو أي محتوى تبي فكري يتعلم منه أسلوبك..."
@@ -890,13 +926,13 @@ export default function Settings() {
                         هذه البصمة الأسلوبية المستخرجة من عيناتك. تُحقن تلقائياً عند توليد الأفكار.
                       </p>
 
-                      {(localSettings.style_matrix || localStyleMatrix) ? (
+                      {(localSettings.style_profile || localStyleMatrix) ? (
                         <div className="space-y-2">
                           {editingStyleMatrix ? (
                             <>
                               <Textarea
                                 rows={8}
-                                value={localStyleMatrix || localSettings.style_matrix || ""}
+                                value={localStyleMatrix || localSettings.style_profile || ""}
                                 onChange={(e) => setLocalStyleMatrix(e.target.value)}
                                 data-testid="textarea-style-matrix-edit"
                               />
@@ -917,10 +953,10 @@ export default function Settings() {
                           ) : (
                             <div
                               className="rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap cursor-pointer hover:bg-muted/50 transition-colors"
-                              onClick={() => { setLocalStyleMatrix(localSettings.style_matrix || localStyleMatrix); setEditingStyleMatrix(true); }}
+                              onClick={() => { setLocalStyleMatrix(localSettings.style_profile || localStyleMatrix); setEditingStyleMatrix(true); }}
                               data-testid="text-style-matrix-display"
                             >
-                              {localSettings.style_matrix || localStyleMatrix}
+                              {localSettings.style_profile || localStyleMatrix}
                               <p className="text-xs text-primary mt-2">اضغط للتعديل</p>
                             </div>
                           )}

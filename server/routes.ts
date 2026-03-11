@@ -799,10 +799,11 @@ export async function registerRoutes(
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
 
-      const styleMatrixSetting = await storage.getSetting("style_matrix", userId);
-      const styleMatrix = styleMatrixSetting?.value || null;
+      let styleProfileSetting = await storage.getSetting("style_profile", userId);
+      if (!styleProfileSetting) styleProfileSetting = await storage.getSetting("style_matrix", userId);
+      const styleProfile = styleProfileSetting?.value || null;
       
-      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!, styleMatrix);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!, styleProfile);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -914,8 +915,9 @@ export async function registerRoutes(
         const template = await storage.getPromptTemplateById(templateReq.templateId, userId);
         if (!template) continue;
 
-        const styleMatrixSetting = await storage.getSetting("style_matrix", userId);
-        const styleMatrix = styleMatrixSetting?.value || null;
+        let styleProfileSetting = await storage.getSetting("style_profile", userId);
+        if (!styleProfileSetting) styleProfileSetting = await storage.getSetting("style_matrix", userId);
+        const styleProfile = styleProfileSetting?.value || null;
 
         const ideas = await generateSmartIdeasForTemplate(
           enrichedContentToUse,
@@ -929,7 +931,7 @@ export async function registerRoutes(
           styleExamples,
           existingTitles,
           userId,
-          styleMatrix
+          styleProfile
         );
 
         for (const idea of ideas) {
@@ -2610,7 +2612,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       const matrix = await generateStyleMatrix(sampleStyles, userId);
 
-      await storage.upsertSetting("style_matrix", matrix, userId);
+      await storage.upsertSetting("style_profile", matrix, userId);
 
       res.json({ success: true, styleMatrix: matrix });
     } catch (error: any) {
@@ -2628,7 +2630,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       if (styleMatrix.length > 10000) {
         return res.status(400).json({ error: "مصفوفة الأسلوب طويلة جداً (الحد الأقصى 10,000 حرف)" });
       }
-      await storage.upsertSetting("style_matrix", styleMatrix.trim(), req.session.userId!);
+      await storage.upsertSetting("style_profile", styleMatrix.trim(), req.session.userId!);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "فشل حفظ مصفوفة الأسلوب" });
