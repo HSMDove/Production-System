@@ -638,7 +638,7 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         if (!rssUrl) {
           // do not crash the whole pipeline; return an informative error so
           // caller can show a message but other sources can continue.
-          throw new Error("Could not resolve YouTube feed. Try using a channel link, a video link from that channel, or a playlist. (Handles and custom URLs are automatically detected.)");
+          throw new Error("Could not resolve YouTube feed. Try using a channel link or a video link from that channel. (Handles and custom URLs are automatically detected.)");
         }
 
         // normalize source record if we resolved a cleaner URL (feed or
@@ -712,7 +712,7 @@ function extractYouTubeVideoId(url: string): string | null {
 
 // Get YouTube thumbnail URL from video ID
 function getYouTubeThumbnail(videoId: string): string {
-  // Use maxresdefault, with fallback to hqdefault
+  // Return maxresdefault (highest quality thumbnail; YouTube serves lower res if unavailable)
   return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 }
 
