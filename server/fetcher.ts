@@ -102,7 +102,7 @@ async function extractYouTubeChannelId(url: string): Promise<string | null> {
     });
 
     if (oembedRes.ok) {
-      const oembed = await oembedRes.json() as any;
+      const oembed = await oembedRes.json() as Record<string, unknown>;
       const authorUrl = String(oembed?.author_url || "");
       const channelMatch = authorUrl.match(/\/channel\/(UC[\w-]+)/i);
       if (channelMatch) {
@@ -649,7 +649,8 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         if (rssUrl && source.url && source.url !== rssUrl) {
           try {
             const { storage } = await import("./storage");
-            await storage.updateSource(source.id, { url: rssUrl } as any);
+            const updateData: Record<string, unknown> = { url: rssUrl };
+            await storage.updateSource(source.id, updateData);
           } catch (e) {
             // non‑fatal – just log and move on.
             console.error("Failed to normalize YouTube source URL:", e);
@@ -780,18 +781,19 @@ function extractImageUrl(item: Parser.Item): string | null {
   }
   
   // Check media:thumbnail or media:content
-  const mediaContent = (item as any)["media:content"];
+  const itemRecord = item as Record<string, unknown>;
+  const mediaContent = itemRecord["media:content"] as Record<string, any> | undefined;
   if (mediaContent?.$.url) {
     return mediaContent.$.url;
   }
   
-  const mediaThumbnail = (item as any)["media:thumbnail"];
+  const mediaThumbnail = itemRecord["media:thumbnail"] as Record<string, any> | undefined;
   if (mediaThumbnail?.$.url) {
     return mediaThumbnail.$.url;
   }
   
   // Check for image in content
-  const content = item.content || (item as any)["content:encoded"] || "";
+  const content = item.content || (itemRecord["content:encoded"] as string) || "";
   const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
   if (imgMatch) {
     return imgMatch[1];
