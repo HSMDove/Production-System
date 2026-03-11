@@ -82,80 +82,114 @@ function getYouTubeRSSUrl(url: string): string | null {
   }
 }
 
-// Extract channel ID from YouTube page HTML
+// Headers that mimic a real browser to bypass YouTube bot detection and consent pages
+const YT_BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  // SOCS=CAI bypasses the YouTube GDPR consent page without needing real cookies
+  "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+634; SOCS=CAI",
+};
+
+// Extract channel ID from a YouTube page URL using multiple strategies
 async function extractYouTubeChannelId(url: string): Promise<string | null> {
-  const normalizedUrl = (() => {
-    try {
-      if (url.startsWith("http")) return url;
-      return `https://${url}`;
-    } catch {
-      return url;
-    }
-  })();
+  const normalizedUrl = url.startsWith("http") ? url : `https://${url}`;
 
-  // Fallback #1: oEmbed endpoint (often resolves @handle and video urls to canonical channel)
+  // Return cached value immediately
+  if (youTubeChannelCache.has(normalizedUrl)) {
+    return youTubeChannelCache.get(normalizedUrl)!;
+  }
+
+  // Strategy 1: oEmbed — works reliably for video URLs.
+  // Returns author_url which can be a /channel/UC... or a handle @name URL.
   try {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
-    const oembedRes = await fetch(oembedUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(10000),
-    });
-
+    const oembedRes = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(10000) }
+    );
     if (oembedRes.ok) {
       const oembed = await oembedRes.json() as Record<string, unknown>;
       const authorUrl = String(oembed?.author_url || "");
-      const channelMatch = authorUrl.match(/\/channel\/(UC[\w-]+)/i);
-      if (channelMatch) {
-        return channelMatch[1];
+
+      // Best case: author_url already contains a /channel/UCxxx path
+      const directMatch = authorUrl.match(/\/channel\/(UC[\w-]+)/i);
+      if (directMatch) {
+        youTubeChannelCache.set(normalizedUrl, directMatch[1]);
+        return directMatch[1];
+      }
+
+      // Common case: author_url is a handle URL like https://www.youtube.com/@RickAstleyYT
+      // Recursively resolve it (one level deep only to avoid infinite loops)
+      if (authorUrl && authorUrl !== normalizedUrl && authorUrl.includes("youtube.com")) {
+        const resolvedId = await extractYouTubeChannelIdFromPage(authorUrl);
+        if (resolvedId) {
+          youTubeChannelCache.set(normalizedUrl, resolvedId);
+          return resolvedId;
+        }
       }
     }
   } catch (error) {
-    console.log("YouTube oEmbed channel resolve failed:", error);
+    console.log("[YouTube] oEmbed failed:", error instanceof Error ? error.message : error);
   }
 
-  // Fallback #2: HTML parsing
+  // Strategy 2: scrape the YouTube page HTML
+  const channelId = await extractYouTubeChannelIdFromPage(normalizedUrl);
+  if (channelId) {
+    youTubeChannelCache.set(normalizedUrl, channelId);
+  }
+  return channelId;
+}
+
+// Internal helper: fetch a YouTube page and extract the channel ID from the HTML.
+// Separated from extractYouTubeChannelId to allow recursive calls without double-caching.
+async function extractYouTubeChannelIdFromPage(url: string): Promise<string | null> {
   try {
-    const response = await fetch(normalizedUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      signal: AbortSignal.timeout(12000),
+    const response = await fetch(url, {
+      headers: YT_BROWSER_HEADERS,
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
     });
-    
+
+    // After redirects (e.g. @handle → /channel/UCxxx) the final URL may contain the ID
+    const finalUrl = response.url;
+    const redirectMatch = finalUrl.match(/\/channel\/(UC[\w-]+)/i);
+    if (redirectMatch) {
+      return redirectMatch[1];
+    }
+
     const html = await response.text();
-    
-    // look for any of several indicators of the channel ID in the page
-    const patterns = [
-      /"channelId":"(UC[\w-]+)"/,
-      /"browseId":"(UC[\w-]+)"/,            // newer JSON fields
-      /channel_id=(UC[\w-]+)/,
-      /"externalId":"(UC[\w-]+)"/,
+
+    // Ordered from most reliable to least reliable
+    const patterns: RegExp[] = [
+      /"externalId":"(UC[\w-]+)"/,          // ytInitialData channel header
+      /"channelId":"(UC[\w-]+)"/,           // various locations in ytInitialData
+      /"browseId":"(UC[\w-]+)"/,            // ytInitialData browse endpoint
+      /"ucid":"(UC[\w-]+)"/,               // older field name
+      /"UCID":"(UC[\w-]+)"/,
+      /"channel_id":"(UC[\w-]+)"/,
+      /channel_id=(UC[\w-]+)/,             // URL query params embedded in the page
       /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*\/channel\/(UC[\w-]+)/i,
-      /<meta\s+itemprop="channelId"\s+content="(UC[\w-]+)"\s*\/?/i,
+      /<meta[^>]+itemprop=["']channelId["'][^>]+content=["'](UC[\w-]+)["']/i,
+      /"webCommandMetadata"[^}]{0,200}"url":"\/channel\/(UC[\w-]+)"/,
     ];
 
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
-        const id = match[1];
-        youTubeChannelCache.set(normalizedUrl, id);
-        return id;
+        return match[1];
       }
     }
 
-    // last‑ditch generic search for anything that looks like a channel ID.
-    // this catches unexpected field names or if YouTube alters the JSON object
-    // keys in the future.  It may sometimes pick up a random UC… string from a
-    // video/playlist ID but those do not start with UC, so the risk is low.
+    // Last-ditch: any 24-char string starting with "UC" (channel IDs are always UCxxx with 22 more chars)
     const generic = html.match(/(UC[\w-]{22})/);
     if (generic) {
-      youTubeChannelCache.set(normalizedUrl, generic[1]);
       return generic[1];
     }
 
+    console.log(`[YouTube] No channel ID found in page: ${url}`);
     return null;
   } catch (error) {
-    console.error("Error extracting YouTube channel ID:", error);
+    console.error("[YouTube] Page scrape error:", error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -574,50 +608,38 @@ async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
 }
 
 async function resolveYouTubeRSSUrl(sourceUrl: string): Promise<string | null> {
-  // normalize input for caching purposes
   const normalized = sourceUrl.trim();
+
+  // Return from cache (channel IDs only; direct RSS/playlist URLs skip caching)
   if (youTubeChannelCache.has(normalized)) {
-    const cached = youTubeChannelCache.get(normalized)!;
-    return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${cached}`);
+    return `https://www.youtube.com/feeds/videos.xml?channel_id=${youTubeChannelCache.get(normalized)}`;
   }
 
-  // 1) Try the easy synchronous patterns.  If the URL points to a playlist we
-  // decline to handle it here; playlist RSS feeds are flaky or 404 and there is
-  // no reliable way to determine the owning channel without calling the API.
-  // Returning null will cause the caller to surface an error message asking the
-  // user to supply a channel or video link instead.
-  let rss = getYouTubeRSSUrl(sourceUrl);
-  const isPlaylist = rss?.includes("playlist_id=");
-  if (rss && !isPlaylist) {
-    return appendOrderParam(rss);
-  }
-  if (isPlaylist) {
-    return null;
+  // 1) Try synchronous URL pattern matching first (fast, no network calls).
+  //    This handles: /channel/UCxxx, /user/xxx, ?channel_id=xxx, direct RSS URLs.
+  //    Playlist URLs are also resolved directly — YouTube supports playlist RSS feeds.
+  const rss = getYouTubeRSSUrl(sourceUrl);
+  if (rss) {
+    return rss;
   }
 
-  // 2) If the URL contains a video ID (including shorts), resolve channel ID
+  // 2) URL contains a video ID (watch, shorts, youtu.be, embed, etc.)
+  //    Resolve the owning channel via oEmbed + page scraping.
   const videoId = extractYouTubeVideoId(sourceUrl);
   if (videoId) {
     const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const channelId = await extractYouTubeChannelId(watchUrl);
     if (channelId) {
       youTubeChannelCache.set(normalized, channelId);
-      return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
+      return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
     }
   }
 
-  // 3) Otherwise try to extract a channel ID directly from whatever page the
-  // user supplied (this will work for handles, /c/ links, playlist pages, etc.)
+  // 3) For @handle, /c/, and any other URL form, scrape the channel page.
   const channelId = await extractYouTubeChannelId(sourceUrl);
   if (channelId) {
     youTubeChannelCache.set(normalized, channelId);
-    return appendOrderParam(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
-  }
-
-  // nothing worked – fall back to any RSS url we might have had (including
-  // playlist); the caller will handle the null/404 case.
-  if (rss) {
-    return appendOrderParam(rss);
+    return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
   }
 
   return null;
@@ -713,22 +735,6 @@ function extractYouTubeVideoId(url: string): string | null {
 function getYouTubeThumbnail(videoId: string): string {
   // Return maxresdefault (highest quality thumbnail; YouTube serves lower res if unavailable)
   return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-}
-
-// Helper used by resolveYouTubeRSSUrl to append an ordering query param.  This
-// makes it easier to comply with the "order by date" requirement and also
-// reduces the chance of the feed returning very old items.
-function appendOrderParam(rssUrl: string): string {
-  try {
-    const u = new URL(rssUrl);
-    // only add if not already present
-    if (!u.searchParams.has("orderby")) {
-      u.searchParams.set("orderby", "published");
-    }
-    return u.toString();
-  } catch {
-    return rssUrl;
-  }
 }
 
 // Fetch OG image from a webpage
