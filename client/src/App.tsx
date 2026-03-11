@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthGuard } from "@/components/auth/auth-guard";
 import Dashboard from "@/pages/dashboard";
 import FolderDetail from "@/pages/folder-detail";
 import Ideas from "@/pages/ideas";
@@ -13,13 +14,20 @@ import Trends from "@/pages/trends";
 import Settings from "@/pages/settings";
 import SplitView from "@/pages/split-view";
 import ModelAssistantPage from "@/pages/model-assistant";
+import LoginPage from "@/pages/login";
+import VerifyOTPPage from "@/pages/verify-otp";
+import OnboardingPage from "@/pages/onboarding";
 import NotFound from "@/pages/not-found";
 import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
 import { FikriOverlay } from "@/components/fikri/fikri-overlay";
+import { TeaserBanner } from "@/components/teaser-banner";
 
 function Router() {
   return (
     <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/verify" component={VerifyOTPPage} />
+      <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/" component={Dashboard} />
       <Route path="/folder/:id" component={FolderDetail} />
       <Route path="/ideas" component={Ideas} />
@@ -40,9 +48,12 @@ function App() {
       <ThemeProvider defaultTheme="default-dark" storageKey="tech-voice-theme">
         <TooltipProvider>
           <FikriOverlayProvider>
-            <Toaster />
-            <Router />
-            <FikriOverlay />
+            <AuthGuard>
+              <Toaster />
+              <Router />
+              <FikriOverlay />
+              <TeaserBanner />
+            </AuthGuard>
           </FikriOverlayProvider>
         </TooltipProvider>
       </ThemeProvider>

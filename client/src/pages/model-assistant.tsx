@@ -351,7 +351,7 @@ export default function ModelAssistantPage() {
                               href={item.originalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="block rounded-lg border border-border/60 bg-background/80 p-2 text-sm hover:bg-background"
+                              className="block rounded-lg border border-border/60 bg-card p-2 text-sm hover:bg-card/90"
                             >
                               <div className="font-medium">{item.title}</div>
                               <div className="text-xs text-muted-foreground mt-1">{item.folderName}</div>
