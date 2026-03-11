@@ -1013,13 +1013,6 @@ ${templatePrompt}
 `;
     }
 
-    if (styleProfile && styleProfile.trim()) {
-      stage2Prompt += `🎨 بصمة الأسلوب الشخصي (التزم بها بدقة في صياغة العنوان والوصف والسكريبت ونص المصغرة):
-${styleProfile}
-
-`;
-    }
-
     if (existingTitles && existingTitles.length > 0) {
       const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
       stage2Prompt += `⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}\n\n`;
