@@ -802,9 +802,22 @@ export async function registerRoutes(
 
       let styleProfileSetting = await storage.getSetting("style_profile", userId);
       if (!styleProfileSetting) styleProfileSetting = await storage.getSetting("style_matrix", userId);
-      const styleProfile = styleProfileSetting?.value || null;
+      let styleProfile = styleProfileSetting?.value || "";
+
+      const legacyExamples = await storage.getAllStyleExamples(userId);
+      if (legacyExamples.length > 0) {
+        const exBlock = legacyExamples.map((ex, i) => {
+          let line = `مثال ${i + 1}: "${ex.title}"`;
+          if (ex.description) line += `\n    الوصف: ${ex.description}`;
+          if (ex.thumbnailText) line += `\n    نص المصغرة: ${ex.thumbnailText}`;
+          return line;
+        }).join("\n\n");
+        styleProfile = styleProfile
+          ? `${styleProfile}\n\nأمثلة ناجحة سابقة:\n${exBlock}`
+          : `أمثلة ناجحة سابقة:\n${exBlock}`;
+      }
       
-      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!, styleProfile);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!, styleProfile || null);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -917,7 +930,20 @@ export async function registerRoutes(
 
         let styleProfileSetting = await storage.getSetting("style_profile", userId);
         if (!styleProfileSetting) styleProfileSetting = await storage.getSetting("style_matrix", userId);
-        const styleProfile = styleProfileSetting?.value || null;
+        let styleProfile = styleProfileSetting?.value || "";
+
+        const legacyStyleExamples = await storage.getAllStyleExamples(userId);
+        if (legacyStyleExamples.length > 0) {
+          const examplesBlock = legacyStyleExamples.map((ex, i) => {
+            let line = `مثال ${i + 1}: "${ex.title}"`;
+            if (ex.description) line += `\n    الوصف: ${ex.description}`;
+            if (ex.thumbnailText) line += `\n    نص المصغرة: ${ex.thumbnailText}`;
+            return line;
+          }).join("\n\n");
+          styleProfile = styleProfile
+            ? `${styleProfile}\n\nأمثلة ناجحة سابقة:\n${examplesBlock}`
+            : `أمثلة ناجحة سابقة:\n${examplesBlock}`;
+        }
 
         const ideas = await generateSmartIdeasForTemplate(
           enrichedContentToUse,
@@ -930,7 +956,7 @@ export async function registerRoutes(
           aiSystemPrompt,
           existingTitles,
           userId,
-          styleProfile
+          styleProfile || null
         );
 
         for (const idea of ideas) {
