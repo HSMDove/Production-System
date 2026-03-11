@@ -32,11 +32,13 @@ The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for typ
 
 ### Fikri 2.0 Personal Training System
 
-Users can submit text samples (scripts, video descriptions, notes) via the Settings → "فكري 2.0" tab. Each sample is analyzed by AI to extract a style fingerprint. All sample fingerprints are then merged into a single "style matrix" (`style_matrix` setting) — a compressed style profile covering tone, title patterns, narrative structure, recurring terms, and explanation style. This matrix is automatically injected into idea generation prompts (`generateIdeasFromContent` and `generateSmartIdeasForTemplate`) to produce ideas that match the user's personal writing style. The system includes:
+Users can submit text samples (scripts, video descriptions, notes) via the Settings → "فكري 2.0" tab. Content can be pasted directly, uploaded as a text file, or imported from Google Docs via URL. Each sample is analyzed by AI to extract a style fingerprint. All sample fingerprints are then merged into a single "style profile" (`style_profile` setting) — a compressed style profile covering tone, title patterns, narrative structure, recurring terms, and explanation style. This profile is automatically injected into idea generation prompts to produce ideas that match the user's personal writing style. The old "أمثلة أسلوبية سابقة" (style examples) system has been merged into this unified training system. The system includes:
 - `training_samples` table: stores user-uploaded text samples with extracted style per sample
 - `style_profile` setting: the merged style fingerprint used in all idea generation
-- Training APIs: `POST /api/training/submit`, `POST /api/training/analyze`, `GET /api/training/samples`, `DELETE /api/training/samples/:id`, `PUT /api/training/style-matrix`
+- Google Docs integration: `server/google-docs.ts` — fetches document content via Google Docs API (Replit connector)
+- Training APIs: `POST /api/training/submit`, `POST /api/training/analyze`, `POST /api/training/fetch-gdoc`, `GET /api/training/samples`, `DELETE /api/training/samples/:id`, `PUT /api/training/style-matrix`
 - AI functions: `analyzeTrainingSampleStyle()` and `generateStyleMatrix()` in `server/openai.ts`
+- Content type selector includes a disabled "مقطع (قريباً)" option for future video clip support
 
 ### Design Principles
 

@@ -886,10 +886,9 @@ export async function generateSmartIdeasForTemplate(
   templatePrompt: string,
   count: number,
   customSystemPrompt?: string | null,
-  styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>,
   existingTitles?: string[],
   userId?: string,
-  styleMatrix?: string | null
+  styleProfile?: string | null
 ): Promise<SmartIdeaResult[]> {
   if (contentItems.length === 0) {
     return [];
@@ -915,20 +914,11 @@ export async function generateSmartIdeasForTemplate(
     .join("\n\n");
 
   let styleSection = "";
-  if (styleExamples && styleExamples.length > 0) {
-    const examples = styleExamples.map((ex, i) => {
-      let example = `مثال ${i + 1}: "${ex.title}"`;
-      if (ex.description) example += `\n    الوصف: ${ex.description}`;
-      if (ex.thumbnailText) example += `\n    نص المصغرة: ${ex.thumbnailText}`;
-      return example;
-    }).join("\n\n");
-    
-    styleSection = `\n🎯 المرحلة 1 - أسلوبي في الكتابة (تعلّم من أمثلتي الناجحة):
-هذه أمثلة من أفكاري الناجحة السابقة. تعلّم من أسلوب العناوين والوصف ونص المصغرة:
+  if (styleProfile && styleProfile.trim().length > 0) {
+    styleSection = `\n🎯 بصمة أسلوبي (تعلّم من أسلوبي الشخصي):
+${styleProfile}
 
-${examples}
-
-يجب أن تتبع نفس أسلوب ونمط هذه الأمثلة في العناوين والوصف ونص المصغرة.\n\n`;
+يجب أن تتبع هذه البصمة الأسلوبية في العناوين والوصف ونص المصغرة.\n\n`;
   }
 
   const hasUserInstructions = templatePrompt && templatePrompt.trim().length > 0;
@@ -1023,9 +1013,9 @@ ${templatePrompt}
 `;
     }
 
-    if (styleMatrix && styleMatrix.trim()) {
+    if (styleProfile && styleProfile.trim()) {
       stage2Prompt += `🎨 بصمة الأسلوب الشخصي (التزم بها بدقة في صياغة العنوان والوصف والسكريبت ونص المصغرة):
-${styleMatrix}
+${styleProfile}
 
 `;
     }

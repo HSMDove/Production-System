@@ -40,9 +40,7 @@ export default function Settings() {
   const [testAiTitle, setTestAiTitle] = useState("Apple تكشف عن iPhone 16 Pro بتقنيات كاميرا جديدة");
   const [testAiResult, setTestAiResult] = useState("");
 
-  const [styleTitle, setStyleTitle] = useState("");
-  const [styleDescription, setStyleDescription] = useState("");
-  const [styleThumbnail, setStyleThumbnail] = useState("");
+  const [gdocUrl, setGdocUrl] = useState("");
 
   const [trainingSampleTitle, setTrainingSampleTitle] = useState("");
   const [trainingSampleType, setTrainingSampleType] = useState<string>("script");
@@ -51,7 +49,6 @@ export default function Settings() {
   const [localStyleMatrix, setLocalStyleMatrix] = useState("");
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
-  const { data: styleExamples } = useQuery<any[]>({ queryKey: ["/api/style-examples"] });
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
 
@@ -186,29 +183,20 @@ export default function Settings() {
     onError: () => toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" }),
   });
 
-  const addStyleMutation = useMutation({
-    mutationFn: async () => apiRequest("POST", "/api/style-examples", {
-      title: styleTitle,
-      description: styleDescription || undefined,
-      thumbnailText: styleThumbnail || undefined,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
-      setStyleTitle("");
-      setStyleDescription("");
-      setStyleThumbnail("");
-      toast({ title: "تمت الإضافة", description: "تم إضافة مثال أسلوبي جديد" });
+  const fetchGdocMutation = useMutation({
+    mutationFn: async () => {
+      const result = await apiRequest("POST", "/api/training/fetch-gdoc", { url: gdocUrl });
+      return result as any;
     },
-    onError: () => toast({ title: "خطأ", description: "فشل إضافة المثال", variant: "destructive" }),
-  });
-
-  const deleteStyleMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest("DELETE", `/api/style-examples/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/style-examples"] });
-      toast({ title: "تم الحذف", description: "تم حذف المثال" });
+    onSuccess: (data: any) => {
+      setTrainingSampleContent(data.text || "");
+      if (!trainingSampleTitle.trim() && data.title) {
+        setTrainingSampleTitle(data.title);
+      }
+      setGdocUrl("");
+      toast({ title: "تم الجلب", description: "تم استيراد محتوى المستند بنجاح" });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل حذف المثال", variant: "destructive" }),
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل جلب محتوى Google Doc", variant: "destructive" }),
   });
 
   const notificationsEnabled = localSettings.notifications_enabled === "true";
@@ -808,6 +796,7 @@ export default function Settings() {
                         <SelectItem value="description">وصف فيديو</SelectItem>
                         <SelectItem value="text">نص عام</SelectItem>
                         <SelectItem value="notes">ملاحظات أسلوب</SelectItem>
+                        <SelectItem value="clip" disabled>مقطع (قريباً)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -848,6 +837,27 @@ export default function Settings() {
                         />
                       </label>
                       <span className="text-xs text-muted-foreground">أو الصق المحتوى مباشرة</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Input
+                        placeholder="أو الصق رابط Google Doc هنا..."
+                        value={gdocUrl}
+                        onChange={(e) => setGdocUrl(e.target.value)}
+                        className="flex-1"
+                        dir="ltr"
+                        data-testid="input-gdoc-url"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0"
+                        onClick={() => fetchGdocMutation.mutate()}
+                        disabled={!gdocUrl.trim() || fetchGdocMutation.isPending}
+                        data-testid="button-fetch-gdoc"
+                      >
+                        {fetchGdocMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link className="h-3.5 w-3.5" />}
+                        استيراد
+                      </Button>
                     </div>
                     <Textarea
                       rows={6}
@@ -988,37 +998,6 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>أمثلة أسلوبية سابقة</CardTitle>
-                <CardDescription>تُستخدم لتحسين أفكار فكري لهذا المستخدم فقط.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input placeholder="العنوان" value={styleTitle} onChange={(e) => setStyleTitle(e.target.value)} />
-                <Textarea placeholder="الوصف" value={styleDescription} onChange={(e) => setStyleDescription(e.target.value)} rows={3} />
-                <Input placeholder="نص الصورة المصغرة (اختياري)" value={styleThumbnail} onChange={(e) => setStyleThumbnail(e.target.value)} />
-                <Button onClick={() => addStyleMutation.mutate()} disabled={!styleTitle.trim() || addStyleMutation.isPending} className="gap-2">
-                  <Bot className="h-4 w-4" /> إضافة مثال
-                </Button>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  {(styleExamples || []).map((example) => (
-                    <div key={example.id} className="rounded-lg border p-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{example.title}</p>
-                        {example.description && <p className="text-sm text-muted-foreground mt-1">{example.description}</p>}
-                        {example.thumbnailText && <Badge variant="secondary" className="mt-2">{example.thumbnailText}</Badge>}
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteStyleMutation.mutate(example.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
 

@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
+import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
@@ -902,7 +903,6 @@ export async function registerRoutes(
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
       const aiSystemPrompt = await getUserComposedSystemPrompt(userId);
-      const styleExamples = await storage.getAllStyleExamples(userId);
       
       const allExistingIdeas = await storage.getAllIdeas(userId);
       const existingTitles = allExistingIdeas.map(idea => idea.title);
@@ -928,7 +928,6 @@ export async function registerRoutes(
           template.promptContent,
           templateReq.count,
           aiSystemPrompt,
-          styleExamples,
           existingTitles,
           userId,
           styleProfile
@@ -2502,8 +2501,8 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
-  // Style Examples (Past Successful Ideas)
-  app.get("/api/style-examples", async (req, res) => {
+  // Style Examples (Legacy — kept for backward compatibility, no longer used in UI)
+  app.get("/api/style-examples", requireAuth, async (req, res) => {
     try {
       const examples = await storage.getAllStyleExamples(req.session.userId!);
       res.json(examples);
@@ -2512,7 +2511,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
-  app.post("/api/style-examples", async (req, res) => {
+  app.post("/api/style-examples", requireAuth, async (req, res) => {
     try {
       const example = await storage.createStyleExample({ ...req.body, userId: req.session.userId! });
       res.json(example);
@@ -2521,7 +2520,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
-  app.delete("/api/style-examples/:id", async (req, res) => {
+  app.delete("/api/style-examples/:id", requireAuth, async (req, res) => {
     try {
       const deleted = await storage.deleteStyleExample(req.params.id, req.session.userId!);
       if (deleted) {
@@ -2634,6 +2633,30 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "فشل حفظ مصفوفة الأسلوب" });
+    }
+  });
+
+  app.post("/api/training/fetch-gdoc", requireAuth, async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ error: "رابط Google Doc مطلوب" });
+      }
+      if (!url.includes("docs.google.com") && !url.includes("drive.google.com")) {
+        return res.status(400).json({ error: "الرابط ليس رابط Google Docs صالح" });
+      }
+      const result = await fetchGoogleDocText(url.trim());
+      if (!result.text || !result.text.trim()) {
+        return res.status(400).json({ error: "المستند فارغ أو لا يحتوي على نص" });
+      }
+      res.json({ title: result.title, text: result.text });
+    } catch (error: any) {
+      console.error("Error fetching Google Doc:", error);
+      const msg = error.message || "فشل جلب محتوى Google Doc";
+      if (msg.includes("not connected")) {
+        return res.status(400).json({ error: "حساب Google غير مربوط. يرجى ربط حسابك من الإعدادات." });
+      }
+      res.status(500).json({ error: msg });
     }
   });
 
