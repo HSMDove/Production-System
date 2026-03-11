@@ -21,31 +21,34 @@ interface FetchResult {
 // Convert YouTube URL to RSS feed URL
 function getYouTubeRSSUrl(url: string): string | null {
   try {
-    // Handle various YouTube URL formats
-    const patterns = [
-      /youtube\.com\/channel\/([\w-]+)/,  // /channel/UC...
-      /youtube\.com\/@([\w-]+)/,           // /@channelname
-      /youtube\.com\/c\/([\w-]+)/,         // /c/channelname
-      /youtube\.com\/user\/([\w-]+)/,      // /user/username
-    ];
+    const raw = url.trim();
 
-    // Try to extract channel ID from URL
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match) {
-        const identifier = match[1];
-        
-        // If it starts with UC, it's already a channel ID
-        if (identifier.startsWith('UC')) {
-          return `https://www.youtube.com/feeds/videos.xml?channel_id=${identifier}`;
-        }
-        
-        // For @username format, we'll need to fetch the page to get the channel ID
-        // For now, return null and we'll handle it in the fetch function
-        return null;
-      }
+    // Already a YouTube RSS feed URL
+    if (/youtube\.com\/feeds\/videos\.xml/i.test(raw)) {
+      return raw;
     }
-    
+
+    const parsed = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+
+    const channelIdFromQuery = parsed.searchParams.get("channel_id");
+    if (channelIdFromQuery?.startsWith("UC")) {
+      return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelIdFromQuery}`;
+    }
+
+    const path = parsed.pathname;
+
+    // /channel/UCxxxx
+    const channelMatch = path.match(/\/channel\/(UC[\w-]+)/i);
+    if (channelMatch) {
+      return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`;
+    }
+
+    // Legacy user feeds are still supported
+    const userMatch = path.match(/\/user\/([\w-]+)/i);
+    if (userMatch) {
+      return `https://www.youtube.com/feeds/videos.xml?user=${userMatch[1]}`;
+    }
+
     return null;
   } catch (error) {
     console.error("Error parsing YouTube URL:", error);
@@ -55,25 +58,58 @@ function getYouTubeRSSUrl(url: string): string | null {
 
 // Extract channel ID from YouTube page HTML
 async function extractYouTubeChannelId(url: string): Promise<string | null> {
+  const normalizedUrl = (() => {
+    try {
+      if (url.startsWith("http")) return url;
+      return `https://${url}`;
+    } catch {
+      return url;
+    }
+  })();
+
+  // Fallback #1: oEmbed endpoint (often resolves @handle and video urls to canonical channel)
   try {
-    const response = await fetch(url, {
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(normalizedUrl)}&format=json`;
+    const oembedRes = await fetch(oembedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (oembedRes.ok) {
+      const oembed = await oembedRes.json() as any;
+      const authorUrl = String(oembed?.author_url || "");
+      const channelMatch = authorUrl.match(/\/channel\/(UC[\w-]+)/i);
+      if (channelMatch) {
+        return channelMatch[1];
+      }
+    }
+  } catch (error) {
+    console.log("YouTube oEmbed channel resolve failed:", error);
+  }
+
+  // Fallback #2: HTML parsing
+  try {
+    const response = await fetch(normalizedUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
+      signal: AbortSignal.timeout(12000),
     });
     
     const html = await response.text();
     
-    // Look for channel_id in the HTML
-    const channelIdMatch = html.match(/"channelId":"(UC[\w-]+)"/);
-    if (channelIdMatch) {
-      return channelIdMatch[1];
-    }
-    
-    // Alternative pattern
-    const altMatch = html.match(/channel_id=(UC[\w-]+)/);
-    if (altMatch) {
-      return altMatch[1];
+    const patterns = [
+      /"channelId":"(UC[\w-]+)"/,
+      /channel_id=(UC[\w-]+)/,
+      /"externalId":"(UC[\w-]+)"/,
+      /<meta\s+itemprop="channelId"\s+content="(UC[\w-]+)"\s*\/?/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        return match[1];
+      }
     }
     
     return null;
@@ -496,6 +532,30 @@ async function fetchTikTokFeed(source: Source): Promise<FetchResult> {
   };
 }
 
+async function resolveYouTubeRSSUrl(sourceUrl: string): Promise<string | null> {
+  // 1) Direct parse for feed/channel/user URLs
+  const direct = getYouTubeRSSUrl(sourceUrl);
+  if (direct) return direct;
+
+  // 2) If a video URL is provided, extract its channel
+  const videoId = extractYouTubeVideoId(sourceUrl);
+  if (videoId) {
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const channelId = await extractYouTubeChannelId(watchUrl);
+    if (channelId) {
+      return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    }
+  }
+
+  // 3) Generic fallback for @handle/c/custom pages
+  const channelId = await extractYouTubeChannelId(sourceUrl);
+  if (channelId) {
+    return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+  }
+
+  return null;
+}
+
 export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
   try {
     let rssUrl: string | null = null;
@@ -507,18 +567,9 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         break;
 
       case "youtube":
-        rssUrl = getYouTubeRSSUrl(source.url);
-        
-        // If we couldn't get the RSS URL directly, try to extract channel ID from page
+        rssUrl = await resolveYouTubeRSSUrl(source.url);
         if (!rssUrl) {
-          const channelId = await extractYouTubeChannelId(source.url);
-          if (channelId) {
-            rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-          }
-        }
-        
-        if (!rssUrl) {
-          throw new Error("Could not extract YouTube channel ID from URL. Please use a channel URL like youtube.com/channel/UC... or youtube.com/@username");
+          throw new Error("Could not resolve YouTube feed. Use channel URL, @handle, or any video URL from the target channel.");
         }
         break;
 

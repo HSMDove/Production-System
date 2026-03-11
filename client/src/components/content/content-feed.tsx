@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye, Languages, RefreshCw } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye, Languages, RefreshCw } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -532,18 +531,6 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
     );
   }
 
-  // Split content into news and videos
-  const newsContent = content.filter(item => 
-    item.source?.type === "rss" || item.source?.type === "website"
-  );
-  
-  const videoContent = content.filter(item => 
-    item.source?.type === "youtube" || item.source?.type === "twitter"
-  );
-
-  const hasNews = newsContent.length > 0;
-  const hasVideos = videoContent.length > 0;
-
   const ExplanationDialog = (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-explanation">
@@ -595,113 +582,21 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
     </Dialog>
   );
 
-  // If only one type exists, just show that content without tabs
-  if (!hasNews && hasVideos) {
-    return (
-      <>
-        {ExplanationDialog}
-        <div className="space-y-4">
-          {videoContent.map((item) => (
-            <ContentCard 
-              key={item.id} 
-              item={item} 
-              onExplain={handleExplain} 
-              onTranslate={handleTranslate}
-              showTranslation={showTranslation} 
-              isTranslating={translatingIds.has(item.id)}
-            />
-          ))}
-        </div>
-      </>
-    );
-  }
-
-  if (hasNews && !hasVideos) {
-    return (
-      <>
-        {ExplanationDialog}
-        <div className="space-y-4">
-          {newsContent.map((item) => (
-            <ContentCard 
-              key={item.id} 
-              item={item} 
-              onExplain={handleExplain} 
-              onTranslate={handleTranslate}
-              showTranslation={showTranslation} 
-              isTranslating={translatingIds.has(item.id)}
-            />
-          ))}
-        </div>
-      </>
-    );
-  }
-
-  // Show tabs when both types exist
   return (
     <>
       {ExplanationDialog}
-      <Tabs defaultValue="news" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="news" className="gap-2" data-testid="tab-content-news">
-            <Newspaper className="h-4 w-4" />
-            <span>أخبار</span>
-            <Badge variant="secondary" className="mr-1 text-xs">
-              {newsContent.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="videos" className="gap-2" data-testid="tab-content-videos">
-            <Play className="h-4 w-4" />
-            <span>فيديوهات</span>
-            <Badge variant="secondary" className="mr-1 text-xs">
-              {videoContent.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="news" className="space-y-4">
-          {newsContent.length > 0 ? (
-            newsContent.map((item) => (
-              <ContentCard 
-                key={item.id} 
-                item={item} 
-                onExplain={handleExplain} 
-                onTranslate={handleTranslate}
-                showTranslation={showTranslation} 
-                isTranslating={translatingIds.has(item.id)}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Newspaper className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">لا توجد أخبار</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="videos" className="space-y-4">
-          {videoContent.length > 0 ? (
-            videoContent.map((item) => (
-              <ContentCard 
-                key={item.id} 
-                item={item} 
-                onExplain={handleExplain} 
-                onTranslate={handleTranslate}
-                showTranslation={showTranslation} 
-                isTranslating={translatingIds.has(item.id)}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Play className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">لا توجد فيديوهات</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-4" data-testid="unified-content-timeline">
+        {content.map((item) => (
+          <ContentCard
+            key={item.id}
+            item={item}
+            onExplain={handleExplain}
+            onTranslate={handleTranslate}
+            showTranslation={showTranslation}
+            isTranslating={translatingIds.has(item.id)}
+          />
+        ))}
+      </div>
     </>
   );
 }

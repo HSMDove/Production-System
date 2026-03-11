@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { fetchMultipleSources } from "./fetcher";
 import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, processNewContentNotificationsForFolder } from "./notifier";
+import { getUserComposedSystemPrompt } from "./ai-system-prompt";
 import type { Folder } from "@shared/schema";
 
 export interface FetchFolderResult {
@@ -47,7 +48,7 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
     const folderUserId = folder?.userId || null;
     (async () => {
       const aiSystemPrompt = folderUserId
-        ? (await storage.getSetting("ai_system_prompt", folderUserId))?.value || null
+        ? await getUserComposedSystemPrompt(folderUserId)
         : null;
       if (aiSystemPrompt) {
         console.log(`[Folder Fetcher] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);

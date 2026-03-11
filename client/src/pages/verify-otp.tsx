@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bot, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -99,20 +99,20 @@ export default function VerifyOTPPage() {
 
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Logo */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
-            <Bot className="h-8 w-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">تحقق من بريدك</h1>
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
+          <p className="text-muted-foreground text-sm font-semibold">تحقق من بريدك</p>
+        </div>
+
+        <div className="card bg-card p-6 space-y-6">
+        <div className="text-center space-y-1">
           <p className="text-muted-foreground text-sm">
             أرسلنا رمزاً مكوناً من 6 أرقام إلى
           </p>
           <p className="text-sm font-medium text-primary" dir="ltr">{email}</p>
         </div>
 
-        {/* OTP Inputs */}
         <div className="flex gap-2 justify-center" dir="ltr" onPaste={handlePaste}>
           {digits.map((digit, i) => (
             <Input
@@ -124,7 +124,7 @@ export default function VerifyOTPPage() {
               value={digit}
               onChange={(e) => handleDigitChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-12 h-14 text-center text-2xl font-bold p-0"
+              className="w-12 h-14 text-center text-2xl font-bold p-0 flex items-center justify-center"
               disabled={verifyMutation.isPending}
               data-testid={`input-otp-digit-${i}`}
               autoFocus={i === 0}
@@ -138,8 +138,8 @@ export default function VerifyOTPPage() {
             جاري التحقق...
           </div>
         )}
+        </div>
 
-        {/* Actions */}
         <div className="space-y-3">
           <Button
             variant="ghost"

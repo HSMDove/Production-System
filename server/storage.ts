@@ -1,4 +1,5 @@
 import { eq, and, desc, isNull, gt } from "drizzle-orm";
+import crypto from "crypto";
 import { db } from "./db";
 import {
   folders,
@@ -42,7 +43,58 @@ import {
   type InsertAssistantConversation,
   type AssistantMessage,
   type InsertAssistantMessage,
+  userPlatformIds,
+  type UserPlatformId,
+  type PlatformType,
+  systemSettings,
+  type SystemSetting,
+  apiUsageLogs,
+  type ApiUsageLog,
+  type InsertApiUsageLog,
 } from "@shared/schema";
+
+const ENCRYPTED_PREFIX = "enc:v1:";
+const SENSITIVE_SETTING_KEYS = new Set([
+  "ai_custom_api_key",
+  "llm_api_key",
+  "web_search_api_key",
+  "telegram_bot_token",
+  "slack_webhook_url",
+  "slack_bot_token",
+  "slack_signing_secret",
+]);
+
+function getEncryptionKey(): Buffer {
+  const source = process.env.SETTINGS_ENCRYPTION_KEY || process.env.SESSION_SECRET || "fallback-secret-change-in-production";
+  return crypto.createHash("sha256").update(source).digest();
+}
+
+function encryptIfSensitive(key: string, value: string | null): string | null {
+  if (value === null || !SENSITIVE_SETTING_KEYS.has(key)) return value;
+  if (value.startsWith(ENCRYPTED_PREFIX)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${ENCRYPTED_PREFIX}${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptIfNeeded(key: string, value: string | null): string | null {
+  if (value === null) return null;
+  if (!SENSITIVE_SETTING_KEYS.has(key)) return value;
+  if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
+
+  try {
+    const payload = value.slice(ENCRYPTED_PREFIX.length);
+    const [ivB64, tagB64, dataB64] = payload.split(":");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getEncryptionKey(), Buffer.from(ivB64, "base64"));
+    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]);
+    return decrypted.toString("utf8");
+  } catch {
+    return null;
+  }
+}
 
 export interface IStorage {
   // Auth / Users
@@ -102,10 +154,12 @@ export interface IStorage {
   setDefaultPromptTemplate(id: string, userId: string): Promise<PromptTemplate | undefined>;
 
   getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]>;
+  getCommentById(id: string): Promise<IdeaComment | undefined>;
   createComment(comment: InsertIdeaComment): Promise<IdeaComment>;
   deleteComment(id: string): Promise<boolean>;
 
   getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
+  getAssignmentById(id: string): Promise<IdeaAssignment | undefined>;
   createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
   deleteAssignment(id: string): Promise<boolean>;
 
@@ -133,10 +187,31 @@ export interface IStorage {
   getAllStyleExamples(userId: string): Promise<StyleExample[]>;
   createStyleExample(example: InsertStyleExample & { userId: string }): Promise<StyleExample>;
   deleteStyleExample(id: string, userId: string): Promise<boolean>;
+
+  // Platform IDs (multi-ID support)
+  getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]>;
+  addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId>;
+  removePlatformId(id: string, userId: string): Promise<boolean>;
+  getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined>;
+
+  // System Settings (global admin controls)
+  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
+  getAllSystemSettings(): Promise<SystemSetting[]>;
+  upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting>;
+
+  // API Usage Logging
+  logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog>;
+
+  // User Activity
+  updateUserLastActive(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
   // ─── Auth / Users ────────────────────────────────────────────────────────
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
+  }
+
   async getUserById(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -416,6 +491,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).orderBy(desc(ideaComments.createdAt));
   }
 
+  async getCommentById(id: string): Promise<IdeaComment | undefined> {
+    const [comment] = await db.select().from(ideaComments).where(eq(ideaComments.id, id));
+    return comment;
+  }
+
   async createComment(comment: InsertIdeaComment): Promise<IdeaComment> {
     const [created] = await db.insert(ideaComments).values(comment).returning();
     return created;
@@ -428,6 +508,11 @@ export class DatabaseStorage implements IStorage {
 
   async getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]> {
     return db.select().from(ideaAssignments).where(eq(ideaAssignments.ideaId, ideaId)).orderBy(ideaAssignments.createdAt);
+  }
+
+  async getAssignmentById(id: string): Promise<IdeaAssignment | undefined> {
+    const [assignment] = await db.select().from(ideaAssignments).where(eq(ideaAssignments.id, id));
+    return assignment;
   }
 
   async createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment> {
@@ -443,23 +528,26 @@ export class DatabaseStorage implements IStorage {
   // ─── Settings ─────────────────────────────────────────────────────────────
   async getSetting(key: string, userId: string): Promise<Setting | undefined> {
     const [setting] = await db.select().from(settings).where(and(eq(settings.key, key), eq(settings.userId, userId)));
-    return setting;
+    if (!setting) return undefined;
+    return { ...setting, value: decryptIfNeeded(setting.key, setting.value) };
   }
 
   async getAllSettings(userId: string): Promise<Setting[]> {
-    return db.select().from(settings).where(eq(settings.userId, userId));
+    const all = await db.select().from(settings).where(eq(settings.userId, userId));
+    return all.map((s) => ({ ...s, value: decryptIfNeeded(s.key, s.value) }));
   }
 
   async upsertSetting(key: string, value: string | null, userId: string): Promise<Setting> {
+    const persistedValue = encryptIfSensitive(key, value);
     const [result] = await db
       .insert(settings)
-      .values({ userId, key, value, updatedAt: new Date() })
+      .values({ userId, key, value: persistedValue, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: [settings.userId, settings.key],
-        set: { value, updatedAt: new Date() },
+        set: { value: persistedValue, updatedAt: new Date() },
       })
       .returning();
-    return result;
+    return { ...result, value: decryptIfNeeded(result.key, result.value) };
   }
 
   async upsertSettings(entries: Record<string, string | null>, userId: string): Promise<Setting[]> {
@@ -593,6 +681,81 @@ export class DatabaseStorage implements IStorage {
   async deleteStyleExample(id: string, userId: string): Promise<boolean> {
     const result = await db.delete(styleExamples).where(and(eq(styleExamples.id, id), eq(styleExamples.userId, userId)));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  // ─── Platform IDs (Multi-ID) ──────────────────────────────────────────────
+  async getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]> {
+    if (platform) {
+      return db.select().from(userPlatformIds)
+        .where(and(eq(userPlatformIds.userId, userId), eq(userPlatformIds.platform, platform)))
+        .orderBy(desc(userPlatformIds.createdAt));
+    }
+    return db.select().from(userPlatformIds)
+      .where(eq(userPlatformIds.userId, userId))
+      .orderBy(desc(userPlatformIds.createdAt));
+  }
+
+  async addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId> {
+    const [created] = await db.insert(userPlatformIds).values({
+      userId,
+      platform,
+      platformId,
+      label: label || null,
+    }).returning();
+    return created;
+  }
+
+  async removePlatformId(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(userPlatformIds)
+      .where(and(eq(userPlatformIds.id, id), eq(userPlatformIds.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined> {
+    const [record] = await db.select().from(userPlatformIds)
+      .where(and(eq(userPlatformIds.platform, platform), eq(userPlatformIds.platformId, platformId)));
+    if (record) {
+      return this.getUserById(record.userId);
+    }
+    if (platform === "slack") {
+      return this.getUserBySlackUserId(platformId);
+    }
+    return undefined;
+  }
+
+  // ─── System Settings (Global Admin Controls) ──────────────────────────────
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.key, key));
+    return setting;
+  }
+
+  async getAllSystemSettings(): Promise<SystemSetting[]> {
+    return db.select().from(systemSettings).orderBy(systemSettings.key);
+  }
+
+  async upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting> {
+    const updateSet: any = { value, updatedAt: new Date() };
+    if (description !== undefined) updateSet.description = description;
+    const [result] = await db
+      .insert(systemSettings)
+      .values({ key, value, description: description || null, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: updateSet,
+      })
+      .returning();
+    return result;
+  }
+
+  // ─── API Usage Logging ─────────────────────────────────────────────────────
+  async logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog> {
+    const [log] = await db.insert(apiUsageLogs).values(entry as any).returning();
+    return log;
+  }
+
+  // ─── User Activity ─────────────────────────────────────────────────────────
+  async updateUserLastActive(userId: string): Promise<void> {
+    await db.update(users).set({ lastActiveAt: new Date() } as any).where(eq(users.id, userId));
   }
 }
 

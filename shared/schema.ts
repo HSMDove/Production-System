@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   gender: text("gender").$type<GenderType>(),
   slackUserId: text("slack_user_id").unique(),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -27,6 +28,27 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// User Platform IDs - multiple external platform identifiers per user (Slack/Telegram)
+export const platformTypes = ["slack", "telegram"] as const;
+export type PlatformType = typeof platformTypes[number];
+
+export const userPlatformIds = pgTable("user_platform_ids", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull().$type<PlatformType>(),
+  platformId: text("platform_id").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserPlatformIdSchema = createInsertSchema(userPlatformIds).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type UserPlatformId = typeof userPlatformIds.$inferSelect;
+export type InsertUserPlatformId = z.infer<typeof insertUserPlatformIdSchema>;
 
 // OTP Codes - for email-based authentication
 export const otpCodes = pgTable("otp_codes", {
@@ -131,25 +153,13 @@ export const ideaStatuses = [
 ] as const;
 export type IdeaStatus = typeof ideaStatuses[number];
 
-export const ideaCategories = [
-  "thalathiyat",
-  "leh",
-  "tech_i_use",
-  "news_roundup",
-  "deep_dive",
-  "comparison",
-  "tutorial",
-  "other"
-] as const;
-export type IdeaCategory = typeof ideaCategories[number];
-
 export const ideas = pgTable("ideas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   folderId: varchar("folder_id").references(() => folders.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   description: text("description"),
-  category: text("category").notNull().$type<IdeaCategory>(),
+  category: text("category").notNull().default(""),
   status: text("status").notNull().$type<IdeaStatus>().default("raw_idea"),
   estimatedDuration: text("estimated_duration"),
   targetAudience: text("target_audience"),
@@ -348,7 +358,7 @@ export const settings = pgTable("settings", {
   value: text("value"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({
-  pk: { columns: [t.userId, t.key], name: "settings_pkey" },
+  pk: primaryKey({ columns: [t.userId, t.key], name: "settings_pkey" }),
 }));
 
 export const insertSettingSchema = createInsertSchema(settings);
@@ -374,3 +384,36 @@ export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
 
 export type StyleExample = typeof styleExamples.$inferSelect;
 export type InsertStyleExample = z.infer<typeof insertStyleExampleSchema>;
+
+// System Settings - global admin-controlled settings (feature flags, default API config)
+export const systemSettings = pgTable("system_settings", {
+  key: varchar("key").primaryKey(),
+  value: text("value"),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SystemSetting = typeof systemSettings.$inferSelect;
+
+// API Usage Logs - tracks every AI/Search request per user
+export const apiRequestTypes = ["ai_chat", "ai_rewrite", "ai_ideas", "ai_explain", "ai_translate", "ai_summary", "ai_smart_view", "ai_sentiment", "ai_trends", "web_search"] as const;
+export type ApiRequestType = typeof apiRequestTypes[number];
+
+export const apiProviderTypes = ["system_default", "custom_api"] as const;
+export type ApiProviderType = typeof apiProviderTypes[number];
+
+export const apiUsageLogs = pgTable("api_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestType: text("request_type").notNull().$type<ApiRequestType>(),
+  providerUsed: text("provider_used").notNull().$type<ApiProviderType>(),
+  model: text("model"),
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  tokensUsed: integer("tokens_used"),
+  responseTimeMs: integer("response_time_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
+export type InsertApiUsageLog = typeof apiUsageLogs.$inferInsert;

@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
-import { useToast } from "@/hooks/use-toast";
 
 type ChatRole = "user" | "assistant";
 interface ConversationItem { id: string; title: string; createdAt: string; updatedAt: string; }
@@ -31,7 +30,6 @@ const loadingLabels: Record<string, string> = {
 
 export function FikriOverlay() {
   const { open, setOpen } = useFikriOverlay();
-  const { toast } = useToast();
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isNewMode, setIsNewMode] = useState(false);
@@ -40,6 +38,7 @@ export function FikriOverlay() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations } = useQuery<ConversationItem[]>({
@@ -60,10 +59,11 @@ export function FikriOverlay() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversationData?.messages]);
+  }, [conversationData?.messages, chatError]);
 
   const chatMutation = useMutation({
     mutationFn: async ({ message, conversationId }: { message: string; conversationId: string }) => {
+      setChatError(null);
       return apiRequest<{ answer: string; statusLabel?: string; conversationId: string }>("POST", "/api/assistant/chat", { message, conversationId });
     },
     onSuccess: (data) => {
@@ -71,7 +71,12 @@ export function FikriOverlay() {
       queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations", convId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
     },
-    onError: () => toast({ title: "خطأ", description: "فشل إرسال الرسالة", variant: "destructive" }),
+    onError: (error: Error) => {
+      const errorText = error.message || "فشل إرسال الرسالة";
+      const match = errorText.match(/\d+:\s*\{?"?error"?:?\s*"?([^"}\n]+)"?\}?/);
+      const cleanMessage = match ? match[1] : errorText.replace(/^\d+:\s*/, "");
+      setChatError(cleanMessage);
+    },
   });
 
   const deleteConversationMutation = useMutation({
@@ -121,7 +126,7 @@ export function FikriOverlay() {
 
       <aside
         dir="rtl"
-        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col bg-background/95 backdrop-blur-xl border-l border-border shadow-2xl"
+        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col bg-card border-l border-border shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
@@ -235,6 +240,16 @@ export function FikriOverlay() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     {pendingLabel ?? "يفكّر..."}
+                  </div>
+                )}
+                {chatError && !chatMutation.isPending && (
+                  <div className="rounded-2xl px-3 py-2 text-sm leading-relaxed bg-destructive/10 border border-destructive/30 text-destructive" data-testid="fikri-chat-error">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>⚠️ {chatError}</span>
+                      <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0 text-destructive hover:text-destructive" onClick={() => setChatError(null)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <div ref={bottomRef} />

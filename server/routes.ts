@@ -1,14 +1,17 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
+import OpenAI from "openai";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, generateSmartView } from "./openai";
+import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
+import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent } from "./folder-fetcher";
+import { discoverSourcesWithMagicScout, magicScoutInputSchema } from "./magic-scout";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -28,17 +31,6 @@ type AssistantChatRequest = {
   message: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
-
-const ideaCategories = [
-  "thalathiyat",
-  "leh",
-  "tech_i_use",
-  "news_roundup",
-  "deep_dive",
-  "comparison",
-  "tutorial",
-  "other",
-] as const;
 
 function normalizeText(value: string): string {
   return value.toLowerCase().trim();
@@ -64,12 +56,85 @@ type AssistantEngineResult = {
   createdIdea?: { id: string; title: string };
 };
 
-async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string): Promise<AssistantEngineResult> {
-  const [folders, allContent, allIdeas] = await Promise.all([
+type AgentToolResult = {
+  type: "internal_search" | "external_search" | "create_idea";
+  payload: any;
+};
+
+async function runExternalWebSearch(query: string, userId: string): Promise<any[]> {
+  const startTime = Date.now();
+  const webSearchProvider = (await storage.getSetting("web_search_provider", userId))?.value || "system_default";
+  const userApiKey = (await storage.getSetting("web_search_api_key", userId))?.value || "";
+
+  let apiKey = "";
+  let provider = "brave";
+  let providerUsed: "system_default" | "custom_api" = "system_default";
+
+  if (webSearchProvider === "custom") {
+    if (!userApiKey || !userApiKey.trim()) {
+      await logAIRequest(userId, "web_search", "custom_api", null, false, startTime, "مفتاح API مخصص فارغ");
+      throw new Error("يرجى إدخال مفتاح API صحيح لأداة البحث في الإعدادات");
+    }
+    apiKey = userApiKey.trim();
+    providerUsed = "custom_api";
+  } else {
+    const defaultSearchKey = await storage.getSystemSetting("default_search_api_key");
+    apiKey = defaultSearchKey?.value?.trim() || "";
+    if (!apiKey) {
+      await logAIRequest(userId, "web_search", "system_default", null, false, startTime, "لا يوجد مفتاح بحث افتراضي");
+      return [{ title: "البحث غير مفعّل", snippet: "لم يتم تكوين مفتاح بحث افتراضي. تواصل مع المدير أو اختر 'مفتاح API مخصص' من الإعدادات.", url: "" }];
+    }
+    providerUsed = "system_default";
+  }
+
+  if (provider === "brave") {
+    try {
+      const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&text_decorations=0`;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        let errorBody = "";
+        try { errorBody = await response.text(); } catch {}
+        console.error(`[BraveSearch] HTTP ${response.status}: ${errorBody}`);
+        await logAIRequest(userId, "web_search", providerUsed, null, false, startTime, `HTTP ${response.status}`);
+        return [{ title: "فشل البحث الخارجي", snippet: `Brave API error ${response.status}: ${errorBody.slice(0, 200)}`, url: "" }];
+      }
+
+      const data = await response.json() as any;
+      const results = data?.web?.results || data?.results || [];
+      await logAIRequest(userId, "web_search", providerUsed, "brave", true, startTime);
+      return results.slice(0, 5).map((item: any) => ({
+        title: item.title || item.name || "",
+        snippet: item.description || item.snippet || "",
+        url: item.url || item.link || "",
+      }));
+    } catch (err: any) {
+      console.error("[BraveSearch] Exception:", err?.message);
+      await logAIRequest(userId, "web_search", providerUsed, null, false, startTime, err?.message);
+      return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
+    }
+  }
+
+  return [{ title: "مزود بحث غير مدعوم", snippet: `المزود الحالي: ${provider}`, url: "" }];
+}
+
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string, senderDisplayName?: string): Promise<AssistantEngineResult> {
+  const [folders, allContent, allIdeas, baseAiPrompt, fikriPersonaStyle] = await Promise.all([
     storage.getAllFolders(userId),
     storage.getAllContent(userId),
     storage.getAllIdeas(userId),
+    storage.getSetting("ai_system_prompt", userId),
+    storage.getSetting("fikri_persona_style", userId),
   ]);
+
+  const composedPrompt = composeAiSystemPrompt(baseAiPrompt?.value || null, fikriPersonaStyle?.value || null);
 
   const folderById = new Map(folders.map((f) => [f.id, f]));
   const sortedContent = [...allContent].sort((a, b) => {
@@ -80,7 +145,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
 
   const compactContext = {
     folders: folders.map((f) => ({ id: f.id, name: f.name })),
-    latestContent: sortedContent.slice(0, 60).map((item) => ({
+    latestContent: sortedContent.slice(0, 40).map((item) => ({
       id: item.id,
       folderName: folderById.get(item.folderId)?.name || "غير معروف",
       title: item.title,
@@ -92,91 +157,209 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     recentIdeas: allIdeas
       .slice()
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 30)
-      .map((idea) => ({
-        id: idea.id,
-        title: idea.title,
-        folderName: idea.folderId ? folderById.get(idea.folderId)?.name || null : null,
-        status: idea.status,
-      })),
+      .slice(0, 20)
+      .map((idea) => ({ id: idea.id, title: idea.title, status: idea.status })),
   };
 
-  const { client, model } = await getAIClient();
-  const planner = await client.chat.completions.create({
-    model,
-    response_format: { type: "json_object" },
-    temperature: 0.2,
-    messages: [
-      {
-        role: "system",
-        content:
-          "أنت مساعد ذكي داخل نظام إنتاج محتوى عربي واسمك \"فكري\". عند أول رد تعرّف بنفسك باسم فكري.  لديك 3 مهام: 1) البحث في الأخبار والمجلدات والرد من البيانات المقدمة فقط. 2) عندما يطلب المستخدم حفظ فكرة، أعد ideaStructured كاملة. 3) الرد العام إذا لا يوجد إجراء. أجب JSON فقط بالصيغة: {action:'search_news|save_idea|chat', statusLabel:'searching_news|saving_idea|thinking', answer:'...', matches:[contentId], ideaStructured:{title,description,category,estimatedDuration,targetAudience,folderName}}",
+  const { client, model } = await getAIClient(userId);
+
+  const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+    {
+      type: "function",
+      function: {
+        name: "internal_search",
+        description: "البحث داخل محتوى المستخدم ومجلداته الحالية",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+            limit: { type: "number" },
+          },
+          required: ["query"],
+        },
       },
-      {
-        role: "user",
-        content: `رسالة المستخدم: ${userMessage}
-
-السجل المختصر:${JSON.stringify(history).slice(0, 3000)}
-
-بيانات النظام:${JSON.stringify(compactContext)}`,
+    },
+    {
+      type: "function",
+      function: {
+        name: "external_web_search",
+        description: "البحث الخارجي من خلال Web Search API الخاص بالمستخدم",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
       },
-    ],
-  });
+    },
+    {
+      type: "function",
+      function: {
+        name: "create_idea_draft",
+        description: "حفظ فكرة كمسودة داخل النظام للمستخدم الحالي",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            category: { type: "string" },
+            folderName: { type: "string" },
+            estimatedDuration: { type: "string" },
+            targetAudience: { type: "string" },
+          },
+          required: ["title", "category"],
+        },
+      },
+    },
+  ];
 
-  const payload = planner.choices[0]?.message?.content;
-  if (!payload) {
-    throw new Error("Failed to generate assistant response");
-  }
+  const nameContext = senderDisplayName ? `\n- المستخدم الذي يكلمك اسمه "${senderDisplayName}". نادِه باسمه بشكل طبيعي في ردودك.` : "";
 
-  let parsed: any;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    parsed = { action: "chat", statusLabel: "thinking", answer: payload };
-  }
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: `${composedPrompt ? `${composedPrompt}
 
-  if (parsed.action === "save_idea" && parsed.ideaStructured) {
-    const folderName = normalizeText(parsed.ideaStructured.folderName || "");
-    const selectedFolder = folders.find((f) => normalizeText(f.name) === folderName);
-    const rawCategory = parsed.ideaStructured.category;
-    const safeCategory = ideaCategories.includes(rawCategory) ? rawCategory : "other";
+` : ""}أنت وكيل ذكي مستقل باسم "فكري 2.0" لصناعة المحتوى والأخبار فقط.
+- استخدم الأدوات تلقائياً عند الحاجة.
+- النطاق المسموح: صناعة المحتوى، تحليل الأخبار، توليد/حفظ الأفكار.
+- إذا طُلب منك شيء خارج هذا النطاق (مثل البرمجة العامة أو مواضيع لا تخص المحتوى)، ارفض بلطف ووجّه المستخدم لأسئلة ضمن النطاق.
+- عند استخدام أدوات البحث، اعتمد على النتائج ولا تختلق مصادر.
+- أجب بالعربية وبشكل عملي ومختصر.${nameContext}`,
+    },
+    {
+      role: "system",
+      content: `بيانات المستخدم المتاحة: ${JSON.stringify(compactContext)}`,
+    },
+    ...history.slice(-16),
+    {
+      role: "user",
+      content: userMessage,
+    },
+  ];
 
-    const createdIdea = await storage.createIdea({
-      userId,
-      folderId: selectedFolder?.id || null,
-      title: parsed.ideaStructured.title || `فكرة من المحادثة - ${new Date().toLocaleDateString("ar")}`,
-      description: parsed.ideaStructured.description || userMessage,
-      category: safeCategory,
-      status: "raw_idea",
-      estimatedDuration: parsed.ideaStructured.estimatedDuration || "5-8 دقائق",
-      targetAudience: parsed.ideaStructured.targetAudience || "متابعو التقنية",
-      notes: "تمت إضافتها عبر المساعد الذكي",
+  const executedTools: AgentToolResult[] = [];
+  let createdIdea: { id: string; title: string } | undefined;
+
+  for (let i = 0; i < 4; i++) {
+    const completion = await client.chat.completions.create({
+      model,
+      messages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.2,
     });
 
-    return {
-      action: "save_idea",
-      statusLabel: "saving_idea",
-      answer: parsed.answer || `تم حفظ الفكرة بنجاح بعنوان: ${createdIdea.title} في قسم الأفكار.`,
-      createdIdea: { id: createdIdea.id, title: createdIdea.title },
-      matchedContent: [],
-    };
+    const message = completion.choices[0]?.message;
+    if (!message) break;
+
+    messages.push(message as any);
+
+    const toolCalls = message.tool_calls || [];
+    if (toolCalls.length === 0) {
+      const matchedContent = executedTools
+        .filter((t) => t.type === "internal_search")
+        .flatMap((t) => t.payload?.items || [])
+        .slice(0, 8)
+        .map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          originalUrl: item.originalUrl,
+          publishedAt: item.publishedAt,
+          folderName: item.folderName,
+        }));
+
+      return {
+        action: createdIdea ? "save_idea" : matchedContent.length > 0 ? "search_news" : "chat",
+        statusLabel: createdIdea ? "saving_idea" : matchedContent.length > 0 ? "searching_news" : "thinking",
+        answer: message.content || "تمت المعالجة.",
+        matchedContent,
+        createdIdea,
+      };
+    }
+
+    for (const call of toolCalls) {
+      if (call.type !== "function") {
+        continue;
+      }
+      const args = (() => {
+        try { return JSON.parse(call.function.arguments || "{}"); } catch { return {}; }
+      })();
+
+      if (call.function.name === "internal_search") {
+        const query = String(args.query || "").toLowerCase().trim();
+        const limit = Math.min(Number(args.limit || 8), 15);
+        const items = sortedContent
+          .filter((item) => {
+            const hay = `${item.title} ${item.summary || ""} ${item.arabicSummary || ""} ${(item.keywords || []).join(" ")}`.toLowerCase();
+            return !query || hay.includes(query);
+          })
+          .slice(0, limit)
+          .map((item) => ({
+            id: item.id,
+            title: item.title,
+            summary: item.arabicSummary || item.summary || "",
+            originalUrl: item.originalUrl,
+            publishedAt: item.publishedAt || item.fetchedAt,
+            folderName: folderById.get(item.folderId)?.name || "غير معروف",
+          }));
+
+        executedTools.push({ type: "internal_search", payload: { query, items } });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ ok: true, items }),
+        } as any);
+      } else if (call.function.name === "external_web_search") {
+        const query = String(args.query || "").trim();
+        const searchFlag = await storage.getSystemSetting("web_search_enabled");
+        if (searchFlag?.value === "false") {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({ ok: false, error: "البحث الخارجي معطّل حالياً من قبل المدير" }),
+          } as any);
+        } else {
+          const results = await runExternalWebSearch(query, userId);
+          executedTools.push({ type: "external_search", payload: { query, results } });
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: JSON.stringify({ ok: true, results }),
+          } as any);
+        }
+      } else if (call.function.name === "create_idea_draft") {
+        const safeCategory = String(args.category || "");
+        const selectedFolder = folders.find((f) => normalizeText(f.name) === normalizeText(args.folderName || ""));
+        const idea = await storage.createIdea({
+          userId,
+          folderId: selectedFolder?.id || null,
+          title: args.title || `فكرة - ${new Date().toLocaleDateString("ar")}`,
+          description: args.description || userMessage,
+          category: safeCategory,
+          status: "raw_idea",
+          estimatedDuration: args.estimatedDuration || "5-8 دقائق",
+          targetAudience: args.targetAudience || "متابعو التقنية",
+          notes: "تمت إضافتها عبر الوكيل الذكي فكري",
+        });
+        createdIdea = { id: idea.id, title: idea.title };
+        executedTools.push({ type: "create_idea", payload: { id: idea.id, title: idea.title } });
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify({ ok: true, ideaId: idea.id, title: idea.title }),
+        } as any);
+      }
+    }
   }
 
-  const matchedContent = Array.isArray(parsed.matches)
-    ? sortedContent.filter((item) => parsed.matches.includes(item.id)).slice(0, 8)
-    : [];
-
   return {
-    action: parsed.action || "chat",
-    statusLabel: parsed.statusLabel || "thinking",
-    answer: parsed.answer || "تمت المعالجة.",
-    matchedContent: matchedContent.map((item) => ({
-      id: item.id,
-      title: item.title,
-      originalUrl: item.originalUrl,
-      publishedAt: item.publishedAt || item.fetchedAt,
-      folderName: folderById.get(item.folderId)?.name || "غير معروف",
-    })),
+    action: createdIdea ? "save_idea" : "chat",
+    statusLabel: createdIdea ? "saving_idea" : "thinking",
+    answer: createdIdea ? `تم حفظ الفكرة بعنوان: ${createdIdea.title}` : "تعذر إكمال المعالجة الآن.",
+    matchedContent: [],
+    createdIdea,
   };
 }
 
@@ -206,10 +389,50 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function checkFeatureFlag(flagName: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const setting = await storage.getSystemSetting(flagName);
+      if (setting?.value === "false") {
+        return res.status(503).json({ error: `هذه الميزة معطّلة حالياً من قبل المدير (${flagName})` });
+      }
+      next();
+    } catch (err) {
+      console.error(`[FeatureFlag] Error checking ${flagName}:`, err);
+      next();
+    }
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.use("/api", async (req: Request, _res: Response, next: NextFunction) => {
+    if (req.session?.userId) {
+      storage.updateUserLastActive(req.session.userId).catch(() => {});
+    }
+    next();
+  });
+
+  // ─── System Settings API ──────────────────────────────────────────────────
+
+  
+
+  app.get("/api/system-settings/public-flags", async (_req, res) => {
+    try {
+      const flags = ["fikri_enabled", "registration_enabled", "web_search_enabled", "ai_generation_enabled"];
+      const results: Record<string, string> = {};
+      for (const flag of flags) {
+        const setting = await storage.getSystemSetting(flag);
+        results[flag] = setting?.value || "true";
+      }
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get flags" });
+    }
+  });
 
   // ─── Auth Routes ──────────────────────────────────────────────────────────
 
@@ -258,7 +481,13 @@ export async function registerRoutes(
       const isNew = !user;
 
       if (!user) {
+        const regFlag = await storage.getSystemSetting("registration_enabled");
+        if (regFlag?.value === "false") {
+          return res.status(403).json({ error: "تسجيل المستخدمين الجدد معطّل حالياً" });
+        }
         user = await storage.createUser({ email: normalizedEmail, onboardingCompleted: false });
+      } else if (!user.onboardingCompleted) {
+        user = await storage.updateUser(user.id, { onboardingCompleted: true }) ?? user;
       }
 
       req.session.userId = user.id;
@@ -325,10 +554,61 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Platform IDs (Multi-ID) ──────────────────────────────────────────────
+  app.get("/api/auth/platform-ids", requireAuth, async (req, res) => {
+    try {
+      const platform = req.query.platform as string | undefined;
+      const ids = await storage.getPlatformIds(req.session.userId!, platform as any);
+      res.json(ids);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to fetch platform IDs" });
+    }
+  });
+
+  app.post("/api/auth/platform-ids", requireAuth, async (req, res) => {
+    try {
+      const { platform, platformId, label } = req.body;
+      if (!platform || !platformId) return res.status(400).json({ error: "platform و platformId مطلوبين" });
+      if (!["slack", "telegram"].includes(platform)) return res.status(400).json({ error: "المنصة غير مدعومة" });
+      const existing = await storage.getPlatformIds(req.session.userId!, platform);
+      if (existing.some(e => e.platformId === platformId)) {
+        return res.status(409).json({ error: "هذا المعرف مضاف مسبقاً" });
+      }
+      const otherUser = await storage.getUserByPlatformId(platform, platformId.trim());
+      if (otherUser && otherUser.id !== req.session.userId!) {
+        return res.status(409).json({ error: "هذا المعرف مستخدم من حساب آخر" });
+      }
+      const created = await storage.addPlatformId(req.session.userId!, platform, platformId.trim(), label?.trim());
+      if (platform === "slack") {
+        await storage.updateUser(req.session.userId!, { slackUserId: platformId.trim() });
+      }
+      res.json(created);
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to add platform ID" });
+    }
+  });
+
+  app.delete("/api/auth/platform-ids/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const allIds = await storage.getPlatformIds(userId);
+      const toDelete = allIds.find(p => p.id === req.params.id);
+      const deleted = await storage.removePlatformId(req.params.id, userId);
+      if (!deleted) return res.status(404).json({ error: "المعرف غير موجود" });
+      if (toDelete?.platform === "slack") {
+        const remainingSlack = allIds.filter(p => p.platform === "slack" && p.id !== req.params.id);
+        await storage.updateUser(userId, { slackUserId: remainingSlack[0]?.platformId || null });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || "Failed to remove platform ID" });
+    }
+  });
+
   // ─── Global auth guard for all non-auth API routes ────────────────────────
   // Applied after auth routes so /api/auth/* remain public.
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/")) {
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/") || req.path.startsWith("/integrations/telegram/")) {
       return next();
     }
     if (!req.session?.userId) {
@@ -445,7 +725,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/folders/:id/smart-view", async (req, res) => {
+  app.post("/api/folders/:id/smart-view", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
@@ -473,9 +753,9 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", req.session.userId!))?.value;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
       
-      const cards = await generateSmartView(contentToUse, aiSystemPrompt);
+      const cards = await generateSmartView(contentToUse, aiSystemPrompt, req.session.userId!);
       
       res.json({ cards });
     } catch (error: any) {
@@ -484,7 +764,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/folders/:id/generate-ideas", async (req, res) => {
+  app.post("/api/folders/:id/generate-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
@@ -520,7 +800,7 @@ export async function registerRoutes(
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
       
-      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -554,7 +834,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/generate-smart-ideas", async (req, res) => {
+  app.post("/api/generate-smart-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const { folderIds, days, templates: templateRequests } = req.body as {
         folderIds: string[];
@@ -618,7 +898,7 @@ export async function registerRoutes(
       const folderNames = folders.map((f) => f.name).join("، ");
       const primaryFolderId = folderIds.length === 1 ? folderIds[0] : null;
 
-      const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", userId))?.value || null;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(userId);
       const styleExamples = await storage.getAllStyleExamples(userId);
       
       const allExistingIdeas = await storage.getAllIdeas(userId);
@@ -642,7 +922,8 @@ export async function registerRoutes(
           templateReq.count,
           aiSystemPrompt,
           styleExamples,
-          existingTitles
+          existingTitles,
+          userId
         );
 
         for (const idea of ideas) {
@@ -695,6 +976,64 @@ export async function registerRoutes(
     if (!folder || folder.userId !== userId) { res.status(403).json({ error: "Forbidden" }); return null; }
     return source;
   }
+
+  app.post("/api/folders/:id/magic-scout", checkFeatureFlag("fikri_enabled"), async (req, res) => {
+    try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
+
+      const parsed = magicScoutInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors });
+      }
+
+      const suggestions = await discoverSourcesWithMagicScout(parsed.data, req.session.userId!);
+      if (suggestions.length === 0) {
+        return res.json({ added: [], skipped: [], suggestions: [] });
+      }
+
+      const existingSources = await storage.getSourcesByFolderId(folder.id);
+      const existingUrls = new Set(existingSources.map((source) => {
+        try {
+          const url = new URL(source.url);
+          url.hash = "";
+          if (url.pathname.endsWith("/")) url.pathname = url.pathname.slice(0, -1);
+          return url.toString();
+        } catch {
+          return source.url.trim();
+        }
+      }));
+
+      const added: Source[] = [];
+      const skipped: Array<{ url: string; reason: string }> = [];
+
+      for (const suggestion of suggestions) {
+        if (existingUrls.has(suggestion.url)) {
+          skipped.push({ url: suggestion.url, reason: "exists" });
+          continue;
+        }
+
+        try {
+          const created = await storage.createSource({
+            folderId: folder.id,
+            name: suggestion.name,
+            url: suggestion.url,
+            type: suggestion.type,
+            isActive: true,
+          });
+          added.push(created);
+          existingUrls.add(suggestion.url);
+        } catch {
+          skipped.push({ url: suggestion.url, reason: "create_failed" });
+        }
+      }
+
+      res.json({ added, skipped, suggestions });
+    } catch (error: any) {
+      console.error("Magic scout failed:", error);
+      res.status(500).json({ error: error?.message || "Failed to discover sources" });
+    }
+  });
 
   app.post("/api/sources", async (req, res) => {
     try {
@@ -783,7 +1122,7 @@ export async function registerRoutes(
       const _bgUserId = req.session.userId!;
       if (newContentIds.length > 0) {
         (async () => {
-          const aiSystemPrompt = (await storage.getSetting("ai_system_prompt", _bgUserId))?.value || null;
+          const aiSystemPrompt = await getUserComposedSystemPrompt(_bgUserId);
           if (aiSystemPrompt) {
             console.log(`[Source Fetch] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
           }
@@ -794,7 +1133,8 @@ export async function registerRoutes(
                 const arabicSummary = await generateArabicSummary(
                   contentItem.title,
                   contentItem.summary || "",
-                  aiSystemPrompt
+                  aiSystemPrompt,
+                  req.session.userId!
                 );
                 if (arabicSummary) {
                   await storage.updateContentArabicSummary(contentId, arabicSummary);
@@ -803,7 +1143,8 @@ export async function registerRoutes(
                 const translation = await generateProfessionalTranslation(
                   contentItem.title,
                   contentItem.summary || "",
-                  aiSystemPrompt
+                  aiSystemPrompt,
+                  req.session.userId!
                 );
                 if (translation) {
                   await storage.updateContentTranslation(
@@ -916,7 +1257,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/assistant/chat", async (req, res) => {
+  app.post("/api/assistant/chat", checkFeatureFlag("fikri_enabled"), async (req, res) => {
     try {
       const body = req.body as AssistantChatRequest & { conversationId?: string };
       const userMessage = body?.message?.trim();
@@ -953,7 +1294,8 @@ export async function registerRoutes(
         content: userMessage,
       });
 
-      const result = await runAssistantEngine(userMessage, mergedHistory, userId);
+      const webUser = await storage.getUserById(userId);
+      const result = await runAssistantEngine(userMessage, mergedHistory, userId, webUser?.name || undefined);
 
       await storage.createAssistantMessage({
         conversationId,
@@ -989,27 +1331,35 @@ export async function registerRoutes(
       const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
       const payload = req.body || (rawBody ? JSON.parse(rawBody) : {});
 
-      // Handle URL verification challenge immediately (before signature check)
+      // Handle URL verification challenge immediately
       if (payload.type === "url_verification") {
         console.log("[Slack] URL verification challenge received");
         return res.json({ challenge: payload.challenge });
       }
 
-      // Verify signature only if signing secret is configured
-      // At this point we don't know the user yet; we'll look it up after the event
-      // For signature verification we need to find any user with this secret configured.
-      // We use the platform user resolved from the Slack event below.
-      const signingSecret = "";
+      // ── Signature Verification ──
+      // Find any user's signing secret to verify the request
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
+      let signingSecretFound = false;
+      let anySecretConfigured = false;
 
-      if (signingSecret) {
-        if (!verifySlackSignature(rawBody, timestamp || "", signature || "", signingSecret)) {
-          console.warn("[Slack] Signature verification failed - rejecting request");
-          return res.status(401).json({ error: "Invalid Slack signature" });
+      const allUsers = await storage.getAllUsers();
+      for (const u of allUsers) {
+        const secret = (await storage.getSetting("slack_signing_secret", u.id))?.value;
+        if (secret) {
+          anySecretConfigured = true;
+          if (verifySlackSignature(rawBody, timestamp || "", signature || "", secret)) {
+            signingSecretFound = true;
+            console.log("[Slack] Signature verified successfully");
+            break;
+          }
         }
-      } else {
-        console.warn("[Slack] No signing secret configured - skipping signature verification");
+      }
+
+      if (anySecretConfigured && !signingSecretFound) {
+        console.warn("[Slack] Signature verification failed — rejecting request");
+        return res.status(401).json({ error: "Invalid Slack signature" });
       }
 
       if (payload.type !== "event_callback") {
@@ -1017,58 +1367,90 @@ export async function registerRoutes(
       }
 
       const event = payload.event;
-      if (!event) {
-        return res.json({ ok: true });
-      }
+      if (!event) return res.json({ ok: true });
 
-      // Ignore messages from bots (including our own bot)
+      // Ignore bot messages (including our own)
       if (event.bot_id || event.subtype === "bot_message") {
         console.log("[Slack] Ignoring bot message");
         return res.json({ ok: true });
       }
 
-      // Only handle app_mention and direct messages (im)
+      // Handle app_mention and direct messages
       const supportedTypes = ["app_mention", "message"];
-      if (!supportedTypes.includes(event.type)) {
-        return res.json({ ok: true });
-      }
+      if (!supportedTypes.includes(event.type)) return res.json({ ok: true });
 
       let text: string = event.text || "";
-      // Strip bot mention (@BotName) from message text
       text = text.replace(/<@[A-Z0-9]+>/g, "").trim();
-
-      if (!text) {
-        return res.json({ ok: true });
-      }
+      if (!text) return res.json({ ok: true });
 
       const slackUserId = event.user;
       console.log(`[Slack] Received message: "${text.slice(0, 80)}..." from user ${slackUserId} in channel ${event.channel}`);
 
-      // Look up platform user by Slack User ID
-      let platformUser = slackUserId ? await storage.getUserBySlackUserId(slackUserId) : undefined;
+      // ── Bouncer Logic: Look up platform user ──
+      let platformUser = slackUserId ? await storage.getUserByPlatformId("slack", slackUserId) : undefined;
 
       if (!platformUser) {
-        console.log(`[Slack] User ${slackUserId} not linked to any platform account`);
-        // Respond immediately then send rejection message
+        console.log(`[Slack] User ${slackUserId} not linked — sending bouncer message`);
         res.json({ ok: true });
-        // No platform user found — cannot look up settings, skip bot reply
+
+        // Use verified user's bot token (the one whose signing secret matched) to reply
+        // Falls back to first available if no specific match
+        for (const u of allUsers) {
+          const token = (await storage.getSetting("slack_bot_token", u.id))?.value;
+          if (token && event.channel) {
+            await fetch("https://slack.com/api/chat.postMessage", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                channel: event.channel,
+                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اكتب الـ Member ID حقك\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
+                thread_ts: event.thread_ts || event.ts,
+              }),
+            }).catch(err => console.error("[Slack] Failed to send bouncer message:", err));
+            break;
+          }
+        }
         return;
       }
 
       console.log(`[Slack] Matched platform user: ${platformUser.name || platformUser.email} (${platformUser.id})`);
 
-      // Respond to Slack immediately to avoid timeout
+      // Respond to Slack immediately to avoid 3s timeout
       res.json({ ok: true });
 
-      // Process in background
+      // ── Background Processing ──
       (async () => {
         try {
+          // ── Fetch sender's display name from Slack API ──
+          let senderDisplayName: string | undefined;
+          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
+
+          if (botToken && slackUserId) {
+            try {
+              const userInfoRes = await fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${botToken}` },
+              });
+              const userInfo = await userInfoRes.json() as any;
+              if (userInfo.ok && userInfo.user) {
+                senderDisplayName = userInfo.user.profile?.display_name
+                  || userInfo.user.profile?.real_name
+                  || userInfo.user.real_name
+                  || userInfo.user.name;
+                console.log(`[Slack] Resolved sender name: "${senderDisplayName}"`);
+              }
+            } catch (nameErr) {
+              console.warn("[Slack] Failed to fetch user info:", nameErr);
+            }
+          }
+
           const conversation = await storage.createAssistantConversation({
             title: `Slack - ${text.slice(0, 50)}`,
             userId: platformUser!.id,
           } as any);
 
-          const result = await runAssistantEngine(text, [], platformUser!.id);
+          // Pass sender name to the engine for personalized response
+          const result = await runAssistantEngine(text, [], platformUser!.id, senderDisplayName);
           console.log(`[Slack] AI response ready, action: ${result.action}`);
 
           await storage.createAssistantMessage({
@@ -1084,7 +1466,6 @@ export async function registerRoutes(
             statusLabel: result.statusLabel,
           });
 
-          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
           if (!botToken) {
             console.warn("[Slack] No bot token configured - cannot reply to Slack");
             return;
@@ -1111,7 +1492,7 @@ export async function registerRoutes(
           if (!slackData.ok) {
             console.error("[Slack] Failed to send reply:", slackData.error);
           } else {
-            console.log("[Slack] Reply sent successfully");
+            console.log("[Slack] Reply sent successfully to channel:", event.channel);
           }
         } catch (bgError) {
           console.error("[Slack] Background processing error:", bgError);
@@ -1121,6 +1502,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error("[Slack] Events endpoint error:", error);
       return res.status(500).json({ error: "Failed to process Slack event" });
+    }
+  });
+
+  // ─── Telegram Incoming Webhook ───────────────────────────────────────────
+  app.post("/api/integrations/telegram/webhook", async (req, res) => {
+    try {
+      const update = req.body;
+
+      if (!update?.message) {
+        return res.json({ ok: true });
+      }
+
+      const msg = update.message;
+      const text = (msg.text || "").trim();
+      const telegramChatId = String(msg.chat?.id || "");
+      const telegramUserId = String(msg.from?.id || "");
+      const senderName = msg.from?.first_name || msg.from?.username || undefined;
+
+      if (!text || !telegramChatId) {
+        return res.json({ ok: true });
+      }
+
+      console.log(`[Telegram] Received message: "${text.slice(0, 80)}..." from chat ${telegramChatId}, user ${telegramUserId}`);
+
+      // Look up platform user by telegram chat ID or user ID
+      let platformUser = await storage.getUserByPlatformId("telegram", telegramChatId);
+      if (!platformUser && telegramUserId !== telegramChatId) {
+        platformUser = await storage.getUserByPlatformId("telegram", telegramUserId);
+      }
+
+      if (!platformUser) {
+        console.log(`[Telegram] User ${telegramChatId} not linked — sending bouncer message`);
+        res.json({ ok: true });
+
+        // Find any available bot token to reply
+        const allUsers = await storage.getAllUsers();
+        for (const u of allUsers) {
+          const token = (await storage.getSetting("telegram_bot_token", u.id))?.value;
+          if (token) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: telegramChatId,
+                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Telegram مو مربوط بالمنصة بعد.\n\n🔑 الـ Chat ID حقك هو: ${telegramChatId}\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Telegram اضغط (+) وأضف الـ Chat ID\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
+                reply_to_message_id: msg.message_id,
+              }),
+            }).catch(err => console.error("[Telegram] Failed to send bouncer message:", err));
+            break;
+          }
+        }
+        return;
+      }
+
+      console.log(`[Telegram] Matched platform user: ${platformUser.name || platformUser.email} (${platformUser.id})`);
+      res.json({ ok: true });
+
+      // Background processing
+      (async () => {
+        try {
+          const botToken = (await storage.getSetting("telegram_bot_token", platformUser!.id))?.value || "";
+
+          const displayName = senderName || platformUser!.name || undefined;
+
+          const conversation = await storage.createAssistantConversation({
+            title: `Telegram - ${text.slice(0, 50)}`,
+            userId: platformUser!.id,
+          } as any);
+
+          const result = await runAssistantEngine(text, [], platformUser!.id, displayName);
+          console.log(`[Telegram] AI response ready, action: ${result.action}`);
+
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "user",
+            content: text,
+          });
+          await storage.createAssistantMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: result.answer,
+            action: result.action,
+            statusLabel: result.statusLabel,
+          });
+
+          if (!botToken) {
+            console.warn("[Telegram] No bot token configured - cannot reply");
+            return;
+          }
+
+          const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: telegramChatId,
+              text: result.answer,
+              reply_to_message_id: msg.message_id,
+            }),
+          });
+          const tgData = await tgRes.json() as any;
+          if (!tgData.ok) {
+            console.error("[Telegram] Failed to send reply:", tgData.description);
+          } else {
+            console.log("[Telegram] Reply sent successfully to chat:", telegramChatId);
+          }
+        } catch (bgError) {
+          console.error("[Telegram] Background processing error:", bgError);
+        }
+      })();
+
+    } catch (error) {
+      console.error("[Telegram] Webhook endpoint error:", error);
+      return res.status(500).json({ error: "Failed to process Telegram update" });
     }
   });
 
@@ -1326,6 +1820,12 @@ export async function registerRoutes(
 
   app.delete("/api/comments/:id", async (req, res) => {
     try {
+      const comment = await storage.getCommentById(req.params.id);
+      if (!comment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      const idea = await requireIdeaOwner(comment.ideaId, req.session.userId!, res);
+      if (!idea) return;
       await storage.deleteComment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1365,6 +1865,12 @@ export async function registerRoutes(
 
   app.delete("/api/assignments/:id", async (req, res) => {
     try {
+      const assignment = await storage.getAssignmentById(req.params.id);
+      if (!assignment) {
+        return res.status(404).json({ error: "Assignment not found" });
+      }
+      const idea = await requireIdeaOwner(assignment.ideaId, req.session.userId!, res);
+      if (!idea) return;
       await storage.deleteAssignment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1491,7 +1997,7 @@ export async function registerRoutes(
         return res.json({ success: true, analyzed: 0, message: "No unanalyzed content found" });
       }
 
-      const analyses = await analyzeContentSentiment(contentItems);
+      const analyses = await analyzeContentSentiment(contentItems, req.session.userId!);
       
       let analyzedCount = 0;
       for (const entry of Array.from(analyses.entries())) {
@@ -1523,7 +2029,7 @@ export async function registerRoutes(
         return res.json({ success: true, analyzed: 0, message: "No unanalyzed content in folder" });
       }
 
-      const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20));
+      const analyses = await analyzeContentSentiment(unanalyzedContent.slice(0, 20), req.session.userId!);
       
       let analyzedCount = 0;
       for (const entry of Array.from(analyses.entries())) {
@@ -1545,13 +2051,12 @@ export async function registerRoutes(
   });
 
   // Generate detailed Arabic explanation for a content item
-  app.post("/api/content/:id/explain", async (req, res) => {
+  app.post("/api/content/:id/explain", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
       if (!contentItem) return;
 
-      const aiSystemPromptSetting = await storage.getSetting("ai_system_prompt", req.session.userId!);
-      const aiSystemPrompt = aiSystemPromptSetting?.value || null;
+      const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
       if (aiSystemPrompt) {
         console.log(`[Explain Route] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
       }
@@ -1560,7 +2065,8 @@ export async function registerRoutes(
         contentItem.title,
         contentItem.summary,
         contentItem.originalUrl,
-        aiSystemPrompt
+        aiSystemPrompt,
+        req.session.userId!
       );
       
       res.json({ explanation });
@@ -1592,7 +2098,9 @@ export async function registerRoutes(
       if (!arabicSummary) {
         arabicSummary = await generateArabicSummary(
           contentItem.title,
-          contentItem.summary || ""
+          contentItem.summary || "",
+          undefined,
+          req.session.userId!
         );
         if (arabicSummary) {
           await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
@@ -1605,7 +2113,9 @@ export async function registerRoutes(
       if (!arabicTitle || !arabicFullSummary) {
         const translation = await generateProfessionalTranslation(
           contentItem.title,
-          contentItem.summary || ""
+          contentItem.summary || "",
+          undefined,
+          req.session.userId!
         );
         if (translation) {
           arabicTitle = translation.arabicTitle;
@@ -1653,7 +2163,9 @@ export async function registerRoutes(
             if (!contentItem.arabicSummary) {
               const arabicSummary = await generateArabicSummary(
                 contentItem.title,
-                contentItem.summary || ""
+                contentItem.summary || "",
+                undefined,
+                req.session.userId!
               );
               if (arabicSummary) {
                 await storage.updateContentArabicSummary(contentItem.id, arabicSummary);
@@ -1664,7 +2176,9 @@ export async function registerRoutes(
             if (!contentItem.arabicTitle || !contentItem.arabicFullSummary) {
               const translation = await generateProfessionalTranslation(
                 contentItem.title,
-                contentItem.summary || ""
+                contentItem.summary || "",
+                undefined,
+                req.session.userId!
               );
               if (translation) {
                 await storage.updateContentTranslation(
@@ -1710,7 +2224,7 @@ export async function registerRoutes(
         return res.json({ topics: [], message: "No recent content to analyze" });
       }
 
-      const topics = await detectTrendingTopics(recentContent);
+      const topics = await detectTrendingTopics(recentContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
       console.error("Trending topics error:", error);
@@ -1728,7 +2242,7 @@ export async function registerRoutes(
         return res.json({ topics: [], message: "No content in folder" });
       }
 
-      const topics = await detectTrendingTopics(folderContent);
+      const topics = await detectTrendingTopics(folderContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
       console.error("Folder trending topics error:", error);
@@ -1915,7 +2429,11 @@ export async function registerRoutes(
       if (!title) {
         return res.status(400).json({ error: "Title is required for testing" });
       }
-      const rewritten = await rewriteContent(title, summary || null, systemPrompt || null);
+      const userPrompt = await getUserComposedSystemPrompt(req.session.userId!);
+      const mergedPrompt = (typeof systemPrompt === "string" && systemPrompt.trim().length > 0)
+        ? systemPrompt
+        : userPrompt;
+      const rewritten = await rewriteContent(title, summary || null, mergedPrompt, req.session.userId!);
       res.json({ success: true, rewrittenContent: rewritten });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });

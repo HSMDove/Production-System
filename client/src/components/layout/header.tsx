@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,8 +27,19 @@ export function Header() {
   const { setOpen } = useFikriOverlay();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+
+    // Defensive cleanup for mobile Sheet/Dialog side-effects that can linger
+    // on some route transitions in mobile browsers.
+    document.body.style.removeProperty("pointer-events");
+    document.body.style.removeProperty("overflow");
+    document.body.removeAttribute("data-scroll-locked");
+    document.body.removeAttribute("data-aria-hidden");
+  }, [location]);
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-card" style={{ paddingTop: "env(safe-area-inset-top, 0px)", WebkitPosition: "sticky" as any }}>
       <div className="container flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:px-4 md:px-8">
         <Link href="/" className="flex items-center group">
           <span className="text-2xl font-black sm:text-3xl tracking-tighter bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent px-1" data-testid="text-logo">نَسَق</span>

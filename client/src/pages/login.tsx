@@ -48,16 +48,17 @@ export default function LoginPage() {
       dir="rtl"
       className="min-h-screen flex items-center justify-center bg-background px-4"
     >
-      <div className="w-full max-w-sm space-y-8">
+      <div className="w-full max-w-sm space-y-6">
         {/* Logo & Title */}
-        <div className="text-center space-y-3">
-          <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent">نَسَق</h1>
-          <p className="text-muted-foreground text-sm">
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
+          <p className="text-muted-foreground text-sm font-semibold">
             أدخل بريدك الإلكتروني لتلقّي رمز الدخول
           </p>
         </div>
 
-        {/* Form */}
+        {/* Form — Neo-Brutalist Card */}
+        <div className="card bg-card p-6 space-y-4">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email-input">
@@ -100,6 +101,7 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
+        </div>
 
         <p className="text-center text-xs text-muted-foreground">
           سيتم إرسال رمز مكوّن من 6 أرقام صالح لمدة 5 دقائق
