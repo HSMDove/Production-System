@@ -446,7 +446,8 @@ export default function FolderDetail() {
                     content={filteredContent} 
                     isLoading={contentLoading} 
                     showTranslation={showTranslation} 
-                    folderId={id} 
+                    folderId={id}
+                    unifiedTimeline={selectedFilterSourceId === null}
                   />
                 )}
               </div>

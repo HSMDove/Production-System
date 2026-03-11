@@ -34,6 +34,7 @@ interface ContentFeedProps {
   isLoading?: boolean;
   showTranslation?: boolean;
   folderId?: string;
+  unifiedTimeline?: boolean;
 }
 
 
@@ -451,7 +452,7 @@ function ContentSkeleton() {
   );
 }
 
-export function ContentFeed({ content, isLoading, showTranslation, folderId }: ContentFeedProps) {
+export function ContentFeed({ content, isLoading, showTranslation, folderId, unifiedTimeline }: ContentFeedProps) {
   const [selectedItem, setSelectedItem] = useState<ContentWithSource | null>(null);
   const [explanation, setExplanation] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -532,7 +533,7 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
     );
   }
 
-  // Split content into news and videos
+  // Split content into news and videos (only used when unifiedTimeline is false)
   const newsContent = content.filter(item => 
     item.source?.type === "rss" || item.source?.type === "website"
   );
@@ -594,6 +595,27 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId }: C
       </DialogContent>
     </Dialog>
   );
+
+  // Unified timeline: all content merged in a single chronological list, no type-based split
+  if (unifiedTimeline) {
+    return (
+      <>
+        {ExplanationDialog}
+        <div className="space-y-4" data-testid="unified-timeline">
+          {content.map((item) => (
+            <ContentCard
+              key={item.id}
+              item={item}
+              onExplain={handleExplain}
+              onTranslate={handleTranslate}
+              showTranslation={showTranslation}
+              isTranslating={translatingIds.has(item.id)}
+            />
+          ))}
+        </div>
+      </>
+    );
+  }
 
   // If only one type exists, just show that content without tabs
   if (!hasNews && hasVideos) {
