@@ -1,5 +1,4 @@
-import { eq, and, desc, isNull, gt } from "drizzle-orm";
-import crypto from "crypto";
+import { eq, and, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   folders,
@@ -7,7 +6,6 @@ import {
   content,
   ideas,
   users,
-  otpCodes,
   promptTemplates,
   ideaComments,
   ideaAssignments,
@@ -22,7 +20,6 @@ import {
   type UpdateIdea,
   type User,
   type InsertUser,
-  type OtpCode,
   type PromptTemplate,
   type InsertPromptTemplate,
   type UpdatePromptTemplate,
@@ -43,88 +40,26 @@ import {
   type InsertAssistantConversation,
   type AssistantMessage,
   type InsertAssistantMessage,
-  userPlatformIds,
-  type UserPlatformId,
-  type PlatformType,
-  systemSettings,
-  type SystemSetting,
-  apiUsageLogs,
-  type ApiUsageLog,
-  type InsertApiUsageLog,
 } from "@shared/schema";
 
-const ENCRYPTED_PREFIX = "enc:v1:";
-const SENSITIVE_SETTING_KEYS = new Set([
-  "ai_custom_api_key",
-  "llm_api_key",
-  "web_search_api_key",
-  "telegram_bot_token",
-  "slack_webhook_url",
-  "slack_bot_token",
-  "slack_signing_secret",
-]);
-
-function getEncryptionKey(): Buffer {
-  const source = process.env.SETTINGS_ENCRYPTION_KEY || process.env.SESSION_SECRET || "fallback-secret-change-in-production";
-  return crypto.createHash("sha256").update(source).digest();
-}
-
-function encryptIfSensitive(key: string, value: string | null): string | null {
-  if (value === null || !SENSITIVE_SETTING_KEYS.has(key)) return value;
-  if (value.startsWith(ENCRYPTED_PREFIX)) return value;
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `${ENCRYPTED_PREFIX}${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
-}
-
-function decryptIfNeeded(key: string, value: string | null): string | null {
-  if (value === null) return null;
-  if (!SENSITIVE_SETTING_KEYS.has(key)) return value;
-  if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
-
-  try {
-    const payload = value.slice(ENCRYPTED_PREFIX.length);
-    const [ivB64, tagB64, dataB64] = payload.split(":");
-    const decipher = crypto.createDecipheriv("aes-256-gcm", getEncryptionKey(), Buffer.from(ivB64, "base64"));
-    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-    const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]);
-    return decrypted.toString("utf8");
-  } catch {
-    return null;
-  }
-}
-
 export interface IStorage {
-  // Auth / Users
-  getUserById(id: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  getUserBySlackUserId(slackUserId: string): Promise<User | undefined>;
-  createUser(user: Partial<InsertUser>): Promise<User>;
-  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
-
-  // OTP
-  createOTP(email: string, code: string, expiresAt: Date): Promise<OtpCode>;
-  getValidOTP(email: string, code: string): Promise<OtpCode | undefined>;
-  markOTPUsed(id: string): Promise<void>;
-  invalidateOTPsForEmail(email: string): Promise<void>;
-
-  // Folders (user-scoped)
-  getAllFolders(userId: string): Promise<Folder[]>;
-  getAllFoldersSystem(): Promise<Folder[]>;
+  getUser(id: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  
+  getAllFolders(): Promise<Folder[]>;
   getFolderById(id: string): Promise<Folder | undefined>;
-  createFolder(folder: InsertFolder & { userId: string }): Promise<Folder>;
+  createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
   deleteFolder(id: string): Promise<boolean>;
-
+  
   getSourcesByFolderId(folderId: string): Promise<Source[]>;
   getSourceById(id: string): Promise<Source | undefined>;
   createSource(source: InsertSource): Promise<Source>;
   updateSource(id: string, source: Partial<InsertSource>): Promise<Source | undefined>;
   deleteSource(id: string): Promise<boolean>;
-
-  getAllContent(userId: string): Promise<Content[]>;
+  
+  getAllContent(): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
   getContentById(id: string): Promise<Content | undefined>;
@@ -135,48 +70,48 @@ export interface IStorage {
   updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
   updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
-
+  
   getAllSources(): Promise<Source[]>;
-
-  getAllIdeas(userId: string): Promise<Idea[]>;
+  
+  getAllIdeas(): Promise<Idea[]>;
   getIdeasByFolderId(folderId: string): Promise<Idea[]>;
   getIdeaById(id: string): Promise<Idea | undefined>;
-  createIdea(idea: InsertIdea & { userId: string }): Promise<Idea>;
+  createIdea(idea: InsertIdea): Promise<Idea>;
   updateIdea(id: string, idea: UpdateIdea): Promise<Idea | undefined>;
   deleteIdea(id: string): Promise<boolean>;
-
-  getAllPromptTemplates(userId: string): Promise<PromptTemplate[]>;
-  getPromptTemplateById(id: string, userId: string): Promise<PromptTemplate | undefined>;
-  getDefaultPromptTemplate(userId: string): Promise<PromptTemplate | undefined>;
-  createPromptTemplate(template: InsertPromptTemplate & { userId: string }): Promise<PromptTemplate>;
-  updatePromptTemplate(id: string, template: UpdatePromptTemplate, userId: string): Promise<PromptTemplate | undefined>;
-  deletePromptTemplate(id: string, userId: string): Promise<boolean>;
-  setDefaultPromptTemplate(id: string, userId: string): Promise<PromptTemplate | undefined>;
-
+  
+  getAllPromptTemplates(): Promise<PromptTemplate[]>;
+  getPromptTemplateById(id: string): Promise<PromptTemplate | undefined>;
+  getDefaultPromptTemplate(): Promise<PromptTemplate | undefined>;
+  createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate>;
+  updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined>;
+  deletePromptTemplate(id: string): Promise<boolean>;
+  setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined>;
+  
   getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]>;
-  getCommentById(id: string): Promise<IdeaComment | undefined>;
   createComment(comment: InsertIdeaComment): Promise<IdeaComment>;
   deleteComment(id: string): Promise<boolean>;
-
+  
   getAssignmentsByIdeaId(ideaId: string): Promise<IdeaAssignment[]>;
-  getAssignmentById(id: string): Promise<IdeaAssignment | undefined>;
   createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment>;
   deleteAssignment(id: string): Promise<boolean>;
 
-  getSetting(key: string, userId: string): Promise<Setting | undefined>;
-  getAllSettings(userId: string): Promise<Setting[]>;
-  upsertSetting(key: string, value: string | null, userId: string): Promise<Setting>;
-  upsertSettings(entries: Record<string, string | null>, userId: string): Promise<Setting[]>;
+  getSetting(key: string): Promise<Setting | undefined>;
+  getAllSettings(): Promise<Setting[]>;
+  upsertSetting(key: string, value: string | null): Promise<Setting>;
+  upsertSettings(entries: Record<string, string | null>): Promise<Setting[]>;
 
   getUnnotifiedContent(): Promise<Content[]>;
   markContentNotified(id: string): Promise<Content | undefined>;
   updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined>;
-
+  
   getUnusedContentByFolderId(folderId: string): Promise<Content[]>;
   markContentUsedForIdeas(ids: string[]): Promise<void>;
   markContentRead(id: string): Promise<Content | undefined>;
 
-  getAssistantConversations(userId: string): Promise<AssistantConversation[]>;
+
+
+  getAssistantConversations(): Promise<AssistantConversation[]>;
   getAssistantConversationById(id: string): Promise<AssistantConversation | undefined>;
   createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation>;
   updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined>;
@@ -184,105 +119,28 @@ export interface IStorage {
   getAssistantMessagesByConversationId(conversationId: string): Promise<AssistantMessage[]>;
   createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage>;
 
-  getAllStyleExamples(userId: string): Promise<StyleExample[]>;
-  createStyleExample(example: InsertStyleExample & { userId: string }): Promise<StyleExample>;
-  deleteStyleExample(id: string, userId: string): Promise<boolean>;
-
-  // Platform IDs (multi-ID support)
-  getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]>;
-  addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId>;
-  removePlatformId(id: string, userId: string): Promise<boolean>;
-  getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined>;
-
-  // System Settings (global admin controls)
-  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
-  getAllSystemSettings(): Promise<SystemSetting[]>;
-  upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting>;
-
-  // API Usage Logging
-  logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog>;
-
-  // User Activity
-  updateUserLastActive(userId: string): Promise<void>;
+    getAllStyleExamples(): Promise<StyleExample[]>;
+  createStyleExample(example: InsertStyleExample): Promise<StyleExample>;
+  deleteStyleExample(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // ─── Auth / Users ────────────────────────────────────────────────────────
-  async getAllUsers(): Promise<User[]> {
-    return db.select().from(users);
-  }
-
-  async getUserById(id: string): Promise<User | undefined> {
+  async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim()));
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
     return user;
   }
 
-  async getUserBySlackUserId(slackUserId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.slackUserId, slackUserId));
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
-  async createUser(data: Partial<InsertUser>): Promise<User> {
-    const [user] = await db.insert(users).values(data as any).returning();
-    return user;
-  }
-
-  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [updated] = await db
-      .update(users)
-      .set({ ...data, updatedAt: new Date() } as any)
-      .where(eq(users.id, id))
-      .returning();
-    return updated;
-  }
-
-  // ─── OTP ─────────────────────────────────────────────────────────────────
-  async createOTP(email: string, code: string, expiresAt: Date): Promise<OtpCode> {
-    const [otp] = await db.insert(otpCodes).values({ email: email.toLowerCase().trim(), code, expiresAt }).returning();
-    return otp;
-  }
-
-  async getValidOTP(email: string, code: string): Promise<OtpCode | undefined> {
-    const now = new Date();
-    const [otp] = await db
-      .select()
-      .from(otpCodes)
-      .where(
-        and(
-          eq(otpCodes.email, email.toLowerCase().trim()),
-          eq(otpCodes.code, code),
-          eq(otpCodes.used, false),
-          gt(otpCodes.expiresAt, now)
-        )
-      )
-      .orderBy(desc(otpCodes.createdAt))
-      .limit(1);
-    return otp;
-  }
-
-  async markOTPUsed(id: string): Promise<void> {
-    await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, id));
-  }
-
-  async invalidateOTPsForEmail(email: string): Promise<void> {
-    await db
-      .update(otpCodes)
-      .set({ used: true })
-      .where(and(eq(otpCodes.email, email.toLowerCase().trim()), eq(otpCodes.used, false)));
-  }
-
-  // ─── Folders ─────────────────────────────────────────────────────────────
-  async getAllFolders(userId: string): Promise<Folder[]> {
-    return db.select().from(folders).where(eq(folders.userId, userId)).orderBy(folders.createdAt);
-  }
-
-  // Used by scheduler only — fetches all folders across all users
-  async getAllFoldersSystem(): Promise<Folder[]> {
+  async getAllFolders(): Promise<Folder[]> {
     return db.select().from(folders).orderBy(folders.createdAt);
   }
 
@@ -292,12 +150,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFolder(folder: InsertFolder): Promise<Folder> {
-    const [created] = await db.insert(folders).values(folder as any).returning();
+    const [created] = await db.insert(folders).values(folder).returning();
     return created;
   }
 
   async updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined> {
-    const [updated] = await db.update(folders).set(folder as any).where(eq(folders.id, id)).returning();
+    const [updated] = await db.update(folders).set(folder).where(eq(folders.id, id)).returning();
     return updated;
   }
 
@@ -306,7 +164,6 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
-  // ─── Sources ─────────────────────────────────────────────────────────────
   async getSourcesByFolderId(folderId: string): Promise<Source[]> {
     return db.select().from(sources).where(eq(sources.folderId, folderId)).orderBy(sources.createdAt);
   }
@@ -331,13 +188,8 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
-  // ─── Content ─────────────────────────────────────────────────────────────
-  async getAllContent(userId: string): Promise<Content[]> {
-    const userFolders = await this.getAllFolders(userId);
-    const folderIds = userFolders.map((f) => f.id);
-    if (folderIds.length === 0) return [];
-    const { inArray } = await import("drizzle-orm");
-    return db.select().from(content).where(inArray(content.folderId, folderIds)).orderBy(content.fetchedAt);
+  async getAllContent(): Promise<Content[]> {
+    return db.select().from(content).orderBy(content.fetchedAt);
   }
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
@@ -364,7 +216,9 @@ export class DatabaseStorage implements IStorage {
         eq(content.originalUrl, contentItem.originalUrl)
       )
     );
-    if (existing) return null;
+    if (existing) {
+      return null;
+    }
     const [created] = await db.insert(content).values(contentItem as any).returning();
     return created;
   }
@@ -379,7 +233,12 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined> {
+  async updateContentSentiment(
+    id: string,
+    sentiment: SentimentType,
+    sentimentScore: number,
+    keywords: string[]
+  ): Promise<Content | undefined> {
     const [updated] = await db
       .update(content)
       .set({ sentiment, sentimentScore, keywords })
@@ -415,9 +274,8 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  // ─── Ideas ────────────────────────────────────────────────────────────────
-  async getAllIdeas(userId: string): Promise<Idea[]> {
-    return db.select().from(ideas).where(eq(ideas.userId, userId)).orderBy(ideas.createdAt);
+  async getAllIdeas(): Promise<Idea[]> {
+    return db.select().from(ideas).orderBy(ideas.createdAt);
   }
 
   async getIdeasByFolderId(folderId: string): Promise<Idea[]> {
@@ -444,56 +302,49 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
-  // ─── Prompt Templates ─────────────────────────────────────────────────────
-  async getAllPromptTemplates(userId: string): Promise<PromptTemplate[]> {
-    return db.select().from(promptTemplates).where(eq(promptTemplates.userId, userId)).orderBy(promptTemplates.createdAt);
+  async getAllPromptTemplates(): Promise<PromptTemplate[]> {
+    return db.select().from(promptTemplates).orderBy(promptTemplates.createdAt);
   }
 
-  async getPromptTemplateById(id: string, userId: string): Promise<PromptTemplate | undefined> {
-    const [template] = await db.select().from(promptTemplates).where(and(eq(promptTemplates.id, id), eq(promptTemplates.userId, userId)));
+  async getPromptTemplateById(id: string): Promise<PromptTemplate | undefined> {
+    const [template] = await db.select().from(promptTemplates).where(eq(promptTemplates.id, id));
     return template;
   }
 
-  async getDefaultPromptTemplate(userId: string): Promise<PromptTemplate | undefined> {
-    const [template] = await db.select().from(promptTemplates).where(and(eq(promptTemplates.isDefault, true), eq(promptTemplates.userId, userId)));
+  async getDefaultPromptTemplate(): Promise<PromptTemplate | undefined> {
+    const [template] = await db.select().from(promptTemplates).where(eq(promptTemplates.isDefault, true));
     return template;
   }
 
-  async createPromptTemplate(template: InsertPromptTemplate & { userId: string }): Promise<PromptTemplate> {
-    const [created] = await db.insert(promptTemplates).values(template as any).returning();
+  async createPromptTemplate(template: InsertPromptTemplate): Promise<PromptTemplate> {
+    const [created] = await db.insert(promptTemplates).values(template).returning();
     return created;
   }
 
-  async updatePromptTemplate(id: string, template: UpdatePromptTemplate, userId: string): Promise<PromptTemplate | undefined> {
+  async updatePromptTemplate(id: string, template: UpdatePromptTemplate): Promise<PromptTemplate | undefined> {
     const [updated] = await db.update(promptTemplates)
       .set({ ...template, updatedAt: new Date() })
-      .where(and(eq(promptTemplates.id, id), eq(promptTemplates.userId, userId)))
+      .where(eq(promptTemplates.id, id))
       .returning();
     return updated;
   }
 
-  async deletePromptTemplate(id: string, userId: string): Promise<boolean> {
-    const deleted = await db.delete(promptTemplates).where(and(eq(promptTemplates.id, id), eq(promptTemplates.userId, userId))).returning();
+  async deletePromptTemplate(id: string): Promise<boolean> {
+    const deleted = await db.delete(promptTemplates).where(eq(promptTemplates.id, id)).returning();
     return deleted.length > 0;
   }
 
-  async setDefaultPromptTemplate(id: string, userId: string): Promise<PromptTemplate | undefined> {
-    await db.update(promptTemplates).set({ isDefault: false }).where(and(eq(promptTemplates.isDefault, true), eq(promptTemplates.userId, userId)));
+  async setDefaultPromptTemplate(id: string): Promise<PromptTemplate | undefined> {
+    await db.update(promptTemplates).set({ isDefault: false }).where(eq(promptTemplates.isDefault, true));
     const [updated] = await db.update(promptTemplates)
       .set({ isDefault: true, updatedAt: new Date() })
-      .where(and(eq(promptTemplates.id, id), eq(promptTemplates.userId, userId)))
+      .where(eq(promptTemplates.id, id))
       .returning();
     return updated;
   }
 
-  // ─── Comments & Assignments ───────────────────────────────────────────────
   async getCommentsByIdeaId(ideaId: string): Promise<IdeaComment[]> {
     return db.select().from(ideaComments).where(eq(ideaComments.ideaId, ideaId)).orderBy(desc(ideaComments.createdAt));
-  }
-
-  async getCommentById(id: string): Promise<IdeaComment | undefined> {
-    const [comment] = await db.select().from(ideaComments).where(eq(ideaComments.id, id));
-    return comment;
   }
 
   async createComment(comment: InsertIdeaComment): Promise<IdeaComment> {
@@ -510,11 +361,6 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ideaAssignments).where(eq(ideaAssignments.ideaId, ideaId)).orderBy(ideaAssignments.createdAt);
   }
 
-  async getAssignmentById(id: string): Promise<IdeaAssignment | undefined> {
-    const [assignment] = await db.select().from(ideaAssignments).where(eq(ideaAssignments.id, id));
-    return assignment;
-  }
-
   async createAssignment(assignment: InsertIdeaAssignment): Promise<IdeaAssignment> {
     const [created] = await db.insert(ideaAssignments).values(assignment).returning();
     return created;
@@ -525,41 +371,36 @@ export class DatabaseStorage implements IStorage {
     return deleted.length > 0;
   }
 
-  // ─── Settings ─────────────────────────────────────────────────────────────
-  async getSetting(key: string, userId: string): Promise<Setting | undefined> {
-    const [setting] = await db.select().from(settings).where(and(eq(settings.key, key), eq(settings.userId, userId)));
-    if (!setting) return undefined;
-    return { ...setting, value: decryptIfNeeded(setting.key, setting.value) };
+  async getSetting(key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting;
   }
 
-  async getAllSettings(userId: string): Promise<Setting[]> {
-    const all = await db.select().from(settings).where(eq(settings.userId, userId));
-    return all.map((s) => ({ ...s, value: decryptIfNeeded(s.key, s.value) }));
+  async getAllSettings(): Promise<Setting[]> {
+    return db.select().from(settings);
   }
 
-  async upsertSetting(key: string, value: string | null, userId: string): Promise<Setting> {
-    const persistedValue = encryptIfSensitive(key, value);
+  async upsertSetting(key: string, value: string | null): Promise<Setting> {
     const [result] = await db
       .insert(settings)
-      .values({ userId, key, value: persistedValue, updatedAt: new Date() })
+      .values({ key, value, updatedAt: new Date() })
       .onConflictDoUpdate({
-        target: [settings.userId, settings.key],
-        set: { value: persistedValue, updatedAt: new Date() },
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
       })
       .returning();
-    return { ...result, value: decryptIfNeeded(result.key, result.value) };
+    return result;
   }
 
-  async upsertSettings(entries: Record<string, string | null>, userId: string): Promise<Setting[]> {
+  async upsertSettings(entries: Record<string, string | null>): Promise<Setting[]> {
     const results: Setting[] = [];
     for (const [key, value] of Object.entries(entries)) {
-      const result = await this.upsertSetting(key, value, userId);
+      const result = await this.upsertSetting(key, value);
       results.push(result);
     }
     return results;
   }
 
-  // ─── Notifications ────────────────────────────────────────────────────────
   async getUnnotifiedContent(): Promise<Content[]> {
     return db
       .select()
@@ -612,13 +453,10 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // ─── Assistant Conversations ──────────────────────────────────────────────
-  async getAssistantConversations(userId: string): Promise<AssistantConversation[]> {
-    return db
-      .select()
-      .from(assistantConversations)
-      .where(eq(assistantConversations.userId, userId))
-      .orderBy(desc(assistantConversations.updatedAt));
+
+
+  async getAssistantConversations(): Promise<AssistantConversation[]> {
+    return db.select().from(assistantConversations).orderBy(desc(assistantConversations.updatedAt));
   }
 
   async getAssistantConversationById(id: string): Promise<AssistantConversation | undefined> {
@@ -627,14 +465,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssistantConversation(conversation: InsertAssistantConversation): Promise<AssistantConversation> {
-    const [created] = await db.insert(assistantConversations).values(conversation as any).returning();
+    const [created] = await db.insert(assistantConversations).values(conversation).returning();
     return created;
   }
 
   async updateAssistantConversation(id: string, patch: Partial<InsertAssistantConversation>): Promise<AssistantConversation | undefined> {
     const [updated] = await db
       .update(assistantConversations)
-      .set({ ...patch, updatedAt: new Date() } as any)
+      .set({ ...patch, updatedAt: new Date() })
       .where(eq(assistantConversations.id, id))
       .returning();
     return updated;
@@ -657,10 +495,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage> {
-    const [created] = await db
-      .insert(assistantMessages)
-      .values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null })
-      .returning();
+    const [created] = await db.insert(assistantMessages).values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null }).returning();
     await db
       .update(assistantConversations)
       .set({ updatedAt: new Date() })
@@ -668,94 +503,18 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  // ─── Style Examples ───────────────────────────────────────────────────────
-  async getAllStyleExamples(userId: string): Promise<StyleExample[]> {
-    return db.select().from(styleExamples).where(eq(styleExamples.userId, userId)).orderBy(desc(styleExamples.createdAt));
+    async getAllStyleExamples(): Promise<StyleExample[]> {
+    return db.select().from(styleExamples).orderBy(desc(styleExamples.createdAt));
   }
 
-  async createStyleExample(example: InsertStyleExample & { userId: string }): Promise<StyleExample> {
-    const [created] = await db.insert(styleExamples).values(example as any).returning();
+  async createStyleExample(example: InsertStyleExample): Promise<StyleExample> {
+    const [created] = await db.insert(styleExamples).values(example).returning();
     return created;
   }
 
-  async deleteStyleExample(id: string, userId: string): Promise<boolean> {
-    const result = await db.delete(styleExamples).where(and(eq(styleExamples.id, id), eq(styleExamples.userId, userId)));
+  async deleteStyleExample(id: string): Promise<boolean> {
+    const result = await db.delete(styleExamples).where(eq(styleExamples.id, id));
     return (result.rowCount ?? 0) > 0;
-  }
-
-  // ─── Platform IDs (Multi-ID) ──────────────────────────────────────────────
-  async getPlatformIds(userId: string, platform?: PlatformType): Promise<UserPlatformId[]> {
-    if (platform) {
-      return db.select().from(userPlatformIds)
-        .where(and(eq(userPlatformIds.userId, userId), eq(userPlatformIds.platform, platform)))
-        .orderBy(desc(userPlatformIds.createdAt));
-    }
-    return db.select().from(userPlatformIds)
-      .where(eq(userPlatformIds.userId, userId))
-      .orderBy(desc(userPlatformIds.createdAt));
-  }
-
-  async addPlatformId(userId: string, platform: PlatformType, platformId: string, label?: string): Promise<UserPlatformId> {
-    const [created] = await db.insert(userPlatformIds).values({
-      userId,
-      platform,
-      platformId,
-      label: label || null,
-    }).returning();
-    return created;
-  }
-
-  async removePlatformId(id: string, userId: string): Promise<boolean> {
-    const result = await db.delete(userPlatformIds)
-      .where(and(eq(userPlatformIds.id, id), eq(userPlatformIds.userId, userId)));
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async getUserByPlatformId(platform: PlatformType, platformId: string): Promise<User | undefined> {
-    const [record] = await db.select().from(userPlatformIds)
-      .where(and(eq(userPlatformIds.platform, platform), eq(userPlatformIds.platformId, platformId)));
-    if (record) {
-      return this.getUserById(record.userId);
-    }
-    if (platform === "slack") {
-      return this.getUserBySlackUserId(platformId);
-    }
-    return undefined;
-  }
-
-  // ─── System Settings (Global Admin Controls) ──────────────────────────────
-  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
-    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.key, key));
-    return setting;
-  }
-
-  async getAllSystemSettings(): Promise<SystemSetting[]> {
-    return db.select().from(systemSettings).orderBy(systemSettings.key);
-  }
-
-  async upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting> {
-    const updateSet: any = { value, updatedAt: new Date() };
-    if (description !== undefined) updateSet.description = description;
-    const [result] = await db
-      .insert(systemSettings)
-      .values({ key, value, description: description || null, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: systemSettings.key,
-        set: updateSet,
-      })
-      .returning();
-    return result;
-  }
-
-  // ─── API Usage Logging ─────────────────────────────────────────────────────
-  async logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog> {
-    const [log] = await db.insert(apiUsageLogs).values(entry as any).returning();
-    return log;
-  }
-
-  // ─── User Activity ─────────────────────────────────────────────────────────
-  async updateUserLastActive(userId: string): Promise<void> {
-    await db.update(users).set({ lastActiveAt: new Date() } as any).where(eq(users.id, userId));
   }
 }
 

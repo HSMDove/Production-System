@@ -1,10 +1,9 @@
 import { storage } from "./storage";
 import { rewriteContent } from "./openai";
-import { composeAiSystemPrompt } from "./ai-system-prompt";
 import type { Content, Folder } from "@shared/schema";
 
-async function getSettingsMap(userId: string): Promise<Map<string, string | null>> {
-  const allSettings = await storage.getAllSettings(userId);
+async function getSettingsMap(): Promise<Map<string, string | null>> {
+  const allSettings = await storage.getAllSettings();
   const map = new Map<string, string | null>();
   for (const s of allSettings) {
     map.set(s.key, s.value);
@@ -92,7 +91,7 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
-export async function processNewContentNotifications(newContentIds: string[], userId: string): Promise<{
+export async function processNewContentNotifications(newContentIds: string[]): Promise<{
   processed: number;
   notified: number;
   errors: string[];
@@ -101,7 +100,7 @@ export async function processNewContentNotifications(newContentIds: string[], us
     return { processed: 0, notified: 0, errors: [] };
   }
 
-  const settingsMap = await getSettingsMap(userId);
+  const settingsMap = await getSettingsMap();
   const notificationsEnabled = settingsMap.get("notifications_enabled") === "true";
   
   if (!notificationsEnabled) {
@@ -118,7 +117,7 @@ export async function processNewContentNotifications(newContentIds: string[], us
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
+  const systemPrompt = settingsMap.get("ai_system_prompt");
   if (systemPrompt) {
     console.log(`[Notifier] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
@@ -184,19 +183,19 @@ export async function processNewContentNotifications(newContentIds: string[], us
   return { processed, notified, errors };
 }
 
-export async function broadcastSingleContent(contentId: string, userId: string): Promise<{
+export async function broadcastSingleContent(contentId: string): Promise<{
   success: boolean;
   channels: string[];
   error?: string;
 }> {
-  const settingsMap = await getSettingsMap(userId);
+  const settingsMap = await getSettingsMap();
 
   const telegramEnabled = settingsMap.get("telegram_enabled") === "true";
   const slackEnabled = settingsMap.get("slack_enabled") === "true";
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
+  const systemPrompt = settingsMap.get("ai_system_prompt");
   if (systemPrompt) {
     console.log(`[Broadcast] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
@@ -250,14 +249,13 @@ export async function broadcastSingleContent(contentId: string, userId: string):
 
 export async function processNewContentNotificationsForFolder(
   newContentIds: string[],
-  folder: Folder,
-  userId: string
+  folder: Folder
 ): Promise<{ processed: number; notified: number; errors: string[] }> {
   if (newContentIds.length === 0) {
     return { processed: 0, notified: 0, errors: [] };
   }
 
-  const settingsMap = await getSettingsMap(userId);
+  const settingsMap = await getSettingsMap();
   const notificationsEnabled = settingsMap.get("notifications_enabled") === "true";
 
   if (!notificationsEnabled) {
@@ -277,7 +275,7 @@ export async function processNewContentNotificationsForFolder(
   const telegramToken = settingsMap.get("telegram_bot_token") || "";
   const telegramChatId = settingsMap.get("telegram_chat_id") || "";
   const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
-  const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
+  const systemPrompt = settingsMap.get("ai_system_prompt");
   if (systemPrompt) {
     console.log(`[Notifier Folder] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
   }
@@ -342,7 +340,7 @@ export async function testTelegramConnection(
   botToken: string,
   chatId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "اهلا وسهلا انا فكري 2.0 من نسق 🤖\n\nبس حبيت اتأكد من الإتصال وهل هو شغال ؟\n\n✅ وحاب ابشرك واقولك إنه <b>شغااال</b>";
+  const message = "✅ <b>نظام الإنتاج</b>\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
   try {
     const sent = await sendTelegramMessage(botToken, chatId, message);
     return sent 
@@ -356,7 +354,7 @@ export async function testTelegramConnection(
 export async function testSlackConnection(
   webhookUrl: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = "اهلا وسهلا انا فكري 2.0 من نسق 🤖\n\nبس حبيت اتأكد من الإتصال وهل هو شغال ؟\n\n✅ وحاب ابشرك واقولك إنه *شغااال*";
+  const message = "✅ *نظام الإنتاج*\n\nتم الاتصال بنجاح! هذه رسالة اختبار من منصة نظام الإنتاج.";
   try {
     const sent = await sendSlackMessage(webhookUrl, message);
     return sent

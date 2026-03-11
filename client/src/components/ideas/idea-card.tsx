@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { IdeaWithFolder } from "@/lib/types";
-import { getCategoryColor } from "@/lib/types";
+import { ideaCategoryLabels, categoryColors } from "@/lib/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -142,7 +142,7 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const categoryColor = getCategoryColor(idea.category);
+  const categoryColor = categoryColors[idea.category] || categoryColors.other;
   const wasDraggingRef = useRef(false);
 
   useEffect(() => {
@@ -200,7 +200,7 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
                 variant="secondary" 
                 className={`text-xs ${categoryColor.bg} ${categoryColor.text}`}
               >
-                {idea.category || "بدون فئة"}
+                {ideaCategoryLabels[idea.category] || idea.category}
               </Badge>
               {idea.folder && (
                 <Badge variant="outline" className="text-xs">

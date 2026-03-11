@@ -37,7 +37,7 @@ async function runFolderFetch(folderId: string) {
 
 async function tick() {
   try {
-    const allFolders = await storage.getAllFoldersSystem();
+    const allFolders = await storage.getAllFolders();
     const activeFolders = allFolders.filter(f => f.isBackgroundActive);
 
     for (const folder of activeFolders) {
