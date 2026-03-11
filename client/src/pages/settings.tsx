@@ -873,7 +873,7 @@ export default function Settings() {
                     <Separator />
                     <div className="space-y-2">
                       <p className="text-sm font-medium flex items-center gap-2">
-                        <FileText className="h-4 w-4" /> العينات المضافة ({(trainingSamples || []).length})
+                        <FileText className="h-4 w-4" /> العينات المضافة ({(trainingSamples as any[] || []).length})
                       </p>
                       {(trainingSamples || []).map((sample: any) => (
                         <div key={sample.id} className="rounded-lg border p-3 flex items-start justify-between gap-3" data-testid={`card-training-sample-${sample.id}`}>
@@ -903,24 +903,30 @@ export default function Settings() {
                         </div>
                       ))}
                     </div>
+                  </>
+                )}
 
+                {((trainingSamples || []).length > 0 || localSettings.style_profile || localStyleMatrix) && (
+                  <>
                     <Separator />
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-medium flex items-center gap-2">
                           <BrainCircuit className="h-4 w-4" /> مصفوفة الأسلوب
                         </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() => analyzeStyleMutation.mutate()}
-                          disabled={analyzeStyleMutation.isPending}
-                          data-testid="button-analyze-style"
-                        >
-                          {analyzeStyleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                          إعادة تحليل الأسلوب
-                        </Button>
+                        {(trainingSamples || []).length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => analyzeStyleMutation.mutate()}
+                            disabled={analyzeStyleMutation.isPending}
+                            data-testid="button-analyze-style"
+                          >
+                            {analyzeStyleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                            إعادة تحليل الأسلوب
+                          </Button>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         هذه البصمة الأسلوبية المستخرجة من عيناتك. تُحقن تلقائياً عند توليد الأفكار.
