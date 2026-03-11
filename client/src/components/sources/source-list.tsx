@@ -1,4 +1,4 @@
-import { Rss, Globe, Youtube, Twitter, Music, MoreVertical, Pencil, Trash2, Plus, RefreshCw } from "lucide-react";
+import { Rss, Globe, Youtube, Twitter, Music, MoreVertical, Pencil, Trash2, Plus, RefreshCw, Telescope } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { ar } from "date-fns/locale";
 interface SourceListProps {
   sources: Source[];
   onAdd: () => void;
+  onFikriSearch?: () => void;
   onEdit: (source: Source) => void;
   onDelete: (source: Source) => void;
   onFetch: (sourceId: string) => void;
@@ -30,15 +31,29 @@ const sourceIcons: Record<string, typeof Rss> = {
   tiktok: Music,
 };
 
-export function SourceList({ sources, onAdd, onEdit, onDelete, onFetch, isFetching }: SourceListProps) {
+export function SourceList({ sources, onAdd, onFikriSearch, onEdit, onDelete, onFetch, isFetching }: SourceListProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
         <CardTitle className="text-lg">المصادر</CardTitle>
-        <Button size="sm" onClick={onAdd} data-testid="button-add-source">
-          <Plus className="ml-2 h-4 w-4" />
-          إضافة مصدر
-        </Button>
+        <div className="flex items-center gap-2">
+          {onFikriSearch && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onFikriSearch}
+              className="gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:text-primary"
+              data-testid="button-fikri-kashshaf"
+            >
+              <Telescope className="h-4 w-4" />
+              <span className="hidden sm:inline">فكري الكشّاف</span>
+            </Button>
+          )}
+          <Button size="sm" onClick={onAdd} data-testid="button-add-source">
+            <Plus className="ml-2 h-4 w-4" />
+            إضافة مصدر
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {sources.length === 0 ? (

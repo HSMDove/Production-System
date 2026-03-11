@@ -19,6 +19,13 @@ The frontend is built with React 18 and TypeScript, using Vite for fast developm
 
 The backend is built with Node.js and Express.js, entirely in TypeScript, and bundled with ESBuild. It provides RESTful API endpoints for CRUD operations on folders, sources, content, and ideas. The system integrates an RSS Parser with concurrency limits and retry mechanisms for robust content fetching, including fallbacks for Twitter/X and TikTok. AI integration leverages the OpenAI API for generating video ideas, rewriting content, summarizing, translating, and explaining news items, with a customizable AI persona. The system features a provider-agnostic AI engine that supports both "Production Cloud" and "Custom/Local" AI configurations, with strict API key enforcement and system defaults. Feature flags and administrative controls are managed via a `system_settings` table, allowing for dynamic feature enablement and AI provider configuration. API usage, including AI and search requests, is meticulously tracked in an `api_usage_logs` table.
 
+### Fikri Kashshaf Feature
+
+AI-powered source discovery assistant. Found in:
+- **Frontend**: `client/src/components/sources/fikri-kashshaf-dialog.tsx` — a 6-step wizard dialog (field → language → source types → depth → content nature → count) that calls the discovery API and displays added sources.
+- **Backend**: `POST /api/folders/:folderId/discover-sources` in `server/routes.ts` — builds targeted Brave Search queries, runs them in parallel, passes results to the AI for evaluation and ranking, then auto-creates the selected sources in the folder.
+- **Entry point**: "فكري الكشّاف" button in `source-list.tsx` header (Sources tab of folder detail page).
+
 ### Data Storage
 
 The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for type-safe queries and schema management. The schema includes tables for `folders`, `sources`, `content`, `ideas`, `settings`, `prompt_templates` (renamed to "Content Templates" in UI), `idea_comments`, `idea_assignments`, and `style_examples`. This design supports multi-tenancy by scoping resources like folders, ideas, and conversations by user ID. The `content` table includes a `usedForIdeas` flag to prevent duplicate use of news items for AI generation.

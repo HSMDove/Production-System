@@ -8,6 +8,7 @@ import { SmartViewFeed } from "@/components/content/smart-view-feed";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
+import { FikriKashshafDialog } from "@/components/sources/fikri-kashshaf-dialog";
 import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
 import { ContentFilters } from "@/components/content/content-filters";
@@ -39,6 +40,7 @@ export default function FolderDetail() {
   
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fikriKashshafOpen, setFikriKashshafOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
@@ -458,6 +460,7 @@ export default function FolderDetail() {
             <SourceList
               sources={sources || []}
               onAdd={handleAddSource}
+              onFikriSearch={() => setFikriKashshafOpen(true)}
               onEdit={handleEditSource}
               onDelete={handleDeleteSource}
               onFetch={(sourceId) => fetchSourceMutation.mutate(sourceId)}
@@ -483,6 +486,12 @@ export default function FolderDetail() {
         description={`هل أنت متأكد من حذف المصدر "${selectedSource?.name}"؟`}
         onConfirm={() => selectedSource && deleteSourceMutation.mutate(selectedSource.id)}
         isLoading={deleteSourceMutation.isPending}
+      />
+
+      <FikriKashshafDialog
+        open={fikriKashshafOpen}
+        onOpenChange={setFikriKashshafOpen}
+        folderId={id!}
       />
 
     </MainLayout>

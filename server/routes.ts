@@ -2332,6 +2332,167 @@ export async function registerRoutes(
     }
   });
 
+  // Fikri Kashshaf - AI-powered source discovery
+  app.post("/api/folders/:folderId/discover-sources", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { folderId } = req.params;
+      const { field, language, sourceTypes, depth, contentNature, count } = req.body;
+
+      if (!field || typeof field !== "string" || !field.trim()) {
+        return res.status(400).json({ error: "المجال مطلوب" });
+      }
+
+      const folder = await storage.getFolderById(folderId);
+      if (!folder || folder.userId !== req.session.userId) {
+        return res.status(404).json({ error: "المجلد غير موجود" });
+      }
+
+      const targetCount = Math.min(Math.max(parseInt(count) || 4, 1), 10);
+      const fieldTrimmed = field.trim();
+
+      // Build targeted search queries based on preferences
+      const queries: string[] = [];
+
+      if (language === "arabic" || language === "all") {
+        if (sourceTypes === "youtube" || sourceTypes === "all") {
+          queries.push(`أفضل قنوات يوتيوب ${fieldTrimmed} عربية موثوقة`);
+        }
+        if (sourceTypes === "website" || sourceTypes === "all") {
+          queries.push(`أفضل مواقع عربية ${fieldTrimmed} موثوقة`);
+        }
+        if (sourceTypes === "twitter") {
+          queries.push(`أفضل حسابات تويتر X عربية ${fieldTrimmed}`);
+        }
+      }
+
+      if (language === "english" || language === "all") {
+        if (sourceTypes === "youtube" || sourceTypes === "all") {
+          queries.push(`best ${fieldTrimmed} YouTube channels ${depth === "deep" ? "in depth analysis" : "news updates"}`);
+        }
+        if (sourceTypes === "website" || sourceTypes === "all") {
+          queries.push(`best ${fieldTrimmed} websites RSS ${contentNature === "educational" ? "educational tutorials" : "news"}`);
+        }
+        if (sourceTypes === "twitter") {
+          queries.push(`best ${fieldTrimmed} Twitter X accounts to follow`);
+        }
+      }
+
+      // Fallback if no queries built
+      if (queries.length === 0) {
+        queries.push(`best ${fieldTrimmed} sources content creators`);
+      }
+
+      // Run up to 3 searches in parallel
+      const searchBatches = await Promise.all(
+        queries.slice(0, 3).map((q) => runExternalWebSearch(q, req.session.userId!))
+      );
+
+      const allResults = searchBatches
+        .flat()
+        .filter((r: any) => r.url && r.url.startsWith("http"))
+        .slice(0, 20);
+
+      if (allResults.length === 0) {
+        return res.json({ success: true, addedSources: [], message: "لم تُعثر على نتائج من البحث. تحقق من إعدادات بحث الويب." });
+      }
+
+      // Use AI to pick, rank, and structure the best sources
+      const { client, model } = await getAIClient(req.session.userId);
+
+      const langLabel = language === "arabic" ? "عربية" : language === "english" ? "إنجليزية" : "عربية وإنجليزية";
+      const typeLabel = sourceTypes === "youtube" ? "قنوات يوتيوب" : sourceTypes === "website" ? "مواقع ويب/RSS" : sourceTypes === "twitter" ? "حسابات X" : "جميع الأنواع";
+      const depthLabel = depth === "deep" ? "عميق وتفصيلي ومتخصص" : "سريع وبسيط وإخباري";
+      const natureLabel = contentNature === "educational" ? "تعليمي ومستمر" : "أخبار وتريندات";
+
+      const aiPrompt = `أنت محلل محتوى خبير في تقييم المصادر الرقمية. المستخدم يبحث عن مصادر لمجال: "${fieldTrimmed}".
+
+المعايير المطلوبة:
+- اللغة: ${langLabel}
+- نوع المصادر: ${typeLabel}
+- مستوى العمق: ${depthLabel}
+- طبيعة المحتوى: ${natureLabel}
+- عدد المصادر: ${targetCount}
+
+نتائج بحث الويب التالية متاحة:
+${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippet, url: r.url })), null, 2)}
+
+مهمتك: انتقِ أفضل ${targetCount} مصادر حقيقية وموثوقة من النتائج أعلاه، أو اقترح مصادر مشهورة في هذا المجال إذا لم تكن النتائج كافية.
+
+قواعد صارمة:
+- يوتيوب: استخدم رابط القناة مثل https://www.youtube.com/@channelname (لا تستخدم روابط فيديوهات)
+- مواقع/RSS: استخدم الرابط الرئيسي للموقع (homepage)
+- X/تويتر: استخدم https://twitter.com/username
+- تأكد أن كل رابط منطقي ومتسق مع اسم المصدر
+- لا تضف مصادر وهمية أو روابط غير موجودة
+
+أعد JSON فقط بدون أي نص إضافي:
+{
+  "sources": [
+    {
+      "name": "اسم المصدر",
+      "url": "الرابط الكامل",
+      "type": "youtube|rss|website|twitter",
+      "reason": "سبب الاختيار باختصار"
+    }
+  ]
+}`;
+
+      let parsedResponse: { sources?: Array<{ name: string; url: string; type: string; reason?: string }> } = {};
+
+      try {
+        const completion = await client.chat.completions.create({
+          model,
+          messages: [{ role: "user", content: aiPrompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+          max_tokens: 1500,
+        });
+
+        const responseText = completion.choices[0].message.content || "{}";
+        parsedResponse = JSON.parse(responseText);
+      } catch (aiErr: any) {
+        console.error("[FikriKashshaf] AI error:", aiErr?.message);
+        return res.status(500).json({ error: "فشل الذكاء الاصطناعي في تحليل النتائج: " + (aiErr?.message || "خطأ غير معروف") });
+      }
+
+      const discoveredSources = (parsedResponse.sources || []).slice(0, targetCount);
+
+      if (discoveredSources.length === 0) {
+        return res.json({ success: true, addedSources: [], message: "لم يتمكن فكري من إيجاد مصادر مناسبة لهذه المعايير" });
+      }
+
+      // Add validated sources to the folder
+      const validTypes = ["rss", "website", "youtube", "twitter", "tiktok"];
+      const addedSources = [];
+
+      for (const src of discoveredSources) {
+        if (!src.name || !src.url) continue;
+        try {
+          const sourceType = validTypes.includes(src.type) ? src.type : "website";
+          const created = await storage.createSource({
+            folderId,
+            name: src.name,
+            url: src.url,
+            type: sourceType as any,
+            isActive: true,
+          });
+          addedSources.push(created);
+        } catch (createErr: any) {
+          console.error("[FikriKashshaf] Failed to create source:", src.url, createErr?.message);
+        }
+      }
+
+      res.json({ success: true, addedSources, totalDiscovered: discoveredSources.length });
+    } catch (error: any) {
+      console.error("[FikriKashshaf] Error:", error);
+      res.status(500).json({ error: error.message || "فشل البحث عن المصادر" });
+    }
+  });
+
   // Style Examples (Past Successful Ideas)
   app.get("/api/style-examples", async (req, res) => {
     try {
