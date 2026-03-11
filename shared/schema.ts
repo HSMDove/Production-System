@@ -385,6 +385,30 @@ export const insertStyleExampleSchema = createInsertSchema(styleExamples).omit({
 export type StyleExample = typeof styleExamples.$inferSelect;
 export type InsertStyleExample = z.infer<typeof insertStyleExampleSchema>;
 
+// Training Samples - user-uploaded scripts/content for style analysis
+export const trainingSampleTypes = ["text", "script", "description", "notes"] as const;
+export type TrainingSampleType = typeof trainingSampleTypes[number];
+
+export const trainingSamples = pgTable("training_samples", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sampleTitle: text("sample_title").notNull(),
+  contentType: text("content_type").notNull().$type<TrainingSampleType>(),
+  textContent: text("text_content").notNull(),
+  extractedStyle: text("extracted_style"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTrainingSampleSchema = createInsertSchema(trainingSamples).omit({
+  id: true,
+  userId: true,
+  extractedStyle: true,
+  createdAt: true,
+});
+
+export type TrainingSample = typeof trainingSamples.$inferSelect;
+export type InsertTrainingSample = z.infer<typeof insertTrainingSampleSchema>;
+
 // System Settings - global admin-controlled settings (feature flags, default API config)
 export const systemSettings = pgTable("system_settings", {
   key: varchar("key").primaryKey(),

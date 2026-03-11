@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, Check, CircleHelp, Copy, Link, Loader2, LogOut, Moon, Palette, Plus, Save, Send, Sparkles, Sun, TestTube, Trash2, User, X } from "lucide-react";
+import { Bell, Bot, BrainCircuit, Check, CircleHelp, Copy, FileText, Link, Loader2, LogOut, Moon, Palette, Plus, RefreshCw, Save, Send, Sparkles, Sun, TestTube, Trash2, Upload, User, X } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -44,9 +44,16 @@ export default function Settings() {
   const [styleDescription, setStyleDescription] = useState("");
   const [styleThumbnail, setStyleThumbnail] = useState("");
 
+  const [trainingSampleTitle, setTrainingSampleTitle] = useState("");
+  const [trainingSampleType, setTrainingSampleType] = useState<string>("script");
+  const [trainingSampleContent, setTrainingSampleContent] = useState("");
+  const [editingStyleMatrix, setEditingStyleMatrix] = useState(false);
+  const [localStyleMatrix, setLocalStyleMatrix] = useState("");
+
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: styleExamples } = useQuery<any[]>({ queryKey: ["/api/style-examples"] });
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
+  const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
 
   const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
   const telegramIds = useMemo(() => (platformIds || []).filter(p => p.platform === "telegram"), [platformIds]);
@@ -114,6 +121,53 @@ export default function Settings() {
       toast({ title: "تم الحذف", description: "تم إزالة المعرف" });
     },
     onError: () => toast({ title: "خطأ", description: "فشل إزالة المعرف", variant: "destructive" }),
+  });
+
+  const submitTrainingSampleMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/training/submit", {
+      sampleTitle: trainingSampleTitle,
+      contentType: trainingSampleType,
+      textContent: trainingSampleContent,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/training/samples"] });
+      setTrainingSampleTitle("");
+      setTrainingSampleContent("");
+      toast({ title: "تم إضافة العينة", description: "تم تحليل النص واستخراج الأسلوب بنجاح" });
+    },
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل إضافة عينة التدريب", variant: "destructive" }),
+  });
+
+  const deleteTrainingSampleMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/training/samples/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/training/samples"] });
+      toast({ title: "تم الحذف", description: "تم حذف العينة" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل حذف العينة", variant: "destructive" }),
+  });
+
+  const analyzeStyleMutation = useMutation({
+    mutationFn: async () => {
+      const result = await apiRequest("POST", "/api/training/analyze");
+      return result as any;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      setLocalStyleMatrix(data.styleMatrix || "");
+      toast({ title: "تم التحليل", description: "تم استخراج مصفوفة الأسلوب بنجاح" });
+    },
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل تحليل العينات", variant: "destructive" }),
+  });
+
+  const saveStyleMatrixMutation = useMutation({
+    mutationFn: async () => apiRequest("PUT", "/api/training/style-matrix", { styleMatrix: localStyleMatrix }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      setEditingStyleMatrix(false);
+      toast({ title: "تم الحفظ", description: "تم حفظ مصفوفة الأسلوب" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل حفظ مصفوفة الأسلوب", variant: "destructive" }),
   });
 
   const testAiMutation = useMutation({
@@ -725,6 +779,160 @@ export default function Settings() {
                   </Button>
                   {testAiResult && <Textarea rows={5} value={testAiResult} readOnly className="bg-muted/50" />}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> درّب فكري — بصمة أسلوبك</CardTitle>
+                <CardDescription>ارفع سكربتاتك ومحتواك السابق. فكري يتعلم أسلوبك ويستخدمه في توليد الأفكار.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
+                  <p className="text-sm font-medium flex items-center gap-2"><Upload className="h-4 w-4" /> إضافة عينة تدريب جديدة</p>
+                  <div className="space-y-1">
+                    <Label>عنوان العينة</Label>
+                    <Input
+                      placeholder="مثال: سكربت فيديو أفضل 5 تطبيقات"
+                      value={trainingSampleTitle}
+                      onChange={(e) => setTrainingSampleTitle(e.target.value)}
+                      data-testid="input-training-sample-title"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>نوع المحتوى</Label>
+                    <Select value={trainingSampleType} onValueChange={setTrainingSampleType}>
+                      <SelectTrigger data-testid="select-training-sample-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="script">سكربت فيديو</SelectItem>
+                        <SelectItem value="description">وصف فيديو</SelectItem>
+                        <SelectItem value="text">نص عام</SelectItem>
+                        <SelectItem value="notes">ملاحظات أسلوب</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>المحتوى النصي</Label>
+                    <Textarea
+                      rows={6}
+                      placeholder="الصق هنا نص السكربت أو الوصف أو أي محتوى تبي فكري يتعلم منه أسلوبك..."
+                      value={trainingSampleContent}
+                      onChange={(e) => setTrainingSampleContent(e.target.value)}
+                      data-testid="textarea-training-sample-content"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => submitTrainingSampleMutation.mutate()}
+                    disabled={!trainingSampleTitle.trim() || !trainingSampleContent.trim() || submitTrainingSampleMutation.isPending}
+                    className="gap-2"
+                    data-testid="button-submit-training-sample"
+                  >
+                    {submitTrainingSampleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    تحليل وإضافة
+                  </Button>
+                </div>
+
+                {(trainingSamples || []).length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium flex items-center gap-2">
+                        <FileText className="h-4 w-4" /> العينات المضافة ({(trainingSamples || []).length})
+                      </p>
+                      {(trainingSamples || []).map((sample: any) => (
+                        <div key={sample.id} className="rounded-lg border p-3 flex items-start justify-between gap-3" data-testid={`card-training-sample-${sample.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{sample.sampleTitle}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="secondary" className="text-xs">
+                                {sample.contentType === "script" ? "سكربت" : sample.contentType === "description" ? "وصف" : sample.contentType === "notes" ? "ملاحظات" : "نص"}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(sample.createdAt).toLocaleDateString("ar")}
+                              </span>
+                            </div>
+                            {sample.extractedStyle && (
+                              <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{sample.extractedStyle}</p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteTrainingSampleMutation.mutate(sample.id)}
+                            disabled={deleteTrainingSampleMutation.isPending}
+                            data-testid={`button-delete-training-sample-${sample.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Separator />
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          <BrainCircuit className="h-4 w-4" /> مصفوفة الأسلوب
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => analyzeStyleMutation.mutate()}
+                          disabled={analyzeStyleMutation.isPending}
+                          data-testid="button-analyze-style"
+                        >
+                          {analyzeStyleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          إعادة تحليل الأسلوب
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        هذه البصمة الأسلوبية المستخرجة من عيناتك. تُحقن تلقائياً عند توليد الأفكار.
+                      </p>
+
+                      {(localSettings.style_matrix || localStyleMatrix) ? (
+                        <div className="space-y-2">
+                          {editingStyleMatrix ? (
+                            <>
+                              <Textarea
+                                rows={8}
+                                value={localStyleMatrix || localSettings.style_matrix || ""}
+                                onChange={(e) => setLocalStyleMatrix(e.target.value)}
+                                data-testid="textarea-style-matrix-edit"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => saveStyleMatrixMutation.mutate()}
+                                  disabled={saveStyleMatrixMutation.isPending}
+                                  data-testid="button-save-style-matrix"
+                                >
+                                  {saveStyleMatrixMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                  حفظ
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingStyleMatrix(false)}>إلغاء</Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div
+                              className="rounded-lg border bg-muted/30 p-3 text-sm whitespace-pre-wrap cursor-pointer hover:bg-muted/50 transition-colors"
+                              onClick={() => { setLocalStyleMatrix(localSettings.style_matrix || localStyleMatrix); setEditingStyleMatrix(true); }}
+                              data-testid="text-style-matrix-display"
+                            >
+                              {localSettings.style_matrix || localStyleMatrix}
+                              <p className="text-xs text-primary mt-2">اضغط للتعديل</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                          أضف عينات تدريب أعلاه ثم اضغط "إعادة تحليل الأسلوب" لاستخراج مصفوفة الأسلوب
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

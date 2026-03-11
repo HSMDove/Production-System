@@ -51,6 +51,10 @@ import {
   apiUsageLogs,
   type ApiUsageLog,
   type InsertApiUsageLog,
+  trainingSamples,
+  type TrainingSample,
+  type InsertTrainingSample,
+  type TrainingSampleType,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -198,6 +202,11 @@ export interface IStorage {
   getSystemSetting(key: string): Promise<SystemSetting | undefined>;
   getAllSystemSettings(): Promise<SystemSetting[]>;
   upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting>;
+
+  // Training Samples
+  getTrainingSamples(userId: string): Promise<TrainingSample[]>;
+  createTrainingSample(sample: InsertTrainingSample & { userId: string; extractedStyle?: string | null }): Promise<TrainingSample>;
+  deleteTrainingSample(id: string, userId: string): Promise<boolean>;
 
   // API Usage Logging
   logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog>;
@@ -745,6 +754,30 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  // ─── Training Samples ─────────────────────────────────────────────────────
+  async getTrainingSamples(userId: string): Promise<TrainingSample[]> {
+    return db.select().from(trainingSamples)
+      .where(eq(trainingSamples.userId, userId))
+      .orderBy(desc(trainingSamples.createdAt));
+  }
+
+  async createTrainingSample(sample: InsertTrainingSample & { userId: string; extractedStyle?: string | null }): Promise<TrainingSample> {
+    const [created] = await db.insert(trainingSamples).values({
+      userId: sample.userId,
+      sampleTitle: sample.sampleTitle,
+      contentType: sample.contentType as TrainingSampleType,
+      textContent: sample.textContent,
+      extractedStyle: sample.extractedStyle || null,
+    }).returning();
+    return created;
+  }
+
+  async deleteTrainingSample(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(trainingSamples)
+      .where(and(eq(trainingSamples.id, id), eq(trainingSamples.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ─── API Usage Logging ─────────────────────────────────────────────────────

@@ -28,7 +28,15 @@ AI-powered source discovery assistant. Found in:
 
 ### Data Storage
 
-The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for type-safe queries and schema management. The schema includes tables for `folders`, `sources`, `content`, `ideas`, `settings`, `prompt_templates` (renamed to "Content Templates" in UI), `idea_comments`, `idea_assignments`, and `style_examples`. This design supports multi-tenancy by scoping resources like folders, ideas, and conversations by user ID. The `content` table includes a `usedForIdeas` flag to prevent duplicate use of news items for AI generation.
+The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for type-safe queries and schema management. The schema includes tables for `folders`, `sources`, `content`, `ideas`, `settings`, `prompt_templates` (renamed to "Content Templates" in UI), `idea_comments`, `idea_assignments`, `style_examples`, and `training_samples`. This design supports multi-tenancy by scoping resources like folders, ideas, and conversations by user ID. The `content` table includes a `usedForIdeas` flag to prevent duplicate use of news items for AI generation.
+
+### Fikri 2.0 Personal Training System
+
+Users can submit text samples (scripts, video descriptions, notes) via the Settings → "فكري 2.0" tab. Each sample is analyzed by AI to extract a style fingerprint. All sample fingerprints are then merged into a single "style matrix" (`style_matrix` setting) — a compressed style profile covering tone, title patterns, narrative structure, recurring terms, and explanation style. This matrix is automatically injected into idea generation prompts (`generateIdeasFromContent` and `generateSmartIdeasForTemplate`) to produce ideas that match the user's personal writing style. The system includes:
+- `training_samples` table: stores user-uploaded text samples with extracted style per sample
+- `style_matrix` setting: the merged style fingerprint used in all idea generation
+- Training APIs: `POST /api/training/submit`, `POST /api/training/analyze`, `GET /api/training/samples`, `DELETE /api/training/samples/:id`, `PUT /api/training/style-matrix`
+- AI functions: `analyzeTrainingSampleStyle()` and `generateStyleMatrix()` in `server/openai.ts`
 
 ### Design Principles
 

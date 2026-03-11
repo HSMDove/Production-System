@@ -183,13 +183,97 @@ export function getDefaultPromptContent(): string {
   return DEFAULT_PROMPT;
 }
 
+export async function analyzeTrainingSampleStyle(
+  textContent: string,
+  sampleTitle: string,
+  userId?: string
+): Promise<string> {
+  const { client, model, providerUsed } = await getAIClient(userId);
+  const startTime = Date.now();
+
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      {
+        role: "system",
+        content: `أنت محلل أسلوب كتابة محترف. مهمتك تحليل النص المقدم واستخراج بصمة الأسلوب بشكل مضغوط ودقيق.
+
+استخرج التالي بشكل مختصر ومركز:
+1. نبرة الكتابة (رسمية/غير رسمية/حوارية/ساخرة/إلخ)
+2. أنماط العناوين (كيف يصوغ العناوين - أسئلة؟ أرقام؟ مقارنات؟ تحذيرات؟)
+3. البنية السردية (كيف يبدأ؟ كيف ينتقل بين الأفكار؟ كيف يختم؟)
+4. المصطلحات والعبارات المتكررة
+5. أسلوب الشرح (تقني عميق؟ مبسط؟ بأمثلة؟)
+6. طول الجمل والفقرات المفضل
+
+أجب بنقاط مختصرة وواضحة بالعربية. لا تتجاوز 200 كلمة.`
+      },
+      {
+        role: "user",
+        content: `عنوان العينة: "${sampleTitle}"\n\nالمحتوى:\n${textContent.slice(0, 8000)}`
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  if (userId) await logAIRequest(userId, "ai_chat", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+
+  return response.choices[0]?.message?.content || "لم يتم استخراج أسلوب";
+}
+
+export async function generateStyleMatrix(
+  sampleStyles: Array<{ title: string; style: string }>,
+  userId?: string
+): Promise<string> {
+  if (sampleStyles.length === 0) return "";
+
+  const { client, model, providerUsed } = await getAIClient(userId);
+  const startTime = Date.now();
+
+  const samplesText = sampleStyles.map((s, i) =>
+    `عينة ${i + 1} - "${s.title}":\n${s.style}`
+  ).join("\n\n---\n\n");
+
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      {
+        role: "system",
+        content: `أنت محلل أسلوب كتابة. لديك تحليلات أسلوبية من عدة عينات لنفس الكاتب.
+
+مهمتك: ادمج كل التحليلات في "مصفوفة أسلوب" واحدة مضغوطة تمثل البصمة الأسلوبية الشاملة لهذا الكاتب.
+
+اكتب المصفوفة كنقاط مختصرة تغطي:
+• النبرة العامة والشخصية الكتابية
+• أنماط العناوين المفضلة
+• البنية السردية المعتادة
+• المصطلحات والعبارات المميزة
+• أسلوب الشرح والتبسيط
+• الخصائص الفريدة لهذا الكاتب
+
+اجعل المصفوفة مختصرة (أقل من 250 كلمة) لكن شاملة. لا تكرر نفسك.`
+      },
+      {
+        role: "user",
+        content: `تحليلات الأسلوب من ${sampleStyles.length} عينة:\n\n${samplesText}`
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  if (userId) await logAIRequest(userId, "ai_chat", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+
+  return response.choices[0]?.message?.content || "";
+}
+
 export async function generateIdeasFromContent(
   contentItems: Content[],
   folderName: string,
   folderId: string,
   customTemplate?: PromptTemplate | null,
   existingTitles?: string[],
-  userId?: string
+  userId?: string,
+  styleMatrix?: string | null
 ): Promise<InsertIdea[]> {
   if (contentItems.length === 0) {
     return [];
@@ -220,9 +304,14 @@ export async function generateIdeasFromContent(
     .replace("{{FOLDER_NAME}}", folderName)
     .replace("{{CONTENT_SUMMARY}}", contentSummary);
 
+  if (styleMatrix && styleMatrix.trim()) {
+    prompt += `\n\n🎨 مصفوفة الأسلوب الشخصي (التزم بها في صياغة العناوين والوصف):
+${styleMatrix}`;
+  }
+
   if (existingTitles && existingTitles.length > 0) {
     const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
-    prompt += `\n\nتجنب تكرار هذه الأفكار الموجودة:\n${titlesList}`;
+    prompt += `\n\n⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}`;
   }
 
   try {
@@ -753,7 +842,8 @@ export async function generateSmartIdeasForTemplate(
   customSystemPrompt?: string | null,
   styleExamples?: Array<{ title: string; description: string | null; thumbnailText: string | null }>,
   existingTitles?: string[],
-  userId?: string
+  userId?: string,
+  styleMatrix?: string | null
 ): Promise<SmartIdeaResult[]> {
   if (contentItems.length === 0) {
     return [];
@@ -816,9 +906,16 @@ ${templatePrompt}
 `;
   }
 
+  if (styleMatrix && styleMatrix.trim()) {
+    userPrompt += `🎨 مصفوفة الأسلوب الشخصي (التزم بها بدقة في صياغة العنوان والوصف والسكريبت ونص المصغرة):
+${styleMatrix}
+
+`;
+  }
+
   if (existingTitles && existingTitles.length > 0) {
     const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
-    userPrompt += `تجنب تكرار هذه الأفكار الموجودة:\n${titlesList}\n\n`;
+    userPrompt += `⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}\n\n`;
   }
 
   userPrompt += `مطلوب: أنشئ بالضبط ${count} فكرة/أفكار لسلسلة "${templateName}".

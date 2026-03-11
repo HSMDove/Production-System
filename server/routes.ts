@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
-import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation } from "./openai";
+import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
@@ -798,8 +798,11 @@ export async function registerRoutes(
       
       const existingIdeas = await storage.getIdeasByFolderId(req.params.id);
       const existingTitles = existingIdeas.map(idea => idea.title);
+
+      const styleMatrixSetting = await storage.getSetting("style_matrix", userId);
+      const styleMatrix = styleMatrixSetting?.value || null;
       
-      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!);
+      const generatedIdeas = await generateIdeasFromContent(enrichedContent, folder.name, folder.id, template, existingTitles, req.session.userId!, styleMatrix);
       
       const savedIdeas = [];
       const validationErrors = [];
@@ -911,6 +914,9 @@ export async function registerRoutes(
         const template = await storage.getPromptTemplateById(templateReq.templateId, userId);
         if (!template) continue;
 
+        const styleMatrixSetting = await storage.getSetting("style_matrix", userId);
+        const styleMatrix = styleMatrixSetting?.value || null;
+
         const ideas = await generateSmartIdeasForTemplate(
           enrichedContentToUse,
           folderNames,
@@ -922,7 +928,8 @@ export async function registerRoutes(
           aiSystemPrompt,
           styleExamples,
           existingTitles,
-          userId
+          userId,
+          styleMatrix
         );
 
         for (const idea of ideas) {
@@ -2522,6 +2529,109 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       }
     } catch (error) {
       res.status(500).json({ error: "Failed to delete style example" });
+    }
+  });
+
+  // ─── Training Samples (Fikri 2.0 Personal Training) ──────────────────────
+
+  app.get("/api/training/samples", requireAuth, async (req, res) => {
+    try {
+      const samples = await storage.getTrainingSamples(req.session.userId!);
+      res.json(samples);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب عينات التدريب" });
+    }
+  });
+
+  app.post("/api/training/submit", requireAuth, async (req, res) => {
+    try {
+      const { sampleTitle, contentType, textContent } = req.body;
+      if (!sampleTitle || typeof sampleTitle !== "string" || !sampleTitle.trim()) {
+        return res.status(400).json({ error: "العنوان مطلوب" });
+      }
+      if (!textContent || typeof textContent !== "string" || !textContent.trim()) {
+        return res.status(400).json({ error: "المحتوى النصي مطلوب" });
+      }
+      const validTypes = ["text", "script", "description", "notes"] as const;
+      if (!contentType || !validTypes.includes(contentType)) {
+        return res.status(400).json({ error: "نوع المحتوى غير صحيح" });
+      }
+      if (textContent.length > 50000) {
+        return res.status(400).json({ error: "المحتوى طويل جداً (الحد الأقصى 50,000 حرف)" });
+      }
+
+      const userId = req.session.userId!;
+      const extractedStyle = await analyzeTrainingSampleStyle(textContent.trim(), sampleTitle.trim(), userId);
+
+      const sample = await storage.createTrainingSample({
+        sampleTitle: sampleTitle.trim(),
+        contentType,
+        textContent: textContent.trim(),
+        userId,
+        extractedStyle,
+      });
+
+      res.json(sample);
+    } catch (error: any) {
+      console.error("Error submitting training sample:", error);
+      res.status(500).json({ error: error.message || "فشل إضافة عينة التدريب" });
+    }
+  });
+
+  app.delete("/api/training/samples/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteTrainingSample(req.params.id, req.session.userId!);
+      if (deleted) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "العينة غير موجودة" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف العينة" });
+    }
+  });
+
+  app.post("/api/training/analyze", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const samples = await storage.getTrainingSamples(userId);
+
+      if (samples.length === 0) {
+        return res.status(400).json({ error: "لا توجد عينات تدريب لتحليلها" });
+      }
+
+      const sampleStyles = samples
+        .filter(s => s.extractedStyle)
+        .map(s => ({ title: s.sampleTitle, style: s.extractedStyle! }));
+
+      if (sampleStyles.length === 0) {
+        return res.status(400).json({ error: "لم يتم استخراج أسلوب من أي عينة بعد" });
+      }
+
+      const matrix = await generateStyleMatrix(sampleStyles, userId);
+
+      await storage.upsertSetting("style_matrix", matrix, userId);
+
+      res.json({ success: true, styleMatrix: matrix });
+    } catch (error: any) {
+      console.error("Error analyzing training samples:", error);
+      res.status(500).json({ error: error.message || "فشل تحليل العينات" });
+    }
+  });
+
+  app.put("/api/training/style-matrix", requireAuth, async (req, res) => {
+    try {
+      const { styleMatrix } = req.body;
+      if (typeof styleMatrix !== "string") {
+        return res.status(400).json({ error: "مصفوفة الأسلوب مطلوبة" });
+      }
+      if (styleMatrix.length > 10000) {
+        return res.status(400).json({ error: "مصفوفة الأسلوب طويلة جداً (الحد الأقصى 10,000 حرف)" });
+      }
+      await storage.upsertSetting("style_matrix", styleMatrix.trim(), req.session.userId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حفظ مصفوفة الأسلوب" });
     }
   });
 
