@@ -5,14 +5,12 @@ async function test(url:string) {
     const res = await fetchRSSFeed({
       id: 'test',
       folderId: 'f',
-      type: 'youtube' as const,
+      type: 'youtube',
       url,
       isActive: true,
       userId: 'u',
       name: 'test',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    } as any);
     console.log('URL', url, '=>', res.error || `${res.items.length} items`);
     if (res.items.length>0) console.log(res.items.map(i=>i.originalUrl).slice(0,3));
   } catch(e) {

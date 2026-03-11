@@ -638,7 +638,7 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         if (!rssUrl) {
           // do not crash the whole pipeline; return an informative error so
           // caller can show a message but other sources can continue.
-          throw new Error("Could not resolve YouTube feed. Try using a channel link or a video link from that channel. (Handles and custom URLs are automatically detected.)");
+          throw new Error("Could not resolve YouTube feed. Try using a channel link, a video link from that channel, or a playlist. (Handles and custom URLs are automatically detected.)");
         }
 
         // normalize source record if we resolved a cleaner URL (feed or
@@ -649,8 +649,7 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
         if (rssUrl && source.url && source.url !== rssUrl) {
           try {
             const { storage } = await import("./storage");
-            const updateData: Record<string, unknown> = { url: rssUrl };
-            await storage.updateSource(source.id, updateData);
+            await storage.updateSource(source.id, { url: rssUrl } as any);
           } catch (e) {
             // non‑fatal – just log and move on.
             console.error("Failed to normalize YouTube source URL:", e);
