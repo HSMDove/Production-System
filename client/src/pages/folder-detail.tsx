@@ -10,7 +10,6 @@ import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
 import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
-import { GroupedContentFeed } from "@/components/content/grouped-content-feed";
 import { ContentFilters } from "@/components/content/content-filters";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { FolderCountdown, INTERVAL_OPTIONS } from "@/components/folders/folder-card";
@@ -83,10 +82,11 @@ export default function FolderDetail() {
     let filtered = [...content];
     
     if (selectedFilterSourceId) {
+      // if a specific source is chosen we ignore the type filter because
+      // the sidebar already constrained results
       filtered = filtered.filter((item) => item.sourceId === selectedFilterSourceId);
-    }
-    
-    if (sourceTypeFilter !== "all") {
+    } else if (sourceTypeFilter !== "all") {
+      // only apply type-based filtering when "all" sources are shown
       filtered = filtered.filter((item) => item.source?.type === sourceTypeFilter);
     }
     
@@ -385,7 +385,10 @@ export default function FolderDetail() {
                 variant={selectedFilterSourceId === null ? "default" : "outline"}
                 size="sm"
                 className="flex-shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => setSelectedFilterSourceId(null)}
+                onClick={() => {
+                  setSelectedFilterSourceId(null);
+                  setSourceTypeFilter("all");
+                }}
               >
                 <Layers className="h-3.5 w-3.5" />
                 الكل
@@ -418,7 +421,10 @@ export default function FolderDetail() {
               <SourcesSidebar
                 sources={sources || []}
                 selectedSourceId={selectedFilterSourceId}
-                onSourceSelect={setSelectedFilterSourceId}
+                onSourceSelect={(id) => {
+                  setSelectedFilterSourceId(id);
+                  if (id === null) setSourceTypeFilter("all");
+                }}
               />
               
               {/* Content area */}
@@ -434,14 +440,6 @@ export default function FolderDetail() {
                   <SmartViewFeed 
                     cards={smartViewMutation.data?.cards || []} 
                     isLoading={smartViewMutation.isPending} 
-                  />
-                ) : selectedFilterSourceId ? (
-                  <GroupedContentFeed 
-                    content={filteredContent} 
-                    isLoading={contentLoading} 
-                    showTranslation={showTranslation} 
-                    folderId={id}
-                    sortOrder={sortOrder}
                   />
                 ) : (
                   <ContentFeed 
