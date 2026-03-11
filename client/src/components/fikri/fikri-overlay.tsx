@@ -237,10 +237,11 @@ export function FikriOverlay() {
                 {messages.map((m) => (
                   <div
                     key={m.id}
-                    className={`rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    dir={m.role === "assistant" ? "rtl" : undefined}
+                    className={`rounded-2xl px-3 py-2 text-sm leading-relaxed text-right ${
                       m.role === "assistant"
                         ? "bg-muted text-foreground"
-                        : "bg-primary text-primary-foreground mr-6"
+                        : "bg-primary text-primary-foreground mr-6 text-left"
                     }`}
                   >
                     {m.role === "assistant" ? (
@@ -251,7 +252,7 @@ export function FikriOverlay() {
                           em: ({ children }) => <em className="italic">{children}</em>,
                           ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
                           ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                          li: ({ children }) => <li className="mr-2">{children}</li>,
+                          li: ({ children }) => <li className="ml-4">{children}</li>,
                           h1: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
                           h2: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
                           h3: ({ children }) => <h3 className="font-bold text-sm mb-1">{children}</h3>,
