@@ -2679,10 +2679,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     } catch (error: any) {
       console.error("Error fetching Google Doc:", error);
       const msg = error.message || "فشل جلب محتوى Google Doc";
-      if (msg.includes("not connected")) {
-        return res.status(400).json({ error: "حساب Google غير مربوط. يرجى ربط حسابك من الإعدادات." });
-      }
-      res.status(500).json({ error: msg });
+      res.status(400).json({ error: msg });
     }
   });
 

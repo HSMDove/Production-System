@@ -840,7 +840,7 @@ export default function Settings() {
                     </div>
                     <div className="flex items-center gap-2 mb-2">
                       <Input
-                        placeholder="أو الصق رابط Google Doc هنا..."
+                        placeholder="رابط Google Doc (فعّل المشاركة: أي شخص لديه الرابط)"
                         value={gdocUrl}
                         onChange={(e) => setGdocUrl(e.target.value)}
                         className="flex-1"

@@ -1,70 +1,3 @@
-// Google Docs Integration - Replit Connector
-import { google } from 'googleapis';
-
-let connectionSettings: any;
-
-async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  if (!hostname) {
-    throw new Error('Google Docs not connected — connector hostname not available');
-  }
-
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X-Replit-Token not found for repl/depl');
-  }
-
-  const response = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-docs',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error('Google Docs not connected — failed to retrieve connection');
-  }
-
-  const data = await response.json();
-  connectionSettings = data.items?.[0];
-
-  if (!connectionSettings) {
-    throw new Error('Google Docs not connected');
-  }
-
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!accessToken) {
-    throw new Error('Google Docs not connected — no access token available');
-  }
-  return accessToken;
-}
-
-// WARNING: Never cache this client.
-// Access tokens expire, so a new client must be created each time.
-export async function getUncachableGoogleDocsClient() {
-  const accessToken = await getAccessToken();
-
-  const oauth2Client = new google.auth.OAuth2();
-  oauth2Client.setCredentials({
-    access_token: accessToken
-  });
-
-  return google.docs({ version: 'v1', auth: oauth2Client });
-}
-
 export function extractDocIdFromUrl(url: string): string | null {
   const patterns = [
     /\/document\/d\/([a-zA-Z0-9_-]+)/,
@@ -84,42 +17,49 @@ export async function fetchGoogleDocText(docUrl: string): Promise<{ title: strin
     throw new Error("رابط Google Doc غير صالح. تأكد من نسخ الرابط الصحيح من المتصفح.");
   }
 
-  const docs = await getUncachableGoogleDocsClient();
-  const doc = await docs.documents.get({ documentId: docId });
+  const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=txt`;
 
-  const title = doc.data.title || "مستند بدون عنوان";
-  const body = doc.data.body;
-  if (!body?.content) {
-    return { title, text: "" };
+  const response = await fetch(exportUrl, {
+    redirect: "follow",
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("المستند غير موجود. تأكد من صحة الرابط.");
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('المستند غير متاح. تأكد من تفعيل المشاركة: "أي شخص لديه الرابط يمكنه العرض"');
+    }
+    throw new Error(`فشل جلب المستند (${response.status}). تأكد من أن المشاركة مفعلة.`);
   }
 
-  let text = "";
-  for (const element of body.content) {
-    if (element.paragraph?.elements) {
-      for (const el of element.paragraph.elements) {
-        if (el.textRun?.content) {
-          text += el.textRun.content;
-        }
-      }
-    }
-    if (element.table) {
-      for (const row of element.table.tableRows || []) {
-        for (const cell of row.tableCells || []) {
-          for (const cellContent of cell.content || []) {
-            if (cellContent.paragraph?.elements) {
-              for (const el of cellContent.paragraph.elements) {
-                if (el.textRun?.content) {
-                  text += el.textRun.content;
-                }
-              }
-            }
-          }
-          text += "\t";
-        }
-        text += "\n";
-      }
-    }
+  const text = await response.text();
+
+  if (!text || !text.trim()) {
+    throw new Error("المستند فارغ أو لا يحتوي على نص.");
   }
+
+  const titleUrl = `https://docs.google.com/document/d/${docId}/edit`;
+  let title = "مستند Google";
+  try {
+    const pageResponse = await fetch(titleUrl, {
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (pageResponse.ok) {
+      const html = await pageResponse.text();
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+      if (titleMatch) {
+        title = titleMatch[1]
+          .replace(/ - Google Docs$/, "")
+          .replace(/ - مستندات Google$/, "")
+          .trim() || title;
+      }
+    }
+  } catch {}
 
   return { title, text: text.trim() };
 }
