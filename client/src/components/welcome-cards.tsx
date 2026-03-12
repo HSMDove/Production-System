@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ChevronLeft, Rocket } from "lucide-react";
@@ -34,6 +34,8 @@ export function WelcomeCards() {
   const [phase, setPhase] = useState<Phase>("stable");
   const [direction, setDirection] = useState<Direction>("next");
   const busy = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined);
 
   const { data } = useQuery<WelcomeResponse>({
     queryKey: ["/api/welcome-cards"],
@@ -55,6 +57,13 @@ export function WelcomeCards() {
       return () => clearTimeout(timer);
     }
   }, [data]);
+
+  useLayoutEffect(() => {
+    if (phase === "stable" && contentRef.current) {
+      const h = contentRef.current.scrollHeight;
+      setContainerHeight((prev) => (prev === undefined || h > prev) ? h : prev);
+    }
+  }, [phase, currentIndex]);
 
   const slideTo = useCallback((newIndex: number, dir: Direction) => {
     if (busy.current) return;
@@ -168,8 +177,8 @@ export function WelcomeCards() {
           />
 
           <div className="relative px-8 py-10 text-center">
-            <div className="overflow-hidden" style={{ minHeight: "160px" }}>
-              <div style={contentStyle}>
+            <div className="overflow-hidden" style={{ minHeight: containerHeight ?? 160, transition: "min-height 0.3s ease" }}>
+              <div ref={contentRef} style={contentStyle}>
                 {card.emoji && (
                   <div className="text-5xl mb-4">{card.emoji}</div>
                 )}
