@@ -1331,21 +1331,31 @@ export async function registerRoutes(
       }
 
       // ── Signature Verification ──
-      // Find any user's signing secret to verify the request
       const signature = req.headers["x-slack-signature"] as string | undefined;
       const timestamp = req.headers["x-slack-request-timestamp"] as string | undefined;
       let signingSecretFound = false;
       let anySecretConfigured = false;
 
-      const allUsers = await storage.getAllUsers();
-      for (const u of allUsers) {
-        const secret = (await storage.getSetting("slack_signing_secret", u.id))?.value;
-        if (secret) {
-          anySecretConfigured = true;
-          if (verifySlackSignature(rawBody, timestamp || "", signature || "", secret)) {
-            signingSecretFound = true;
-            console.log("[Slack] Signature verified successfully");
-            break;
+      const platformSigningSecret = process.env.SLACK_SIGNING_SECRET;
+      if (platformSigningSecret) {
+        anySecretConfigured = true;
+        if (verifySlackSignature(rawBody, timestamp || "", signature || "", platformSigningSecret)) {
+          signingSecretFound = true;
+          console.log("[Slack] Signature verified via platform signing secret");
+        }
+      }
+
+      if (!signingSecretFound) {
+        const allUsers = await storage.getAllUsers();
+        for (const u of allUsers) {
+          const secret = (await storage.getSetting("slack_signing_secret", u.id))?.value;
+          if (secret) {
+            anySecretConfigured = true;
+            if (verifySlackSignature(rawBody, timestamp || "", signature || "", secret)) {
+              signingSecretFound = true;
+              console.log("[Slack] Signature verified via user setting");
+              break;
+            }
           }
         }
       }
@@ -1382,26 +1392,38 @@ export async function registerRoutes(
       // ── Bouncer Logic: Look up platform user ──
       let platformUser = slackUserId ? await storage.getUserByPlatformId("slack", slackUserId) : undefined;
 
+      async function findBotTokenForTeam(teamId?: string): Promise<string | undefined> {
+        const allUsrs = await storage.getAllUsers();
+        for (const u of allUsrs) {
+          const channels = await storage.getIntegrationChannels(u.id);
+          for (const ch of channels) {
+            if (ch.platform !== "slack") continue;
+            const creds = storage.getDecryptedCredentials(ch);
+            if (creds.bot_token && creds.bot_token !== "••••••") {
+              if (!teamId || creds.team_id === teamId) return creds.bot_token;
+            }
+          }
+          const manualToken = (await storage.getSetting("slack_bot_token", u.id))?.value;
+          if (manualToken) return manualToken;
+        }
+        return undefined;
+      }
+
       if (!platformUser) {
         console.log(`[Slack] User ${slackUserId} not linked — sending bouncer message`);
         res.json({ ok: true });
 
-        // Use verified user's bot token (the one whose signing secret matched) to reply
-        // Falls back to first available if no specific match
-        for (const u of allUsers) {
-          const token = (await storage.getSetting("slack_bot_token", u.id))?.value;
-          if (token && event.channel) {
-            await fetch("https://slack.com/api/chat.postMessage", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                channel: event.channel,
-                text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اكتب الـ Member ID حقك\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
-                thread_ts: event.thread_ts || event.ts,
-              }),
-            }).catch(err => console.error("[Slack] Failed to send bouncer message:", err));
-            break;
-          }
+        const replyToken = await findBotTokenForTeam(payload.team_id);
+        if (replyToken && event.channel) {
+          await fetch("https://slack.com/api/chat.postMessage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${replyToken}` },
+            body: JSON.stringify({
+              channel: event.channel,
+              text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اكتب الـ Member ID حقك\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
+              thread_ts: event.thread_ts || event.ts,
+            }),
+          }).catch(err => console.error("[Slack] Failed to send bouncer message:", err));
         }
         return;
       }
@@ -1414,7 +1436,11 @@ export async function registerRoutes(
       // ── Background Processing ──
       (async () => {
         try {
-          const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
+          let botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
+          if (!botToken) {
+            const oauthToken = await findBotTokenForTeam(payload.team_id);
+            if (oauthToken) botToken = oauthToken;
+          }
           const fallbackName = event.username || event.user || platformUser!.name || undefined;
 
           const namePromise: Promise<string | undefined> = (botToken && slackUserId)

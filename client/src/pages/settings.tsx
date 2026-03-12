@@ -160,7 +160,14 @@ export default function Settings() {
     [integrationChannels]
   );
 
-  const hasSlackConnection = slackOAuthConnections.length > 0 || !!(localSettings.slack_bot_token);
+  const hasManualSlackConfig = !!(localSettings.slack_bot_token || localSettings.slack_webhook_url);
+  const hasOAuthSlackConfig = slackOAuthConnections.length > 0;
+  const hasSlackConnection = hasOAuthSlackConfig || hasManualSlackConfig;
+
+  useEffect(() => {
+    if (hasManualSlackConfig && !hasOAuthSlackConfig) setSlackConnectionTab("manual");
+    else if (hasOAuthSlackConfig && !hasManualSlackConfig) setSlackConnectionTab("auto");
+  }, [hasManualSlackConfig, hasOAuthSlackConfig]);
 
   type TicketEntry = { id: string; title: string; description: string; imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string };
   type TicketReplyEntry = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
@@ -831,15 +838,15 @@ export default function Settings() {
                     <>
                       <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
                         <button
-                          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-all ${slackConnectionTab === "auto" ? "bg-background shadow-sm" : "hover:bg-background/50"}`}
-                          onClick={() => setSlackConnectionTab("auto")}
+                          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-all ${slackConnectionTab === "auto" ? "bg-background shadow-sm" : "hover:bg-background/50"} ${hasManualSlackConfig ? "opacity-40 cursor-not-allowed" : ""}`}
+                          onClick={() => { if (!hasManualSlackConfig) setSlackConnectionTab("auto"); else toast({ title: "تنبيه", description: "لازم تحذف إعدادات الربط اليدوي أولاً (Webhook / Bot Token) عشان تقدر تستخدم الربط التلقائي", variant: "destructive" }); }}
                           data-testid="tab-slack-auto"
                         >
                           ربط تلقائي
                         </button>
                         <button
-                          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-all ${slackConnectionTab === "manual" ? "bg-background shadow-sm" : "hover:bg-background/50"}`}
-                          onClick={() => setSlackConnectionTab("manual")}
+                          className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-all ${slackConnectionTab === "manual" ? "bg-background shadow-sm" : "hover:bg-background/50"} ${hasOAuthSlackConfig ? "opacity-40 cursor-not-allowed" : ""}`}
+                          onClick={() => { if (!hasOAuthSlackConfig) setSlackConnectionTab("manual"); else toast({ title: "تنبيه", description: "لازم تفصل الربط التلقائي أولاً عشان تقدر تستخدم الربط اليدوي", variant: "destructive" }); }}
                           data-testid="tab-slack-manual"
                         >
                           ربط يدوي
