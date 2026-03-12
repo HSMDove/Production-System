@@ -72,6 +72,12 @@ import {
   adminAuditLogs,
   type AdminAuditLog,
   type AdminRole,
+  supportTickets,
+  type SupportTicket,
+  type InsertSupportTicket,
+  type TicketStatus,
+  ticketReplies,
+  type TicketReply,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -1071,6 +1077,48 @@ export class DatabaseStorage implements IStorage {
       totalIdeas: Number(ideaCount.count),
       adminCount: Number(adminCount.count),
     };
+  }
+  // ─── Support Tickets ─────────────────────────────────────────────────────
+
+  async createTicket(data: InsertSupportTicket): Promise<SupportTicket> {
+    const [ticket] = await db.insert(supportTickets).values(data as any).returning();
+    return ticket;
+  }
+
+  async getTicketsByUser(userId: string): Promise<SupportTicket[]> {
+    return db.select().from(supportTickets).where(eq(supportTickets.userId, userId)).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async getTicketById(id: string): Promise<SupportTicket | undefined> {
+    const [ticket] = await db.select().from(supportTickets).where(eq(supportTickets.id, id));
+    return ticket;
+  }
+
+  async getAllTickets(): Promise<SupportTicket[]> {
+    return db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async updateTicketStatus(id: string, status: TicketStatus): Promise<SupportTicket> {
+    const [ticket] = await db.update(supportTickets)
+      .set({ status, updatedAt: new Date() } as any)
+      .where(eq(supportTickets.id, id))
+      .returning();
+    return ticket;
+  }
+
+  async getTicketReplies(ticketId: string): Promise<TicketReply[]> {
+    return db.select().from(ticketReplies).where(eq(ticketReplies.ticketId, ticketId)).orderBy(ticketReplies.createdAt);
+  }
+
+  async createTicketReply(ticketId: string, userId: string, message: string, isAdmin: boolean): Promise<TicketReply> {
+    const [reply] = await db.insert(ticketReplies).values({
+      ticketId,
+      userId,
+      message,
+      isAdmin,
+    } as any).returning();
+    await db.update(supportTickets).set({ updatedAt: new Date() } as any).where(eq(supportTickets.id, ticketId));
+    return reply;
   }
 }
 

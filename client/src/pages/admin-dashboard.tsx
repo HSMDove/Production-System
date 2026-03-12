@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
-  Lock, AlertTriangle, ChevronLeft
+  Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "settings" | "admins" | "audit";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "tickets" | "settings" | "admins" | "audit";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
@@ -27,6 +27,7 @@ export default function AdminDashboard() {
     { id: "users", label: "المستخدمون", icon: Users },
     { id: "announcements", label: "الإعلانات", icon: Megaphone },
     { id: "banners", label: "الشريط العلوي", icon: Bell },
+    { id: "tickets", label: "الشكاوى والتذاكر", icon: MessageSquare },
     { id: "settings", label: "إعدادات النظام", icon: Settings },
     { id: "admins", label: "إدارة المدراء", icon: Shield },
     { id: "audit", label: "سجل التدقيق", icon: FileText },
@@ -79,6 +80,7 @@ export default function AdminDashboard() {
         {activeTab === "users" && <UsersPanel />}
         {activeTab === "announcements" && <AnnouncementsPanel />}
         {activeTab === "banners" && <BannersPanel />}
+        {activeTab === "tickets" && <TicketsPanel />}
         {activeTab === "settings" && <SystemSettingsPanel />}
         {activeTab === "admins" && <AdminsPanel />}
         {activeTab === "audit" && <AuditPanel />}
@@ -681,6 +683,163 @@ function AuditPanel() {
           <div className="text-center py-8 text-muted-foreground">لا توجد سجلات بعد</div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TicketsPanel() {
+  const { toast } = useToast();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+
+  type AdminTicket = {
+    id: string; userId: string; title: string; description: string;
+    imageUrls: string[] | null; status: string; createdAt: string; updatedAt: string;
+    userEmail: string; userName: string;
+  };
+  type Reply = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
+
+  const { data: tickets, isLoading } = useQuery<AdminTicket[]>({ queryKey: ["/api/admin/tickets"] });
+  const { data: detail } = useQuery<{ ticket: AdminTicket; replies: Reply[] }>({
+    queryKey: ["/api/admin/tickets", selectedId],
+    enabled: !!selectedId,
+  });
+
+  const statusMap: Record<string, { label: string; color: string }> = {
+    open: { label: "خامل", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+    in_progress: { label: "جارٍ العمل عليها", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+    resolved: { label: "تم العمل عليها", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+  };
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) =>
+      apiRequest("PATCH", `/api/admin/tickets/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tickets", selectedId] });
+      toast({ title: "تم", description: "تم تحديث الحالة" });
+    },
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/admin/tickets/${selectedId}/reply`, { message: replyText }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tickets", selectedId] });
+      setReplyText("");
+      toast({ title: "تم", description: "تم إرسال الرد وسيصل إشعار بريدي للمستخدم" });
+    },
+  });
+
+  if (isLoading) return <PanelLoader />;
+
+  if (selectedId && detail) {
+    return (
+      <div>
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)} data-testid="button-back-tickets-admin">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">{detail.ticket.title}</h2>
+            <p className="text-sm text-muted-foreground">
+              {detail.ticket.userEmail} — {new Date(detail.ticket.createdAt).toLocaleDateString("ar-SA")}
+            </p>
+          </div>
+          <select
+            value={detail.ticket.status}
+            onChange={(e) => updateStatusMutation.mutate({ id: detail.ticket.id, status: e.target.value })}
+            className="border rounded-lg px-3 py-1.5 text-sm bg-background"
+            data-testid="select-ticket-status"
+          >
+            <option value="open">خامل</option>
+            <option value="in_progress">جارٍ العمل عليها</option>
+            <option value="resolved">تم العمل عليها</option>
+          </select>
+        </div>
+
+        <div className="rounded-lg border p-4 bg-muted/30 mb-4">
+          <p className="text-sm whitespace-pre-wrap">{detail.ticket.description}</p>
+          {detail.ticket.imageUrls && detail.ticket.imageUrls.length > 0 && (
+            <div className="flex gap-2 mt-3 flex-wrap">
+              {detail.ticket.imageUrls.map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noreferrer">
+                  <img src={url} alt={`صورة ${i + 1}`} className="w-24 h-24 object-cover rounded border" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3 mb-4 max-h-[400px] overflow-y-auto">
+          {detail.replies.map((r) => (
+            <div key={r.id} className={`rounded-lg p-3 text-sm ${r.isAdmin ? "bg-primary/10 border border-primary/20 mr-8" : "bg-muted/50 border ml-8"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-xs font-medium ${r.isAdmin ? "text-primary" : "text-muted-foreground"}`}>
+                  {r.isAdmin ? "أنت (الإدارة)" : detail.ticket.userEmail}
+                </span>
+                <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleDateString("ar-SA")}</span>
+              </div>
+              <p className="whitespace-pre-wrap">{r.message}</p>
+            </div>
+          ))}
+          {detail.replies.length === 0 && (
+            <p className="text-center text-muted-foreground text-sm py-4">لا توجد ردود بعد</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="اكتب ردك... (سيصل للمستخدم عبر البريد الإلكتروني)"
+            className="flex-1 min-h-[80px]"
+            data-testid="input-admin-ticket-reply"
+          />
+          <Button
+            onClick={() => replyMutation.mutate()}
+            disabled={!replyText.trim() || replyMutation.isPending}
+            className="gap-2 self-end"
+            data-testid="button-send-admin-reply"
+          >
+            {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            إرسال
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">الشكاوى والتذاكر</h2>
+      {!tickets || tickets.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">لا توجد تذاكر بعد</div>
+      ) : (
+        <div className="space-y-3">
+          {tickets.map((t) => (
+            <div
+              key={t.id}
+              className="rounded-lg border p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => setSelectedId(t.id)}
+              data-testid={`admin-ticket-${t.id}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{t.title}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{t.userEmail}</p>
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {new Date(t.createdAt).toLocaleDateString("ar-SA")}
+                  </p>
+                </div>
+                <span className={`text-xs px-2.5 py-1 rounded-full border whitespace-nowrap ${statusMap[t.status]?.color || ""}`}>
+                  {statusMap[t.status]?.label || t.status}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

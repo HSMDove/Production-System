@@ -72,6 +72,18 @@ A password-protected admin layer built on top of the OTP auth system. Key compon
 - **User-facing components**: `AnnouncementModal` (shows unseen announcements as modal cards on app open), `TopBannerDisplay` (colored banner at top of app with optional link)
 - **Super admin**: `hylf.111@gmail.com` — password set via DB seed (change on first login via Admin Management panel)
 - **Shield icon**: Admin users see a shield icon in the header navigation linking to `/admin/login`
+- **Dynamic version**: App version shown at bottom of settings page is read from `app_version` system setting via `/api/version` endpoint (public, no auth required)
+
+### Support Ticket System
+
+Users can submit support tickets ("عندي مشكلة") from the Settings → Account tab. Key components:
+- **Database tables**: `support_tickets` (title, description, optional image_urls, status), `ticket_replies` (threaded conversation between user and admin)
+- **Ticket statuses**: `open` (خامل), `in_progress` (جارٍ العمل عليها), `resolved` (تم العمل عليها)
+- **User API**: `POST /api/tickets` (create), `GET /api/tickets` (list own), `GET /api/tickets/:id` (detail + replies), `POST /api/tickets/:id/reply` (user reply)
+- **Admin API**: `GET /api/admin/tickets` (all tickets with user info), `GET /api/admin/tickets/:id` (detail), `PATCH /api/admin/tickets/:id/status` (change status), `POST /api/admin/tickets/:id/reply` (reply + email notification)
+- **Email notification**: When admin replies, user receives a branded email via Resend from `noreply@nasaqapp.net`
+- **Admin dashboard**: "الشكاوى والتذاكر" panel with ticket list, status management dropdown, and reply textarea
+- **User UI**: "عندي مشكلة" card in Settings → Account tab with new ticket form (title, description, image upload), ticket list, and conversation view
 
 ### Notification Pipeline
 

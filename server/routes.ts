@@ -626,7 +626,7 @@ export async function registerRoutes(
   // ─── Global auth guard for all non-auth API routes ────────────────────────
   // Applied after auth routes so /api/auth/* remain public.
   app.use("/api", (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/") || req.path.startsWith("/integrations/telegram/")) {
+    if (req.path.startsWith("/auth/") || req.path.startsWith("/integrations/slack/") || req.path.startsWith("/integrations/telegram/") || req.path === "/version" || req.path === "/banners/active") {
       return next();
     }
     if (!req.session?.userId) {
@@ -3201,5 +3201,186 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
+  // ─── Public version endpoint ──────────────────────────────────────────────
+  app.get("/api/version", async (_req, res) => {
+    try {
+      const setting = await storage.getSystemSetting("app_version");
+      res.json({ version: setting?.value || "1.0.0" });
+    } catch {
+      res.json({ version: "1.0.0" });
+    }
+  });
+
+  // ─── Support Tickets (User) ──────────────────────────────────────────────
+
+  const createTicketSchema = z.object({
+    title: z.string().min(1, "العنوان مطلوب"),
+    description: z.string().min(1, "الوصف مطلوب"),
+    imageUrls: z.array(z.string()).optional(),
+  });
+
+  app.post("/api/tickets", requireAuth, async (req, res) => {
+    try {
+      const parsed = createTicketSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const ticket = await storage.createTicket({
+        userId: req.session.userId!,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        imageUrls: parsed.data.imageUrls || null,
+        status: "open",
+      });
+      res.json(ticket);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء التذكرة" });
+    }
+  });
+
+  app.get("/api/tickets", requireAuth, async (req, res) => {
+    try {
+      const tickets = await storage.getTicketsByUser(req.session.userId!);
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب التذاكر" });
+    }
+  });
+
+  app.get("/api/tickets/:id", requireAuth, async (req, res) => {
+    try {
+      const ticket = await storage.getTicketById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+      if (ticket.userId !== req.session.userId! && !(req.session as any).adminMode) {
+        return res.status(403).json({ error: "غير مصرح" });
+      }
+      const replies = await storage.getTicketReplies(ticket.id);
+      res.json({ ticket, replies });
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب التذكرة" });
+    }
+  });
+
+  app.post("/api/tickets/:id/reply", requireAuth, async (req, res) => {
+    try {
+      const { message } = z.object({ message: z.string().min(1) }).parse(req.body);
+      const ticket = await storage.getTicketById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+      if (ticket.userId !== req.session.userId!) return res.status(403).json({ error: "غير مصرح" });
+      const reply = await storage.createTicketReply(ticket.id, req.session.userId!, message, false);
+      res.json(reply);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إرسال الرد" });
+    }
+  });
+
+  // ─── Support Tickets (Admin) ──────────────────────────────────────────────
+
+  app.get("/api/admin/tickets", requireAdmin, async (_req, res) => {
+    try {
+      const tickets = await storage.getAllTickets();
+      const ticketsWithUsers = await Promise.all(
+        tickets.map(async (t) => {
+          const user = await storage.getUserById(t.userId);
+          return { ...t, userEmail: user?.email || "غير معروف", userName: user?.name || "غير معروف" };
+        })
+      );
+      res.json(ticketsWithUsers);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب التذاكر" });
+    }
+  });
+
+  app.get("/api/admin/tickets/:id", requireAdmin, async (req, res) => {
+    try {
+      const ticket = await storage.getTicketById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+      const replies = await storage.getTicketReplies(ticket.id);
+      const user = await storage.getUserById(ticket.userId);
+      res.json({ ticket: { ...ticket, userEmail: user?.email, userName: user?.name }, replies });
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب التذكرة" });
+    }
+  });
+
+  const updateTicketStatusSchema = z.object({
+    status: z.enum(["open", "in_progress", "resolved"]),
+  });
+
+  app.patch("/api/admin/tickets/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const parsed = updateTicketStatusSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "حالة غير صالحة" });
+      const ticket = await storage.updateTicketStatus(req.params.id, parsed.data.status);
+      await storage.createAuditLog(req.session.userId!, "ticket_status_updated", `تغيير حالة تذكرة ${req.params.id} إلى ${parsed.data.status}`, req.ip || undefined);
+      res.json(ticket);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تحديث الحالة" });
+    }
+  });
+
+  app.post("/api/admin/tickets/:id/reply", requireAdmin, async (req, res) => {
+    try {
+      const { message } = z.object({ message: z.string().min(1) }).parse(req.body);
+      const ticket = await storage.getTicketById(req.params.id);
+      if (!ticket) return res.status(404).json({ error: "التذكرة غير موجودة" });
+      const reply = await storage.createTicketReply(ticket.id, req.session.userId!, message, true);
+
+      try {
+        const ticketUser = await storage.getUserById(ticket.userId);
+        if (ticketUser?.email) {
+          const apiKey = process.env.RESEND_API_KEY;
+          if (apiKey) {
+            const emailHtml = buildTicketReplyEmail(ticket.title, message);
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from: "نَسَق <noreply@nasaqapp.net>",
+                to: [ticketUser.email],
+                subject: "رد على تذكرتك: " + ticket.title + " 📩",
+                html: emailHtml,
+              }),
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error("Failed to send ticket reply email:", emailErr);
+      }
+
+      await storage.createAuditLog(req.session.userId!, "ticket_replied", "رد على تذكرة " + req.params.id, req.ip || undefined);
+      res.json(reply);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إرسال الرد" });
+    }
+  });
+
   return httpServer;
+}
+
+function buildTicketReplyEmail(title: string, replyMessage: string): string {
+  return '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8" />'
+    + '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet" /></head>'
+    + '<body style="margin:0;padding:0;background:#111111;">'
+    + '<table width="100%" cellpadding="0" cellspacing="0" style="background:#111111;padding:40px 16px;"><tr><td align="center">'
+    + '<table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#1c1c1c;border:2.5px solid #F7CB46;box-shadow:5px 5px 0px 0px #F7CB46;">'
+    + '<tr><td style="padding:36px 36px 0 36px;"><table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding-bottom:28px;border-bottom:2px solid #2a2a2a;">'
+    + '<div style="display:inline-block;background:#111111;border:2.5px solid #F7CB46;box-shadow:3px 3px 0px 0px #F7CB46;padding:10px 22px;">'
+    + '<span style="font-family:\'Cairo\',Arial,sans-serif;font-size:28px;font-weight:900;color:#F7CB46;letter-spacing:2px;">نَسَق</span>'
+    + '</div></td></tr></table></td></tr>'
+    + '<tr><td style="padding:28px 36px 0 36px;">'
+    + '<p style="font-family:\'Cairo\',Arial,sans-serif;font-size:17px;font-weight:700;color:#e8e8e8;margin:0;line-height:1.8;text-align:right;">تم الرد على تذكرتك 🎫</p>'
+    + '<p style="font-family:\'Cairo\',Arial,sans-serif;font-size:15px;color:#aaa;margin:8px 0 0 0;text-align:right;"><strong style="color:#F7CB46;">' + escapeHtml(title) + '</strong></p>'
+    + '</td></tr>'
+    + '<tr><td style="padding:24px 36px;"><div style="background:#111111;border:2px solid #333;padding:18px;border-radius:4px;">'
+    + '<p style="font-family:\'Cairo\',Arial,sans-serif;font-size:15px;color:#e8e8e8;margin:0;line-height:1.8;text-align:right;white-space:pre-wrap;">' + escapeHtml(replyMessage) + '</p>'
+    + '</div></td></tr>'
+    + '<tr><td style="padding:0 36px 28px 36px;text-align:center;">'
+    + '<a href="https://nasaqapp.net" style="display:inline-block;background:#F7CB46;color:#111;font-family:\'Cairo\',Arial,sans-serif;font-weight:700;font-size:15px;padding:12px 32px;text-decoration:none;border:2px solid #111;box-shadow:3px 3px 0px 0px #111;">افتح نَسَق</a>'
+    + '</td></tr>'
+    + '<tr><td style="padding:20px 36px 32px 36px;border-top:2px solid #2a2a2a;">'
+    + '<p style="font-family:\'Cairo\',Arial,sans-serif;font-size:13px;color:#555;margin:0;text-align:center;">فريق دعم نَسَق 🚀</p>'
+    + '</td></tr></table></td></tr></table></body></html>';
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

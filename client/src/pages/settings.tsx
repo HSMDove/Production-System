@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, BrainCircuit, Check, CircleHelp, Copy, FileText, Hash, Link, Loader2, LogOut, Moon, Palette, Plus, RefreshCw, Route, Save, Send, Settings2, Sparkles, Sun, TestTube, ToggleLeft, Trash2, Upload, User, X } from "lucide-react";
+import { AlertCircle, Bell, Bot, BrainCircuit, Check, ChevronDown, ChevronUp, CircleHelp, Clock, Copy, FileText, Hash, ImagePlus, Link, Loader2, LogOut, MessageSquare, Moon, Palette, Plus, RefreshCw, Route, Save, Send, Settings2, Sparkles, Sun, TestTube, ToggleLeft, Trash2, Upload, User, X } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -60,7 +60,17 @@ export default function Settings() {
   const [newMappingChannelId, setNewMappingChannelId] = useState("");
   const [newMappingTargetId, setNewMappingTargetId] = useState("");
 
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [ticketTitle, setTicketTitle] = useState("");
+  const [ticketDescription, setTicketDescription] = useState("");
+  const [ticketImages, setTicketImages] = useState<string[]>([]);
+  const [showMyTickets, setShowMyTickets] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [ticketReplyText, setTicketReplyText] = useState("");
+
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
+  const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
+  const appVersion = versionData?.version || "1.0.0";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
@@ -112,6 +122,60 @@ export default function Settings() {
     onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "البوت متصل بنجاح" : (data.error || "فشل الاتصال"), variant: data.success ? "default" : "destructive" }),
     onError: () => toast({ title: "خطأ", description: "فشل اختبار بوت Slack", variant: "destructive" }),
   });
+
+  type TicketEntry = { id: string; title: string; description: string; imageUrls: string[] | null; status: string; createdAt: string; updatedAt: string };
+  type TicketReplyEntry = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
+
+  const { data: myTickets } = useQuery<TicketEntry[]>({ queryKey: ["/api/tickets"], enabled: showMyTickets });
+  const { data: selectedTicketData } = useQuery<{ ticket: TicketEntry; replies: TicketReplyEntry[] }>({ queryKey: ["/api/tickets", selectedTicketId], enabled: !!selectedTicketId });
+
+  const createTicketMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/tickets", {
+      title: ticketTitle,
+      description: ticketDescription,
+      imageUrls: ticketImages.length > 0 ? ticketImages : undefined,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      setTicketTitle("");
+      setTicketDescription("");
+      setTicketImages([]);
+      setShowTicketForm(false);
+      setShowMyTickets(true);
+      toast({ title: "تم الإرسال", description: "تم إرسال تذكرتك بنجاح، سنعمل عليها قريباً" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل إرسال التذكرة", variant: "destructive" }),
+  });
+
+  const replyToTicketMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/tickets/${selectedTicketId}/reply`, { message: ticketReplyText }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets", selectedTicketId] });
+      setTicketReplyText("");
+      toast({ title: "تم", description: "تم إرسال ردك" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل إرسال الرد", variant: "destructive" }),
+  });
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          setTicketImages((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const statusLabels: Record<string, { label: string; color: string }> = {
+    open: { label: "خامل", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+    in_progress: { label: "جارٍ العمل عليها", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+    resolved: { label: "تم العمل عليها", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+  };
 
   const addPlatformIdMutation = useMutation({
     mutationFn: async (data: { platform: string; platformId: string; label?: string }) =>
@@ -336,6 +400,200 @@ export default function Settings() {
                   {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                   تسجيل الخروج
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><AlertCircle className="h-4 w-4" /> عندي مشكلة</CardTitle>
+                <CardDescription>واجهتك مشكلة؟ أرسل لنا تذكرة وسنتابعها معك.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!showTicketForm && !showMyTickets && (
+                  <div className="flex gap-2">
+                    <Button onClick={() => setShowTicketForm(true)} className="gap-2 flex-1" data-testid="button-new-ticket">
+                      <Plus className="h-4 w-4" />
+                      تذكرة جديدة
+                    </Button>
+                    <Button variant="outline" onClick={() => setShowMyTickets(true)} className="gap-2 flex-1" data-testid="button-my-tickets">
+                      <MessageSquare className="h-4 w-4" />
+                      تذاكري
+                    </Button>
+                  </div>
+                )}
+
+                {showTicketForm && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label>عنوان المشكلة</Label>
+                      <Input
+                        value={ticketTitle}
+                        onChange={(e) => setTicketTitle(e.target.value)}
+                        placeholder="مثال: مشكلة في حفظ المحتوى"
+                        className="mt-1"
+                        data-testid="input-ticket-title"
+                      />
+                    </div>
+                    <div>
+                      <Label>وصف المشكلة</Label>
+                      <Textarea
+                        value={ticketDescription}
+                        onChange={(e) => setTicketDescription(e.target.value)}
+                        placeholder="اشرح المشكلة بالتفصيل..."
+                        className="mt-1 min-h-[120px]"
+                        data-testid="input-ticket-description"
+                      />
+                    </div>
+                    <div>
+                      <Label className="flex items-center gap-2">
+                        <ImagePlus className="h-4 w-4" />
+                        صور (اختياري)
+                      </Label>
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImageUpload}
+                        className="mt-1"
+                        data-testid="input-ticket-images"
+                      />
+                      {ticketImages.length > 0 && (
+                        <div className="flex gap-2 mt-2 flex-wrap">
+                          {ticketImages.map((img, i) => (
+                            <div key={i} className="relative w-16 h-16">
+                              <img src={img} alt={`صورة ${i + 1}`} className="w-full h-full object-cover rounded border" />
+                              <button
+                                onClick={() => setTicketImages((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                                data-testid={`button-remove-image-${i}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => createTicketMutation.mutate()}
+                        disabled={!ticketTitle.trim() || !ticketDescription.trim() || createTicketMutation.isPending}
+                        className="gap-2"
+                        data-testid="button-submit-ticket"
+                      >
+                        {createTicketMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        إرسال
+                      </Button>
+                      <Button variant="outline" onClick={() => { setShowTicketForm(false); setTicketTitle(""); setTicketDescription(""); setTicketImages([]); }} data-testid="button-cancel-ticket">
+                        إلغاء
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {showMyTickets && !selectedTicketId && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">تذاكري</span>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => setShowTicketForm(true)} className="gap-1" data-testid="button-new-ticket-inline">
+                          <Plus className="h-3 w-3" /> جديدة
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowMyTickets(false)} data-testid="button-close-tickets">
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    {!myTickets ? (
+                      <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                    ) : myTickets.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-6 text-sm">لا توجد تذاكر بعد</p>
+                    ) : (
+                      myTickets.map((t) => (
+                        <div
+                          key={t.id}
+                          className="rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => setSelectedTicketId(t.id)}
+                          data-testid={`ticket-item-${t.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{t.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(t.createdAt).toLocaleDateString("ar-SA")}
+                              </p>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full border whitespace-nowrap ${statusLabels[t.status]?.color || ""}`}>
+                              {statusLabels[t.status]?.label || t.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {showMyTickets && selectedTicketId && selectedTicketData && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedTicketId(null)} data-testid="button-back-tickets">
+                        <ChevronDown className="h-4 w-4 rotate-90" />
+                      </Button>
+                      <span className="font-medium text-sm flex-1 truncate">{selectedTicketData.ticket.title}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full border ${statusLabels[selectedTicketData.ticket.status]?.color || ""}`}>
+                        {statusLabels[selectedTicketData.ticket.status]?.label || selectedTicketData.ticket.status}
+                      </span>
+                    </div>
+                    <div className="rounded-lg border p-3 bg-muted/30">
+                      <p className="text-sm whitespace-pre-wrap">{selectedTicketData.ticket.description}</p>
+                      {selectedTicketData.ticket.imageUrls && selectedTicketData.ticket.imageUrls.length > 0 && (
+                        <div className="flex gap-2 mt-3 flex-wrap">
+                          {selectedTicketData.ticket.imageUrls.map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noreferrer">
+                              <img src={url} alt={`صورة ${i + 1}`} className="w-20 h-20 object-cover rounded border" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {selectedTicketData.replies.map((r) => (
+                        <div key={r.id} className={`rounded-lg p-3 text-sm ${r.isAdmin ? "bg-primary/10 border border-primary/20 mr-4" : "bg-muted/50 border ml-4"}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-xs font-medium ${r.isAdmin ? "text-primary" : "text-muted-foreground"}`}>
+                              {r.isAdmin ? "فريق الدعم" : "أنت"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleDateString("ar-SA")}</span>
+                          </div>
+                          <p className="whitespace-pre-wrap">{r.message}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedTicketData.ticket.status !== "resolved" && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={ticketReplyText}
+                          onChange={(e) => setTicketReplyText(e.target.value)}
+                          placeholder="اكتب ردك..."
+                          className="flex-1"
+                          data-testid="input-ticket-reply"
+                          onKeyDown={(e) => { if (e.key === "Enter" && ticketReplyText.trim()) replyToTicketMutation.mutate(); }}
+                        />
+                        <Button
+                          size="icon"
+                          onClick={() => replyToTicketMutation.mutate()}
+                          disabled={!ticketReplyText.trim() || replyToTicketMutation.isPending}
+                          data-testid="button-send-reply"
+                        >
+                          {replyToTicketMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1232,7 +1490,7 @@ export default function Settings() {
         </Tabs>
 
         <div className="text-center text-sm text-muted-foreground py-4 border-t mt-6" data-testid="text-version">
-          نَسَق — الإصدار 1.0.0
+          نَسَق — الإصدار {appVersion}
         </div>
       </div>
     </MainLayout>
