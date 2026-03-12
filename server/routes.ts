@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
 import OpenAI from "openai";
+import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
 import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
@@ -12,6 +13,7 @@ import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent } from "./folder-fetcher";
+import { z } from "zod";
 import {
   insertFolderSchema,
   insertSourceSchema,
@@ -389,6 +391,20 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const user = await storage.getUserById(req.session.userId);
+  if (!user?.isAdmin) {
+    return res.status(403).json({ error: "ليس لديك صلاحيات المدير" });
+  }
+  if (!(req.session as any).adminMode) {
+    return res.status(403).json({ error: "يرجى تسجيل الدخول كمدير أولاً" });
+  }
+  next();
+}
+
 function checkFeatureFlag(flagName: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -495,7 +511,8 @@ export async function registerRoutes(
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
 
-      res.json({ success: true, user, isNew });
+      const requiresAdminAuth = user.isAdmin === true;
+      res.json({ success: true, user: { ...user, adminPasswordHash: undefined }, isNew, requiresAdminAuth });
     } catch (error: any) {
       console.error("Verify OTP error:", error);
       res.status(500).json({ error: error?.message || "فشل التحقق" });
@@ -512,7 +529,8 @@ export async function registerRoutes(
         req.session.destroy(() => {});
         return res.status(401).json({ error: "User not found" });
       }
-      res.json(user);
+      const { adminPasswordHash, ...safeUser } = user;
+      res.json({ ...safeUser, adminMode: !!(req.session as any).adminMode });
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
     }
@@ -2833,6 +2851,353 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       res.json({ success: true, rewrittenContent: rewritten });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });
+    }
+  });
+
+  // ─── Admin Auth ──────────────────────────────────────────────────────────
+
+  app.post("/api/admin/verify-password", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const user = await storage.getUserById(userId);
+      if (!user?.isAdmin) {
+        return res.status(403).json({ error: "ليس لديك صلاحيات المدير" });
+      }
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({ error: "كلمة المرور مطلوبة" });
+      }
+      const hash = await storage.getAdminPasswordHash(userId);
+      if (!hash) {
+        return res.status(400).json({ error: "لم يتم تعيين كلمة مرور المدير بعد. تواصل مع المدير الأعلى." });
+      }
+      const valid = await bcrypt.compare(password, hash);
+      if (!valid) {
+        await storage.createAuditLog(userId, "admin_login_failed", "كلمة مرور خاطئة", req.ip || undefined);
+        return res.status(401).json({ error: "كلمة المرور غير صحيحة" });
+      }
+      (req.session as any).adminMode = true;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((err) => (err ? reject(err) : resolve()))
+      );
+      await storage.createAuditLog(userId, "admin_login", "تسجيل دخول المدير", req.ip || undefined);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Admin verify password error:", error);
+      res.status(500).json({ error: "فشل التحقق" });
+    }
+  });
+
+  app.post("/api/admin/set-password", requireAdmin, async (req, res) => {
+    try {
+      const { targetUserId, newPassword } = req.body;
+      const target = targetUserId || req.session.userId!;
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      }
+      const currentUser = await storage.getUserById(req.session.userId!);
+      if (target !== req.session.userId && currentUser?.adminRole !== "super_admin") {
+        return res.status(403).json({ error: "فقط المدير الأعلى يمكنه تغيير كلمات مرور المدراء الآخرين" });
+      }
+      const hash = await bcrypt.hash(newPassword, 12);
+      await storage.setAdminPassword(target, hash);
+      await storage.createAuditLog(req.session.userId!, "admin_password_change", `تغيير كلمة مرور المدير: ${target}`, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "فشل تغيير كلمة المرور" });
+    }
+  });
+
+  app.post("/api/admin/exit", requireAuth, async (req, res) => {
+    (req.session as any).adminMode = false;
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((err) => (err ? reject(err) : resolve()))
+    );
+    res.json({ success: true });
+  });
+
+  // ─── Admin Dashboard Routes ─────────────────────────────────────────────
+
+  app.get("/api/admin/analytics", requireAdmin, async (_req, res) => {
+    try {
+      const analytics = await storage.getAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الإحصائيات" });
+    }
+  });
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await (storage as any).getAllUsers();
+      const safe = allUsers.map((u: any) => {
+        const { adminPasswordHash, ...rest } = u;
+        return rest;
+      });
+      res.json(safe);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب المستخدمين" });
+    }
+  });
+
+  app.get("/api/admin/admins", requireAdmin, async (_req, res) => {
+    try {
+      const admins = await storage.getAdminUsers();
+      const safe = admins.map((u: any) => {
+        const { adminPasswordHash, ...rest } = u;
+        return rest;
+      });
+      res.json(safe);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب المدراء" });
+    }
+  });
+
+  app.post("/api/admin/admins", requireAdmin, async (req, res) => {
+    try {
+      const currentUser = await storage.getUserById(req.session.userId!);
+      if (currentUser?.adminRole !== "super_admin") {
+        return res.status(403).json({ error: "فقط المدير الأعلى يمكنه إضافة مدراء" });
+      }
+      const { email, role, password } = req.body;
+      if (!email) return res.status(400).json({ error: "البريد الإلكتروني مطلوب" });
+      const targetUser = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (!targetUser) return res.status(404).json({ error: "المستخدم غير موجود" });
+      if (targetUser.isAdmin) return res.status(400).json({ error: "المستخدم مدير بالفعل" });
+
+      await storage.setAdminStatus(targetUser.id, true, role || "admin");
+      if (password && password.length >= 6) {
+        const hash = await bcrypt.hash(password, 12);
+        await storage.setAdminPassword(targetUser.id, hash);
+      }
+      await storage.createAuditLog(req.session.userId!, "admin_added", `إضافة مدير: ${email}`, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "فشل إضافة المدير" });
+    }
+  });
+
+  app.delete("/api/admin/admins/:id", requireAdmin, async (req, res) => {
+    try {
+      const currentUser = await storage.getUserById(req.session.userId!);
+      if (currentUser?.adminRole !== "super_admin") {
+        return res.status(403).json({ error: "فقط المدير الأعلى يمكنه إزالة مدراء" });
+      }
+      if (req.params.id === req.session.userId) {
+        return res.status(400).json({ error: "لا يمكنك إزالة نفسك" });
+      }
+      await storage.setAdminStatus(req.params.id, false, "admin");
+      await storage.setAdminPassword(req.params.id, "");
+      await storage.createAuditLog(req.session.userId!, "admin_removed", `إزالة مدير: ${req.params.id}`, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل إزالة المدير" });
+    }
+  });
+
+  // ─── Admin Announcements ─────────────────────────────────────────────────
+
+  app.get("/api/admin/announcements", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getAllAnnouncements());
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الإعلانات" });
+    }
+  });
+
+  const createAnnouncementSchema = z.object({
+    title: z.string().min(1),
+    body: z.string().min(1),
+    imageUrl: z.string().nullable().optional(),
+    icon: z.string().nullable().optional(),
+    isActive: z.boolean().optional().default(true),
+    maxViews: z.number().int().min(1).optional().default(1),
+  });
+
+  app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
+    try {
+      const parsed = createAnnouncementSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة", details: parsed.error.flatten() });
+      const { title, body, imageUrl, icon, isActive, maxViews } = parsed.data;
+      const announcement = await storage.createAnnouncement({
+        title, body,
+        imageUrl: imageUrl || null,
+        icon: icon || null,
+        isActive,
+        maxViews,
+        createdBy: req.session.userId!,
+      });
+      await storage.createAuditLog(req.session.userId!, "announcement_created", `إنشاء إعلان: ${title}`, req.ip || undefined);
+      res.json(announcement);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء الإعلان" });
+    }
+  });
+
+  const updateAnnouncementSchema = z.object({
+    title: z.string().min(1).optional(),
+    body: z.string().min(1).optional(),
+    imageUrl: z.string().nullable().optional(),
+    icon: z.string().nullable().optional(),
+    isActive: z.boolean().optional(),
+    maxViews: z.number().int().min(1).optional(),
+  });
+
+  app.put("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = updateAnnouncementSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const updated = await storage.updateAnnouncement(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "الإعلان غير موجود" });
+      await storage.createAuditLog(req.session.userId!, "announcement_updated", `تعديل إعلان: ${req.params.id}`, req.ip || undefined);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل الإعلان" });
+    }
+  });
+
+  app.delete("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteAnnouncement(req.params.id);
+      await storage.createAuditLog(req.session.userId!, "announcement_deleted", `حذف إعلان: ${req.params.id}`, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف الإعلان" });
+    }
+  });
+
+  // ─── Admin Top Banners ───────────────────────────────────────────────────
+
+  app.get("/api/admin/banners", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getAllTopBanners());
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الشريط العلوي" });
+    }
+  });
+
+  const createBannerSchema = z.object({
+    text: z.string().min(1),
+    linkUrl: z.string().nullable().optional(),
+    linkText: z.string().nullable().optional(),
+    bgColor: z.string().optional().default("#3b82f6"),
+    isActive: z.boolean().optional().default(false),
+  });
+
+  app.post("/api/admin/banners", requireAdmin, async (req, res) => {
+    try {
+      const parsed = createBannerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const { text, linkUrl, linkText, bgColor, isActive } = parsed.data;
+      const banner = await storage.createTopBanner({
+        text, linkUrl: linkUrl || null, linkText: linkText || null,
+        bgColor, isActive,
+        createdBy: req.session.userId!,
+      });
+      await storage.createAuditLog(req.session.userId!, "banner_created", `إنشاء شريط: ${text}`, req.ip || undefined);
+      res.json(banner);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء الشريط" });
+    }
+  });
+
+  const updateBannerSchema = z.object({
+    text: z.string().min(1).optional(),
+    linkUrl: z.string().nullable().optional(),
+    linkText: z.string().nullable().optional(),
+    bgColor: z.string().optional(),
+    isActive: z.boolean().optional(),
+  });
+
+  app.put("/api/admin/banners/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = updateBannerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const updated = await storage.updateTopBanner(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "الشريط غير موجود" });
+      await storage.createAuditLog(req.session.userId!, "banner_updated", `تعديل شريط: ${req.params.id}`, req.ip || undefined);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل الشريط" });
+    }
+  });
+
+  app.delete("/api/admin/banners/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteTopBanner(req.params.id);
+      await storage.createAuditLog(req.session.userId!, "banner_deleted", `حذف شريط: ${req.params.id}`, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف الشريط" });
+    }
+  });
+
+  // ─── Admin Audit Logs ────────────────────────────────────────────────────
+
+  app.get("/api/admin/audit-logs", requireAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      res.json(await storage.getAuditLogs(limit));
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب سجل التدقيق" });
+    }
+  });
+
+  // ─── Admin System Settings (existing system settings but admin-protected) ─
+
+  app.get("/api/admin/system-settings", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getAllSystemSettings());
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب إعدادات النظام" });
+    }
+  });
+
+  const upsertSystemSettingSchema = z.object({
+    key: z.string().min(1),
+    value: z.string().nullable(),
+    description: z.string().optional(),
+  });
+
+  app.put("/api/admin/system-settings", requireAdmin, async (req, res) => {
+    try {
+      const parsed = upsertSystemSettingSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const { key, value, description } = parsed.data;
+      const setting = await storage.upsertSystemSetting(key, value, description);
+      await storage.createAuditLog(req.session.userId!, "system_setting_updated", `تعديل إعداد النظام: ${key}`, req.ip || undefined);
+      res.json(setting);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل الإعداد" });
+    }
+  });
+
+  // ─── User-facing announcement/banner endpoints ──────────────────────────
+
+  app.get("/api/announcements/unseen", requireAuth, async (req, res) => {
+    try {
+      const unseen = await storage.getUnseenAnnouncements(req.session.userId!);
+      res.json(unseen);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الإعلانات" });
+    }
+  });
+
+  app.post("/api/announcements/:id/view", requireAuth, async (req, res) => {
+    try {
+      await storage.recordAnnouncementView(req.session.userId!, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل تسجيل المشاهدة" });
+    }
+  });
+
+  app.get("/api/banners/active", async (_req, res) => {
+    try {
+      const banner = await storage.getActiveTopBanner();
+      res.json(banner || null);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب الشريط" });
     }
   });
 

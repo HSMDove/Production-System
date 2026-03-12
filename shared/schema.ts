@@ -3,6 +3,10 @@ import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, prima
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Admin Role Types (needed before users table)
+export const adminRoles = ["super_admin", "admin"] as const;
+export type AdminRole = typeof adminRoles[number];
+
 // Users - auth-capable user accounts
 export const genderTypes = ["male", "female", "other"] as const;
 export type GenderType = typeof genderTypes[number];
@@ -15,6 +19,9 @@ export const users = pgTable("users", {
   gender: text("gender").$type<GenderType>(),
   slackUserId: text("slack_user_id").unique(),
   onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  isAdmin: boolean("is_admin").default(false).notNull(),
+  adminRole: text("admin_role").$type<AdminRole>(),
+  adminPasswordHash: text("admin_password_hash"),
   lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -481,3 +488,62 @@ export const insertFolderChannelMappingSchema = createInsertSchema(folderChannel
 
 export type FolderChannelMapping = typeof folderChannelMappings.$inferSelect;
 export type InsertFolderChannelMapping = z.infer<typeof insertFolderChannelMappingSchema>;
+
+// ─── Admin System ────────────────────────────────────────────────────────────
+
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  imageUrl: text("image_url"),
+  icon: text("icon"),
+  isActive: boolean("is_active").default(true).notNull(),
+  maxViews: integer("max_views").default(1).notNull(),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+
+export const announcementViews = pgTable("announcement_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  announcementId: varchar("announcement_id").notNull().references(() => announcements.id, { onDelete: "cascade" }),
+  viewCount: integer("view_count").default(0).notNull(),
+  lastViewedAt: timestamp("last_viewed_at").defaultNow().notNull(),
+});
+export type AnnouncementView = typeof announcementViews.$inferSelect;
+
+export const topBanners = pgTable("top_banners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  text: text("text").notNull(),
+  linkUrl: text("link_url"),
+  linkText: text("link_text"),
+  bgColor: text("bg_color").default("#3b82f6"),
+  isActive: boolean("is_active").default(false).notNull(),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export const insertTopBannerSchema = createInsertSchema(topBanners).omit({
+  id: true,
+  createdAt: true,
+});
+export type TopBanner = typeof topBanners.$inferSelect;
+export type InsertTopBanner = z.infer<typeof insertTopBannerSchema>;
+
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  action: text("action").notNull(),
+  details: text("details"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;

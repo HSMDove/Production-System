@@ -10,6 +10,9 @@ export interface AuthUser {
   gender: "male" | "female" | "other" | null;
   slackUserId: string | null;
   onboardingCompleted: boolean;
+  isAdmin: boolean;
+  adminRole: "super_admin" | "admin" | null;
+  adminMode: boolean;
   createdAt: string;
 }
 
@@ -26,12 +29,18 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),
     onSuccess: () => {
-      // Clear all cached data to prevent leaking between user sessions
       queryClient.clear();
       localStorage.clear();
       sessionStorage.clear();
-      // Hard reload to reset all in-memory React state
       window.location.href = "/login";
+    },
+  });
+
+  const exitAdminMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/exit"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      navigate("/");
     },
   });
 
@@ -41,7 +50,11 @@ export function useAuth() {
     user,
     isLoading,
     isAuthenticated,
+    isAdmin: user?.isAdmin === true,
+    isSuperAdmin: user?.adminRole === "super_admin",
+    adminMode: user?.adminMode === true,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+    exitAdmin: exitAdminMutation.mutate,
   };
 }

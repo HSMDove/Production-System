@@ -61,6 +61,17 @@ import {
   folderChannelMappings,
   type FolderChannelMapping,
   type InsertFolderChannelMapping,
+  announcements,
+  type Announcement,
+  type InsertAnnouncement,
+  announcementViews,
+  type AnnouncementView,
+  topBanners,
+  type TopBanner,
+  type InsertTopBanner,
+  adminAuditLogs,
+  type AdminAuditLog,
+  type AdminRole,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -901,6 +912,165 @@ export class DatabaseStorage implements IStorage {
     if (userId) conditions.push(eq(integrationChannels.userId, userId));
     const [channel] = await db.select().from(integrationChannels).where(and(...conditions));
     return channel;
+  }
+
+  // ─── Admin Management ──────────────────────────────────────────────────────
+  async getAdminUsers(): Promise<User[]> {
+    return db.select().from(users).where(eq(users.isAdmin, true));
+  }
+
+  async setAdminStatus(userId: string, isAdmin: boolean, role: AdminRole): Promise<User | undefined> {
+    const [updated] = await db.update(users)
+      .set({ isAdmin, adminRole: role, updatedAt: new Date() } as any)
+      .where(eq(users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  async setAdminPassword(userId: string, passwordHash: string): Promise<void> {
+    await db.update(users)
+      .set({ adminPasswordHash: passwordHash, updatedAt: new Date() } as any)
+      .where(eq(users.id, userId));
+  }
+
+  async getAdminPasswordHash(userId: string): Promise<string | null> {
+    const [user] = await db.select({ hash: users.adminPasswordHash }).from(users).where(eq(users.id, userId));
+    return user?.hash ?? null;
+  }
+
+  // ─── Announcements ────────────────────────────────────────────────────────
+  async getAllAnnouncements(): Promise<Announcement[]> {
+    return db.select().from(announcements).orderBy(desc(announcements.createdAt));
+  }
+
+  async getActiveAnnouncements(): Promise<Announcement[]> {
+    return db.select().from(announcements).where(eq(announcements.isActive, true)).orderBy(desc(announcements.createdAt));
+  }
+
+  async getAnnouncementById(id: string): Promise<Announcement | undefined> {
+    const [ann] = await db.select().from(announcements).where(eq(announcements.id, id));
+    return ann;
+  }
+
+  async createAnnouncement(data: InsertAnnouncement): Promise<Announcement> {
+    const [created] = await db.insert(announcements).values(data as any).returning();
+    return created;
+  }
+
+  async updateAnnouncement(id: string, data: Partial<InsertAnnouncement>): Promise<Announcement | undefined> {
+    const [updated] = await db.update(announcements)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(announcements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAnnouncement(id: string): Promise<boolean> {
+    const result = await db.delete(announcements).where(eq(announcements.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAnnouncementViewsForUser(userId: string): Promise<AnnouncementView[]> {
+    return db.select().from(announcementViews).where(eq(announcementViews.userId, userId));
+  }
+
+  async getUnseenAnnouncements(userId: string): Promise<Announcement[]> {
+    const active = await this.getActiveAnnouncements();
+    const views = await this.getAnnouncementViewsForUser(userId);
+    const viewMap = new Map(views.map(v => [v.announcementId, v.viewCount]));
+    return active.filter(a => {
+      const seen = viewMap.get(a.id) || 0;
+      return seen < a.maxViews;
+    });
+  }
+
+  async recordAnnouncementView(userId: string, announcementId: string): Promise<void> {
+    const existing = await db.select().from(announcementViews)
+      .where(and(eq(announcementViews.userId, userId), eq(announcementViews.announcementId, announcementId)));
+    if (existing.length > 0) {
+      await db.update(announcementViews)
+        .set({ viewCount: existing[0].viewCount + 1, lastViewedAt: new Date() })
+        .where(eq(announcementViews.id, existing[0].id));
+    } else {
+      await db.insert(announcementViews).values({
+        userId,
+        announcementId,
+        viewCount: 1,
+        lastViewedAt: new Date(),
+      } as any);
+    }
+  }
+
+  // ─── Top Banners ──────────────────────────────────────────────────────────
+  async getAllTopBanners(): Promise<TopBanner[]> {
+    return db.select().from(topBanners).orderBy(desc(topBanners.createdAt));
+  }
+
+  async getActiveTopBanner(): Promise<TopBanner | undefined> {
+    const [banner] = await db.select().from(topBanners)
+      .where(eq(topBanners.isActive, true))
+      .orderBy(desc(topBanners.createdAt))
+      .limit(1);
+    return banner;
+  }
+
+  async createTopBanner(data: InsertTopBanner): Promise<TopBanner> {
+    const [created] = await db.insert(topBanners).values(data as any).returning();
+    return created;
+  }
+
+  async updateTopBanner(id: string, data: Partial<InsertTopBanner>): Promise<TopBanner | undefined> {
+    const [updated] = await db.update(topBanners)
+      .set(data as any)
+      .where(eq(topBanners.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTopBanner(id: string): Promise<boolean> {
+    const result = await db.delete(topBanners).where(eq(topBanners.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // ─── Admin Audit Logs ─────────────────────────────────────────────────────
+  async createAuditLog(userId: string, action: string, details?: string, ipAddress?: string): Promise<AdminAuditLog> {
+    const [log] = await db.insert(adminAuditLogs).values({
+      userId,
+      action,
+      details: details || null,
+      ipAddress: ipAddress || null,
+    } as any).returning();
+    return log;
+  }
+
+  async getAuditLogs(limit: number = 100): Promise<AdminAuditLog[]> {
+    return db.select().from(adminAuditLogs).orderBy(desc(adminAuditLogs.createdAt)).limit(limit);
+  }
+
+  // ─── Admin Analytics ──────────────────────────────────────────────────────
+  async getAnalytics(): Promise<{
+    totalUsers: number;
+    totalFolders: number;
+    totalSources: number;
+    totalContent: number;
+    totalIdeas: number;
+    adminCount: number;
+  }> {
+    const { count, sql: sqlFn } = await import("drizzle-orm");
+    const [userCount] = await db.select({ count: count() }).from(users);
+    const [folderCount] = await db.select({ count: count() }).from(folders);
+    const [sourceCount] = await db.select({ count: count() }).from(sources);
+    const [contentCount] = await db.select({ count: count() }).from(content);
+    const [ideaCount] = await db.select({ count: count() }).from(ideas);
+    const [adminCount] = await db.select({ count: count() }).from(users).where(eq(users.isAdmin, true));
+    return {
+      totalUsers: Number(userCount.count),
+      totalFolders: Number(folderCount.count),
+      totalSources: Number(sourceCount.count),
+      totalContent: Number(contentCount.count),
+      totalIdeas: Number(ideaCount.count),
+      adminCount: Number(adminCount.count),
+    };
   }
 }
 

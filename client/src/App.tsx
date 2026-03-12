@@ -17,10 +17,14 @@ import ModelAssistantPage from "@/pages/model-assistant";
 import LoginPage from "@/pages/login";
 import VerifyOTPPage from "@/pages/verify-otp";
 import OnboardingPage from "@/pages/onboarding";
+import AdminLoginPage from "@/pages/admin-login";
+import AdminDashboard from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
 import { FikriOverlay } from "@/components/fikri/fikri-overlay";
 import { TeaserBanner } from "@/components/teaser-banner";
+import { TopBannerDisplay } from "@/components/announcements/top-banner";
+import { AnnouncementModal } from "@/components/announcements/announcement-modal";
 
 function Router() {
   return (
@@ -28,6 +32,8 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/verify" component={VerifyOTPPage} />
       <Route path="/onboarding" component={OnboardingPage} />
+      <Route path="/admin/login" component={AdminLoginPage} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route path="/" component={Dashboard} />
       <Route path="/folder/:id" component={FolderDetail} />
       <Route path="/ideas" component={Ideas} />
@@ -50,9 +56,11 @@ function App() {
           <FikriOverlayProvider>
             <AuthGuard>
               <Toaster />
+              <TopBannerDisplay />
               <Router />
               <FikriOverlay />
               <TeaserBanner />
+              <AnnouncementModal />
             </AuthGuard>
           </FikriOverlayProvider>
         </TooltipProvider>

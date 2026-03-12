@@ -61,6 +61,18 @@ Users can add multiple Telegram bots or Slack webhooks as "integration channels"
 - Smart routing logic in `server/notifier.ts` (`processNewContentNotificationsForFolder`): checks folder mappings first, falls back to legacy settings
 - Settings UI: "التوجيه الذكي" card in Settings → Notifications tab with channel management and folder mapping
 
+### Admin Dashboard System
+
+A password-protected admin layer built on top of the OTP auth system. Key components:
+- **Auth flow**: Admin users (identified by `isAdmin` flag on `users` table) must enter a separate admin password after OTP login to access the dashboard. Session tracks `adminMode`.
+- **Database tables**: `announcements` (modal cards shown to users), `announcement_views` (per-user view tracking), `top_banners` (colored banners at top of app), `admin_audit_logs` (all admin actions logged)
+- **User fields**: `is_admin`, `admin_role` (super_admin/admin), `admin_password_hash` on `users` table
+- **Admin API routes**: All under `/api/admin/*` protected by `requireAdmin` middleware. Includes analytics, user management, announcement CRUD, banner CRUD, system settings management, admin management, and audit logs.
+- **Frontend pages**: `admin-login.tsx` (password entry), `admin-dashboard.tsx` (full dashboard with sidebar navigation and 7 panels: Analytics, Users, Announcements, Banners, System Settings, Admin Management, Audit Logs)
+- **User-facing components**: `AnnouncementModal` (shows unseen announcements as modal cards on app open), `TopBannerDisplay` (colored banner at top of app with optional link)
+- **Super admin**: `hylf.111@gmail.com` — password set via DB seed (change on first login via Admin Management panel)
+- **Shield icon**: Admin users see a shield icon in the header navigation linking to `/admin/login`
+
 ### Notification Pipeline
 
 - **Telegram Bot API**: For automated content notifications with HTML formatting.

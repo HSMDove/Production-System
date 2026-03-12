@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { t } from "@/i18n";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Sheet,
   SheetContent,
@@ -25,6 +26,7 @@ const navItems = [
 export function Header() {
   const [location] = useLocation();
   const { setOpen } = useFikriOverlay();
+  const { isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -84,6 +86,13 @@ export function Header() {
               <Settings className="h-4 w-4" />
             </Button>
           </Link>
+          {isAdmin && (
+            <Link href="/admin/login">
+              <Button variant="ghost" size="icon" data-testid="link-admin" title="لوحة التحكم">
+                <Shield className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
           <ThemeToggle />
         </nav>
 
@@ -145,6 +154,19 @@ export function Header() {
                     <span className="text-base">{t("nav.settings")}</span>
                   </Button>
                 </Link>
+                {isAdmin && (
+                  <Link href="/admin/login">
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start gap-3"
+                      onClick={() => setMobileMenuOpen(false)}
+                      data-testid="mobile-link-admin"
+                    >
+                      <Shield className="h-5 w-5" />
+                      <span className="text-base">لوحة التحكم</span>
+                    </Button>
+                  </Link>
+                )}
               </nav>
             </SheetContent>
           </Sheet>
