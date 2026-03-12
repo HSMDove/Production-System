@@ -233,6 +233,19 @@
     background-image: none !important;
   }
 
+  /* Content news cards — frosted glass effect */
+  .content-news-card {
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    background-color: hsl(var(--card) / 0.82) !important;
+    background-image: none !important;
+  }
+
+  .dark .content-news-card {
+    background-color: rgba(255, 255, 255, 0.07) !important;
+    border-color: hsl(var(--border) / 0.8) !important;
+  }
+
   /* Inputs — solid fill, distinct from card surface */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,

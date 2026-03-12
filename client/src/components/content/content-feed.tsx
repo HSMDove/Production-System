@@ -192,7 +192,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
   
   return (
     <Card 
-      className={`glass-surface rounded-[1.35rem] transition-all duration-300 hover:scale-[1.005] hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
+      className={`glass-surface content-news-card rounded-[1.35rem] transition-all duration-300 hover:scale-[1.005] hover:border-primary/30 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
