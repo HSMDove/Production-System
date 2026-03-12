@@ -1502,6 +1502,159 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Slack OAuth Flow ───────────────────────────────────────────────────
+  app.get("/api/integrations/slack/oauth/start", requireAuth, async (req, res) => {
+    try {
+      const clientId = process.env.SLACK_CLIENT_ID;
+      if (!clientId) return res.status(500).json({ error: "SLACK_CLIENT_ID غير مضبوط" });
+
+      const redirectUri = process.env.SLACK_REDIRECT_URI || `${req.protocol}://${req.get("host")}/api/integrations/slack/oauth/callback`;
+      const scopes = "channels:read,chat:write,channels:history,users:read";
+      const { randomBytes } = await import("crypto");
+      const nonce = randomBytes(24).toString("hex");
+      (req.session as any).slackOAuthState = nonce;
+      const slackUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${nonce}`;
+      res.json({ url: slackUrl });
+    } catch (error) {
+      console.error("[Slack OAuth] Start error:", error);
+      res.status(500).json({ error: "فشل بدء عملية الربط" });
+    }
+  });
+
+  app.get("/api/integrations/slack/oauth/callback", async (req, res) => {
+    try {
+      const { code, state } = req.query;
+      if (!code || !state) return res.status(400).send("Missing code or state");
+
+      const expectedState = (req.session as any).slackOAuthState;
+      if (!expectedState || expectedState !== state) {
+        console.error("[Slack OAuth] State mismatch — possible CSRF");
+        return res.redirect("/settings?slack_oauth=error&msg=state_mismatch");
+      }
+      delete (req.session as any).slackOAuthState;
+
+      if (!req.session.userId) {
+        return res.redirect("/settings?slack_oauth=error&msg=not_authenticated");
+      }
+
+      const clientId = process.env.SLACK_CLIENT_ID;
+      const clientSecret = process.env.SLACK_CLIENT_SECRET;
+      if (!clientId || !clientSecret) return res.status(500).send("OAuth not configured");
+
+      const redirectUri = process.env.SLACK_REDIRECT_URI || `${req.protocol}://${req.get("host")}/api/integrations/slack/oauth/callback`;
+
+      const tokenRes = await fetch("https://slack.com/api/oauth.v2.access", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code: code as string,
+          redirect_uri: redirectUri,
+        }),
+      });
+      const tokenData = await tokenRes.json() as any;
+
+      if (!tokenData.ok) {
+        console.error("[Slack OAuth] Token exchange failed:", tokenData.error);
+        return res.redirect(`/settings?slack_oauth=error&msg=${encodeURIComponent(tokenData.error || "unknown")}`);
+      }
+
+      const botToken = tokenData.access_token;
+      const teamName = tokenData.team?.name || "Slack Workspace";
+      const teamId = tokenData.team?.id || "";
+      const userId = req.session.userId;
+
+      await storage.createIntegrationChannel({
+        userId,
+        platform: "slack",
+        name: `${teamName} (OAuth)`,
+        credentials: { bot_token: botToken, team_id: teamId, team_name: teamName, connection_type: "oauth" },
+      });
+
+      console.log(`[Slack OAuth] Successfully connected workspace "${teamName}" for user ${userId}`);
+      res.redirect("/settings?slack_oauth=success");
+    } catch (error) {
+      console.error("[Slack OAuth] Callback error:", error);
+      res.redirect("/settings?slack_oauth=error");
+    }
+  });
+
+  app.get("/api/integrations/slack/channels", requireAuth, async (req, res) => {
+    try {
+      const userChannels = await storage.getIntegrationChannels(req.session.userId!);
+      const slackOAuthChannels = userChannels.filter(c => c.platform === "slack" && c.isActive);
+
+      let allSlackChannels: { id: string; name: string; topic?: string; memberCount?: number }[] = [];
+
+      for (const ch of slackOAuthChannels) {
+        const creds = storage.getDecryptedCredentials(ch);
+        const token = creds.bot_token;
+        if (!token) continue;
+
+        try {
+          let cursor: string | undefined;
+          do {
+            const params = new URLSearchParams({ types: "public_channel", limit: "200", exclude_archived: "true" });
+            if (cursor) params.set("cursor", cursor);
+
+            const listRes = await fetch(`https://slack.com/api/conversations.list?${params}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const listData = await listRes.json() as any;
+
+            if (listData.ok && listData.channels) {
+              for (const sc of listData.channels) {
+                if (!allSlackChannels.some(c => c.id === sc.id)) {
+                  allSlackChannels.push({
+                    id: sc.id,
+                    name: sc.name,
+                    topic: sc.topic?.value,
+                    memberCount: sc.num_members,
+                  });
+                }
+              }
+            }
+            cursor = listData.response_metadata?.next_cursor;
+          } while (cursor);
+        } catch (err) {
+          console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
+        }
+      }
+
+      const manualToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
+      if (manualToken) {
+        try {
+          const params = new URLSearchParams({ types: "public_channel", limit: "200", exclude_archived: "true" });
+          const listRes = await fetch(`https://slack.com/api/conversations.list?${params}`, {
+            headers: { Authorization: `Bearer ${manualToken}` },
+          });
+          const listData = await listRes.json() as any;
+          if (listData.ok && listData.channels) {
+            for (const sc of listData.channels) {
+              if (!allSlackChannels.some(c => c.id === sc.id)) {
+                allSlackChannels.push({
+                  id: sc.id,
+                  name: sc.name,
+                  topic: sc.topic?.value,
+                  memberCount: sc.num_members,
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[Slack] Failed to fetch channels from manual token:", err);
+        }
+      }
+
+      allSlackChannels.sort((a, b) => a.name.localeCompare(b.name));
+      res.json(allSlackChannels);
+    } catch (error) {
+      console.error("[Slack] Channels fetch error:", error);
+      res.status(500).json({ error: "فشل جلب قنوات Slack" });
+    }
+  });
+
   // ─── Telegram Incoming Webhook ───────────────────────────────────────────
   app.post("/api/integrations/telegram/webhook", async (req, res) => {
     try {
@@ -2553,9 +2706,10 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/integrations/channels", requireAuth, async (req, res) => {
     try {
       const channels = await storage.getIntegrationChannels(req.session.userId!);
+      const nonSensitiveKeys = ["connection_type", "team_name", "team_id"];
       const safe = channels.map(ch => ({
         ...ch,
-        credentials: Object.fromEntries(Object.keys(ch.credentials as Record<string, string>).map(k => [k, "••••••"])),
+        credentials: Object.fromEntries(Object.entries(ch.credentials as Record<string, string>).map(([k, v]) => [k, nonSensitiveKeys.includes(k) ? v : "••••••"])),
       }));
       res.json(safe);
     } catch (error) {
@@ -2602,7 +2756,8 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       if (isActive !== undefined) updates.isActive = isActive;
       const updated = await storage.updateIntegrationChannel(req.params.id, req.session.userId!, updates);
       if (!updated) return res.status(404).json({ error: "القناة غير موجودة" });
-      res.json({ ...updated, credentials: Object.fromEntries(Object.keys((updated.credentials as Record<string, string>)).map(k => [k, "••••••"])) });
+      const nonSensitiveKeys2 = ["connection_type", "team_name", "team_id"];
+      res.json({ ...updated, credentials: Object.fromEntries(Object.entries((updated.credentials as Record<string, string>)).map(([k, v]) => [k, nonSensitiveKeys2.includes(k) ? v : "••••••"])) });
     } catch (error) {
       res.status(500).json({ error: "فشل تعديل قناة الربط" });
     }
@@ -2654,7 +2809,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.post("/api/integrations/folder-mappings", requireAuth, async (req, res) => {
     try {
       const { folderId, integrationChannelId, targetId } = req.body;
-      if (!folderId || !integrationChannelId || !targetId) {
+      if (!folderId || !integrationChannelId || !targetId || (typeof targetId === "string" && !targetId.trim())) {
         return res.status(400).json({ error: "جميع الحقول مطلوبة: المجلد، قناة الربط، معرف القناة المستهدفة" });
       }
       const folder = await storage.getFolderById(folderId);

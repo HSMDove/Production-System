@@ -58,6 +58,32 @@ async function sendSlackMessage(
   }
 }
 
+async function sendSlackBotMessage(
+  botToken: string,
+  channelId: string,
+  message: string
+): Promise<boolean> {
+  try {
+    const response = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${botToken}`,
+      },
+      body: JSON.stringify({ channel: channelId, text: message }),
+    });
+    const data = await response.json() as any;
+    if (!data.ok) {
+      console.error("[Slack Bot] chat.postMessage failed:", data.error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("[Slack Bot] Error sending message:", error);
+    return false;
+  }
+}
+
 function markdownToTelegramHtml(text: string): string {
   const tokens: { start: number; end: number; replacement: string }[] = [];
   const addToken = (regex: RegExp, wrap: (inner: string) => string) => {
@@ -303,6 +329,28 @@ export async function broadcastSingleContent(contentId: string, userId: string):
     if (slackSent) channels.push("slack");
   }
 
+  if (slackEnabled) {
+    const contentFolder = await storage.getFolderByContentId(contentId);
+    if (contentFolder) {
+      const folderMappings = await storage.getMappingsForFolder(contentFolder.id, userId);
+      for (const mapping of folderMappings) {
+        try {
+          const channel = await storage.getActiveIntegrationChannelById(mapping.integrationChannelId, userId);
+          if (!channel || channel.platform !== "slack") continue;
+          const creds = storage.getDecryptedCredentials(channel);
+          const botToken = creds.bot_token || "";
+          if (botToken && mapping.targetId) {
+            const slackMsg = formatSlackMessage(contentItem, rewrittenText);
+            const slackSent = await sendSlackBotMessage(botToken, mapping.targetId, slackMsg);
+            if (slackSent && !channels.includes("slack")) channels.push("slack");
+          }
+        } catch (e) {
+          console.error(`[Broadcast] Slack mapping ${mapping.id} error:`, e);
+        }
+      }
+    }
+  }
+
   if (channels.length > 0) {
     await storage.markContentNotified(contentId);
     return { success: true, channels };
@@ -386,10 +434,18 @@ export async function processNewContentNotificationsForFolder(
             } else if (channel.platform === "slack") {
               const slackMsg = formatSlackMessage(contentItem, rewrittenText);
               const webhookUrl = creds.webhook_url || "";
-              if (webhookUrl) {
+              const botToken = creds.bot_token || "";
+
+              if (botToken && mapping.targetId) {
+                const slackSent = await sendSlackBotMessage(botToken, mapping.targetId, slackMsg);
+                if (slackSent) sent = true;
+                else errors.push(`Slack Bot (${channel.name}) failed for: ${contentItem.title}`);
+              } else if (webhookUrl) {
                 const slackSent = await sendSlackMessage(webhookUrl, slackMsg);
                 if (slackSent) sent = true;
                 else errors.push(`Slack (${channel.name}) failed for: ${contentItem.title}`);
+              } else {
+                errors.push(`Slack (${channel.name}): no bot_token or webhook_url configured`);
               }
             }
           } catch (mappingError) {

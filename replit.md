@@ -53,13 +53,14 @@ The design adopts an RTL-first approach, mirroring layouts for Arabic reading di
 
 ### Multi-Integration Smart Routing
 
-Users can add multiple Telegram bots or Slack webhooks as "integration channels", then map specific folders to specific channels. When new content arrives in a folder, the notifier checks for folder-channel mappings first (smart routing); if none exist, it falls back to the legacy global settings. Key components:
-- `integration_channels` table: stores platform, name, encrypted credentials (bot_token for Telegram, webhook_url for Slack), and active status
-- `folder_channel_mappings` table: maps a folder to an integration channel with a target ID (chat_id for Telegram, channel for Slack)
+Users can add multiple Telegram bots or Slack connections as "integration channels", then map specific folders to specific channels. When new content arrives in a folder, the notifier checks for folder-channel mappings first (smart routing); if none exist, it falls back to the legacy global settings. Key components:
+- `integration_channels` table: stores platform, name, encrypted credentials (bot_token for Telegram, bot_token/webhook_url for Slack), and active status
+- `folder_channel_mappings` table: maps a folder to an integration channel with a target ID (chat_id for Telegram, Slack channel ID for Slack)
 - Storage methods in `server/storage.ts`: full CRUD for channels and mappings with credential encryption via `encryptRawValue`/`decryptRawValue`
 - API routes: `GET/POST/PUT/DELETE /api/integrations/channels`, `POST /api/integrations/channels/:id/test`, `GET/POST/DELETE /api/integrations/folder-mappings`
-- Smart routing logic in `server/notifier.ts` (`processNewContentNotificationsForFolder`): checks folder mappings first, falls back to legacy settings
-- Settings UI: "التوجيه الذكي" card in Settings → Notifications tab with channel management and folder mapping
+- **Slack OAuth flow**: `GET /api/integrations/slack/oauth/start` (redirects to Slack auth), `GET /api/integrations/slack/oauth/callback` (exchanges code for bot_token, stores in integration_channels with `connection_type: "oauth"`), `GET /api/integrations/slack/channels` (fetches workspace channels via conversations.list from both OAuth and manual tokens). Requires `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, optional `SLACK_REDIRECT_URI` env vars.
+- Smart routing logic in `server/notifier.ts` (`processNewContentNotificationsForFolder`): checks folder mappings first, uses `chat.postMessage` for OAuth bot tokens or webhook for legacy, falls back to legacy settings
+- Settings UI: Slack section has "ربط تلقائي" (OAuth one-click) and "ربط يدوي" (manual setup) tabs. Folder mapping uses Slack channel dropdown (from API) instead of manual text input when Slack is selected.
 
 ### Admin Dashboard System
 
