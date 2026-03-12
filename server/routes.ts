@@ -1424,26 +1424,28 @@ export async function registerRoutes(
               .then(r => r.json() as Promise<any>)
               .then(info => {
                 if (info.ok && info.user) {
-                  const name = info.user.profile?.display_name
+                  return (info.user.profile?.display_name
                     || info.user.profile?.real_name
                     || info.user.real_name
-                    || info.user.name;
-                  console.log(`[Slack] Resolved sender name: "${name}"`);
-                  return name as string;
+                    || info.user.name) as string;
                 }
                 return undefined;
               })
               .catch((err: any) => { console.warn("[Slack] Failed to fetch user info:", err); return undefined; })
             : Promise.resolve(undefined);
 
-          const [senderDisplayName, conversation, result] = await Promise.all([
+          const [slackDisplayName, conversation] = await Promise.all([
             namePromise,
             storage.createAssistantConversation({
               title: `Slack - ${text.slice(0, 50)}`,
               userId: platformUser!.id,
             } as any),
-            runAssistantEngine(text, [], platformUser!.id, platformUser!.name || undefined),
           ]);
+
+          const senderDisplayName = slackDisplayName || (event as any).username || platformUser!.name || undefined;
+          if (senderDisplayName) console.log(`[Slack] Sender name: "${senderDisplayName}"`);
+
+          const result = await runAssistantEngine(text, [], platformUser!.id, senderDisplayName);
           console.log(`[Slack] AI response ready, action: ${result.action}`);
 
           await storage.createAssistantMessage({
