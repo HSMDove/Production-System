@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { initAppleEmoji } from "@/lib/apple-emoji";
 import Dashboard from "@/pages/dashboard";
 import FolderDetail from "@/pages/folder-detail";
@@ -56,22 +57,24 @@ function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="default-dark" storageKey="tech-voice-theme">
-        <TooltipProvider>
-          <FikriOverlayProvider>
-            <AuthGuard>
-              <Toaster />
-              <TopBannerDisplay />
-              <Router />
-              <FikriOverlay />
-              <WelcomeCards />
-              <AnnouncementModal />
-            </AuthGuard>
-          </FikriOverlayProvider>
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider defaultTheme="default-dark" storageKey="tech-voice-theme">
+          <TooltipProvider>
+            <FikriOverlayProvider>
+              <AuthGuard>
+                <Toaster />
+                <TopBannerDisplay />
+                <Router />
+                <FikriOverlay />
+                <WelcomeCards />
+                <AnnouncementModal />
+              </AuthGuard>
+            </FikriOverlayProvider>
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

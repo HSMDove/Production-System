@@ -22,69 +22,81 @@ function createEmojiImg(emoji: string): HTMLImageElement {
   img.draggable = false;
   img.loading = "lazy";
   img.onerror = () => {
-    const text = document.createTextNode(emoji);
-    img.replaceWith(text);
+    try {
+      const text = document.createTextNode(emoji);
+      img.replaceWith(text);
+    } catch {}
   };
   return img;
 }
 
 function processTextNode(node: Text) {
-  const text = node.textContent;
-  if (!text || !emojiRegex.test(text)) return;
+  try {
+    if (!node.parentNode || !node.isConnected) return;
+    const text = node.textContent;
+    if (!text || !emojiRegex.test(text)) return;
 
-  emojiRegex.lastIndex = 0;
-  const fragment = document.createDocumentFragment();
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
+    emojiRegex.lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
 
-  while ((match = emojiRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    while ((match = emojiRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      fragment.appendChild(createEmojiImg(match[0]));
+      lastIndex = emojiRegex.lastIndex;
     }
-    fragment.appendChild(createEmojiImg(match[0]));
-    lastIndex = emojiRegex.lastIndex;
-  }
 
-  if (lastIndex < text.length) {
-    fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
-  }
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
 
-  if (fragment.childNodes.length > 0) {
-    node.replaceWith(fragment);
+    if (fragment.childNodes.length > 0 && node.parentNode && node.isConnected) {
+      node.replaceWith(fragment);
+    }
+  } catch {}
+}
+
+function shouldSkipNode(node: Node): boolean {
+  const parent = node.parentElement;
+  if (!parent) return true;
+  const tag = parent.tagName;
+  if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "INPUT" || tag === "CODE" || tag === "PRE" || tag === "SELECT" || tag === "OPTION") {
+    return true;
   }
+  if (parent.classList.contains("apple-emoji") || parent.tagName === "IMG") {
+    return true;
+  }
+  if (parent.getAttribute("contenteditable") === "true") return true;
+  return false;
 }
 
 function walkAndReplace(root: Node) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const parent = node.parentElement;
-      if (!parent) return NodeFilter.FILTER_SKIP;
-      const tag = parent.tagName;
-      if (tag === "SCRIPT" || tag === "STYLE" || tag === "TEXTAREA" || tag === "INPUT" || tag === "CODE" || tag === "PRE") {
-        return NodeFilter.FILTER_SKIP;
-      }
-      if (parent.classList.contains("apple-emoji") || parent.tagName === "IMG") {
-        return NodeFilter.FILTER_SKIP;
-      }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
+  try {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return shouldSkipNode(node) ? NodeFilter.FILTER_SKIP : NodeFilter.FILTER_ACCEPT;
+      },
+    });
 
-  const textNodes: Text[] = [];
-  while (walker.nextNode()) {
-    textNodes.push(walker.currentNode as Text);
-  }
-  textNodes.forEach(processTextNode);
+    const textNodes: Text[] = [];
+    while (walker.nextNode()) {
+      textNodes.push(walker.currentNode as Text);
+    }
+    textNodes.forEach(processTextNode);
+  } catch {}
 }
 
 let observer: MutationObserver | null = null;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let rafId: number | null = null;
 const pendingNodes = new Set<Node>();
 
 export function initAppleEmoji() {
   if (observer) return;
 
-  walkAndReplace(document.body);
+  setTimeout(() => walkAndReplace(document.body), 100);
 
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -94,27 +106,32 @@ export function initAppleEmoji() {
             pendingNodes.add(node);
           }
         });
-      } else if (mutation.type === "characterData" && mutation.target.nodeType === Node.TEXT_NODE) {
-        pendingNodes.add(mutation.target);
       }
     }
 
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      pendingNodes.forEach((node) => {
-        if (node.nodeType === Node.TEXT_NODE) {
-          processTextNode(node as Text);
-        } else if (node.nodeType === Node.ELEMENT_NODE) {
-          walkAndReplace(node);
-        }
-      });
+    if (pendingNodes.size === 0) return;
+
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      const nodes = Array.from(pendingNodes);
       pendingNodes.clear();
-    }, 50);
+      rafId = null;
+
+      for (const node of nodes) {
+        if (!node.isConnected) continue;
+        try {
+          if (node.nodeType === Node.TEXT_NODE) {
+            processTextNode(node as Text);
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            walkAndReplace(node);
+          }
+        } catch {}
+      }
+    });
   });
 
   observer.observe(document.body, {
     childList: true,
     subtree: true,
-    characterData: true,
   });
 }

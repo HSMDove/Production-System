@@ -890,6 +890,30 @@ export default function Settings() {
                               </Button>
                             </div>
                           )}
+
+                          <div className="rounded-lg border p-3 space-y-2">
+                            <p className="text-xs font-semibold text-muted-foreground">ربط معرّفك بنَسَق (Member ID)</p>
+                            <p className="text-[11px] text-muted-foreground">عشان فكري يعرفك في Slack، أضف الـ Member ID حقك. فكري بيعطيك إياه لو كلمته وأنت مو مربوط.</p>
+                            {slackIds.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {slackIds.map((entry) => (
+                                  <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-auto-${entry.id}`}>
+                                    {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
+                                    <button className="hover:text-destructive transition-colors" onClick={() => deletePlatformIdMutation.mutate(entry.id)}>
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <Input placeholder="مثال: U0123456789" value={newSlackId} onChange={(e) => setNewSlackId(e.target.value)} dir="ltr" className="font-mono text-xs" disabled={!slackEnabled} data-testid="input-new-slack-id-auto" />
+                              <Input placeholder="تسمية (اختياري)" value={newSlackLabel} onChange={(e) => setNewSlackLabel(e.target.value)} className="max-w-[140px] text-xs" disabled={!slackEnabled} data-testid="input-new-slack-label-auto" />
+                              <Button variant="outline" size="icon" className="shrink-0" disabled={!newSlackId.trim() || addPlatformIdMutation.isPending || !slackEnabled} onClick={() => addPlatformIdMutation.mutate({ platform: "slack", platformId: newSlackId.trim(), label: newSlackLabel.trim() || undefined })} data-testid="button-add-slack-id-auto">
+                                {addPlatformIdMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       )}
 
