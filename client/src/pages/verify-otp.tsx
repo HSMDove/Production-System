@@ -3,10 +3,10 @@ import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/hooks/use-auth";
+import { FloatingDotsBg } from "@/components/auth/floating-dots-bg";
 
 export default function VerifyOTPPage() {
   const [, navigate] = useLocation();
@@ -98,14 +98,16 @@ export default function VerifyOTPPage() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
+    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+      <FloatingDotsBg />
+
+      <div className="w-full max-w-sm space-y-6 relative z-10">
         <div className="text-center space-y-2">
           <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
           <p className="text-muted-foreground text-sm font-semibold">تحقق من بريدك</p>
         </div>
 
-        <div className="card bg-card p-6 space-y-6">
+        <div className="card bg-card/80 backdrop-blur-xl p-6 space-y-6 border border-border/50 shadow-xl">
         <div className="text-center space-y-1">
           <p className="text-muted-foreground text-sm">
             أرسلنا رمزاً مكوناً من 6 أرقام إلى
@@ -113,9 +115,9 @@ export default function VerifyOTPPage() {
           <p className="text-sm font-medium text-primary" dir="ltr">{email}</p>
         </div>
 
-        <div className="flex gap-2 justify-center" dir="ltr" onPaste={handlePaste}>
+        <div className="flex gap-2.5 justify-center" dir="ltr" onPaste={handlePaste}>
           {digits.map((digit, i) => (
-            <Input
+            <input
               key={i}
               ref={(el) => { inputRefs.current[i] = el; }}
               type="text"
@@ -124,10 +126,11 @@ export default function VerifyOTPPage() {
               value={digit}
               onChange={(e) => handleDigitChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-12 h-14 text-center text-2xl font-bold p-0 flex items-center justify-center"
               disabled={verifyMutation.isPending}
               data-testid={`input-otp-digit-${i}`}
               autoFocus={i === 0}
+              className="w-12 h-14 rounded-lg border-2 border-border bg-background text-center text-2xl font-black text-foreground outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ caretColor: "transparent" }}
             />
           ))}
         </div>

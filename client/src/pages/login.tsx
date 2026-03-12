@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bot, Mail, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { FloatingDotsBg } from "@/components/auth/floating-dots-bg";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -46,10 +47,11 @@ export default function LoginPage() {
   return (
     <div
       dir="rtl"
-      className="min-h-screen flex items-center justify-center bg-background px-4"
+      className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden"
     >
-      <div className="w-full max-w-sm space-y-6">
-        {/* Logo & Title */}
+      <FloatingDotsBg />
+
+      <div className="w-full max-w-sm space-y-6 relative z-10">
         <div className="text-center space-y-2">
           <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
           <p className="text-muted-foreground text-sm font-semibold">
@@ -57,8 +59,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Form — Neo-Brutalist Card */}
-        <div className="card bg-card p-6 space-y-4">
+        <div className="card bg-card/80 backdrop-blur-xl p-6 space-y-4 border border-border/50 shadow-xl">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email-input">
