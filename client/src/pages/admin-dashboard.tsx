@@ -694,7 +694,7 @@ function TicketsPanel() {
 
   type AdminTicket = {
     id: string; userId: string; title: string; description: string;
-    imageUrls: string[] | null; status: string; createdAt: string; updatedAt: string;
+    imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string;
     userEmail: string; userName: string;
   };
   type Reply = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
@@ -710,6 +710,8 @@ function TicketsPanel() {
     in_progress: { label: "جارٍ العمل عليها", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
     resolved: { label: "تم العمل عليها", color: "bg-green-500/20 text-green-400 border-green-500/30" },
   };
+
+  const categoryMap: Record<string, string> = { complaint: "شكوى", suggestion: "اقتراح" };
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) =>
@@ -740,7 +742,12 @@ function TicketsPanel() {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <h2 className="text-xl font-bold">{detail.ticket.title}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold">{detail.ticket.title}</h2>
+              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                {categoryMap[detail.ticket.category] || detail.ticket.category}
+              </span>
+            </div>
             <p className="text-sm text-muted-foreground">
               {detail.ticket.userEmail} — {new Date(detail.ticket.createdAt).toLocaleDateString("ar-SA")}
             </p>
@@ -825,7 +832,12 @@ function TicketsPanel() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{t.title}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{t.title}</p>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                      {categoryMap[t.category] || t.category}
+                    </span>
+                  </div>
                   <p className="text-sm text-muted-foreground mt-1">{t.userEmail}</p>
                   <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                     <Clock className="h-3 w-3" />

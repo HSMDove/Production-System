@@ -76,6 +76,7 @@ import {
   type SupportTicket,
   type InsertSupportTicket,
   type TicketStatus,
+  type TicketCategory,
   ticketReplies,
   type TicketReply,
 } from "@shared/schema";

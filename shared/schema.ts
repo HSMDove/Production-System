@@ -553,12 +553,16 @@ export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 export const ticketStatuses = ["open", "in_progress", "resolved"] as const;
 export type TicketStatus = typeof ticketStatuses[number];
 
+export const ticketCategories = ["complaint", "suggestion"] as const;
+export type TicketCategory = typeof ticketCategories[number];
+
 export const supportTickets = pgTable("support_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description").notNull(),
   imageUrls: text("image_urls").array(),
+  category: text("category").notNull().$type<TicketCategory>().default("complaint"),
   status: text("status").notNull().$type<TicketStatus>().default("open"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

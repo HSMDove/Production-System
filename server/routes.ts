@@ -3216,22 +3216,25 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   const createTicketSchema = z.object({
     title: z.string().min(1, "العنوان مطلوب"),
     description: z.string().min(1, "الوصف مطلوب"),
+    category: z.enum(["complaint", "suggestion"]).default("complaint"),
     imageUrls: z.array(z.string()).optional(),
   });
 
   app.post("/api/tickets", requireAuth, async (req, res) => {
     try {
       const parsed = createTicketSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة", details: parsed.error.issues });
       const ticket = await storage.createTicket({
         userId: req.session.userId!,
         title: parsed.data.title,
         description: parsed.data.description,
+        category: parsed.data.category,
         imageUrls: parsed.data.imageUrls || null,
         status: "open",
       });
       res.json(ticket);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Ticket creation error:", error?.message || error);
       res.status(500).json({ error: "فشل إنشاء التذكرة" });
     }
   });

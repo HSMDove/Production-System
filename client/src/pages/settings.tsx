@@ -63,6 +63,7 @@ export default function Settings() {
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketTitle, setTicketTitle] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
+  const [ticketCategory, setTicketCategory] = useState<"complaint" | "suggestion">("complaint");
   const [ticketImages, setTicketImages] = useState<string[]>([]);
   const [showMyTickets, setShowMyTickets] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -123,7 +124,7 @@ export default function Settings() {
     onError: () => toast({ title: "خطأ", description: "فشل اختبار بوت Slack", variant: "destructive" }),
   });
 
-  type TicketEntry = { id: string; title: string; description: string; imageUrls: string[] | null; status: string; createdAt: string; updatedAt: string };
+  type TicketEntry = { id: string; title: string; description: string; imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string };
   type TicketReplyEntry = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
 
   const { data: myTickets } = useQuery<TicketEntry[]>({ queryKey: ["/api/tickets"], enabled: showMyTickets });
@@ -133,12 +134,14 @@ export default function Settings() {
     mutationFn: async () => apiRequest("POST", "/api/tickets", {
       title: ticketTitle,
       description: ticketDescription,
+      category: ticketCategory,
       imageUrls: ticketImages.length > 0 ? ticketImages : undefined,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
       setTicketTitle("");
       setTicketDescription("");
+      setTicketCategory("complaint");
       setTicketImages([]);
       setShowTicketForm(false);
       setShowMyTickets(true);
@@ -175,6 +178,11 @@ export default function Settings() {
     open: { label: "خامل", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
     in_progress: { label: "جارٍ العمل عليها", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
     resolved: { label: "تم العمل عليها", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+  };
+
+  const categoryLabels: Record<string, string> = {
+    complaint: "شكوى",
+    suggestion: "اقتراح",
   };
 
   const addPlatformIdMutation = useMutation({
@@ -425,21 +433,44 @@ export default function Settings() {
                 {showTicketForm && (
                   <div className="space-y-3">
                     <div>
-                      <Label>عنوان المشكلة</Label>
+                      <Label>نوع الرسالة</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Button
+                          variant={ticketCategory === "complaint" ? "default" : "outline"}
+                          className="flex-1 gap-2"
+                          onClick={() => setTicketCategory("complaint")}
+                          data-testid="button-category-complaint"
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                          شكوى
+                        </Button>
+                        <Button
+                          variant={ticketCategory === "suggestion" ? "default" : "outline"}
+                          className="flex-1 gap-2"
+                          onClick={() => setTicketCategory("suggestion")}
+                          data-testid="button-category-suggestion"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          اقتراح
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>العنوان</Label>
                       <Input
                         value={ticketTitle}
                         onChange={(e) => setTicketTitle(e.target.value)}
-                        placeholder="مثال: مشكلة في حفظ المحتوى"
+                        placeholder={ticketCategory === "complaint" ? "مثال: مشكلة في حفظ المحتوى" : "مثال: إضافة ميزة التصدير"}
                         className="mt-1"
                         data-testid="input-ticket-title"
                       />
                     </div>
                     <div>
-                      <Label>وصف المشكلة</Label>
+                      <Label>{ticketCategory === "complaint" ? "وصف المشكلة" : "وصف الاقتراح"}</Label>
                       <Textarea
                         value={ticketDescription}
                         onChange={(e) => setTicketDescription(e.target.value)}
-                        placeholder="اشرح المشكلة بالتفصيل..."
+                        placeholder={ticketCategory === "complaint" ? "اشرح المشكلة بالتفصيل..." : "اشرح اقتراحك بالتفصيل..."}
                         className="mt-1 min-h-[120px]"
                         data-testid="input-ticket-description"
                       />
@@ -484,7 +515,7 @@ export default function Settings() {
                         {createTicketMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         إرسال
                       </Button>
-                      <Button variant="outline" onClick={() => { setShowTicketForm(false); setTicketTitle(""); setTicketDescription(""); setTicketImages([]); }} data-testid="button-cancel-ticket">
+                      <Button variant="outline" onClick={() => { setShowTicketForm(false); setTicketTitle(""); setTicketDescription(""); setTicketCategory("complaint"); setTicketImages([]); }} data-testid="button-cancel-ticket">
                         إلغاء
                       </Button>
                     </div>
@@ -518,7 +549,12 @@ export default function Settings() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{t.title}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm truncate">{t.title}</p>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                  {categoryLabels[t.category] || t.category}
+                                </span>
+                              </div>
                               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {new Date(t.createdAt).toLocaleDateString("ar-SA")}
