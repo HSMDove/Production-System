@@ -1577,14 +1577,26 @@ export async function registerRoutes(
       const teamId = tokenData.team?.id || "";
       const userId = req.session.userId;
 
-      await storage.createIntegrationChannel({
-        userId,
-        platform: "slack",
-        name: `${teamName} (OAuth)`,
-        credentials: { bot_token: botToken, team_id: teamId, team_name: teamName, connection_type: "oauth" },
+      const existingChannels = await storage.getIntegrationChannels(userId!);
+      const existingOAuth = existingChannels.find(ch => {
+        const creds = storage.getDecryptedCredentials(ch);
+        return ch.platform === "slack" && creds.connection_type === "oauth" && creds.team_id === teamId;
       });
 
-      console.log(`[Slack OAuth] Successfully connected workspace "${teamName}" for user ${userId}`);
+      if (existingOAuth) {
+        await storage.updateIntegrationChannel(existingOAuth.id, userId!, {
+          credentials: { bot_token: botToken, team_id: teamId, team_name: teamName, connection_type: "oauth" },
+        });
+        console.log(`[Slack OAuth] Updated existing connection for workspace "${teamName}" user ${userId}`);
+      } else {
+        await storage.createIntegrationChannel({
+          userId,
+          platform: "slack",
+          name: `${teamName} (OAuth)`,
+          credentials: { bot_token: botToken, team_id: teamId, team_name: teamName, connection_type: "oauth" },
+        });
+        console.log(`[Slack OAuth] New connection for workspace "${teamName}" user ${userId}`);
+      }
       res.redirect("/settings?slack_oauth=success");
     } catch (error) {
       console.error("[Slack OAuth] Callback error:", error);
@@ -2729,10 +2741,14 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     try {
       const channels = await storage.getIntegrationChannels(req.session.userId!);
       const nonSensitiveKeys = ["connection_type", "team_name", "team_id"];
-      const safe = channels.map(ch => ({
-        ...ch,
-        credentials: Object.fromEntries(Object.entries(ch.credentials as Record<string, string>).map(([k, v]) => [k, nonSensitiveKeys.includes(k) ? v : "••••••"])),
-      }));
+      const safe = channels.map(ch => {
+        const decrypted = storage.getDecryptedCredentials(ch);
+        const masked: Record<string, string> = {};
+        for (const [k, v] of Object.entries(decrypted)) {
+          masked[k] = nonSensitiveKeys.includes(k) ? v : "••••••";
+        }
+        return { ...ch, credentials: masked };
+      });
 
       const manualBotToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
       if (manualBotToken) {
