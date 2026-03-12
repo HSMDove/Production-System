@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+img.apple-emoji {
+  display: inline-block;
+  height: 1.2em;
+  width: 1.2em;
+  vertical-align: -0.2em;
+  margin: 0 0.05em;
+  object-fit: contain;
+}
+
 .bidi-text {
   unicode-bidi: plaintext;
   direction: auto;
