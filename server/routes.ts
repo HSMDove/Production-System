@@ -1582,68 +1582,78 @@ export async function registerRoutes(
 
   app.get("/api/integrations/slack/channels", requireAuth, async (req, res) => {
     try {
-      const userChannels = await storage.getIntegrationChannels(req.session.userId!);
-      const slackOAuthChannels = userChannels.filter(c => c.platform === "slack" && c.isActive);
-
+      const integrationChannelId = req.query.integrationChannelId as string | undefined;
       let allSlackChannels: { id: string; name: string; topic?: string; memberCount?: number }[] = [];
 
-      for (const ch of slackOAuthChannels) {
-        const creds = storage.getDecryptedCredentials(ch);
-        const token = creds.bot_token;
-        if (!token) continue;
-
-        try {
-          let cursor: string | undefined;
-          do {
-            const params = new URLSearchParams({ types: "public_channel", limit: "200", exclude_archived: "true" });
-            if (cursor) params.set("cursor", cursor);
-
-            const listRes = await fetch(`https://slack.com/api/conversations.list?${params}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            const listData = await listRes.json() as any;
-
-            if (listData.ok && listData.channels) {
-              for (const sc of listData.channels) {
-                if (!allSlackChannels.some(c => c.id === sc.id)) {
-                  allSlackChannels.push({
-                    id: sc.id,
-                    name: sc.name,
-                    topic: sc.topic?.value,
-                    memberCount: sc.num_members,
-                  });
-                }
-              }
-            }
-            cursor = listData.response_metadata?.next_cursor;
-          } while (cursor);
-        } catch (err) {
-          console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
-        }
-      }
-
-      const manualToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
-      if (manualToken) {
-        try {
+      async function fetchChannelsForToken(token: string) {
+        const channels: typeof allSlackChannels = [];
+        let cursor: string | undefined;
+        do {
           const params = new URLSearchParams({ types: "public_channel", limit: "200", exclude_archived: "true" });
+          if (cursor) params.set("cursor", cursor);
           const listRes = await fetch(`https://slack.com/api/conversations.list?${params}`, {
-            headers: { Authorization: `Bearer ${manualToken}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
           const listData = await listRes.json() as any;
           if (listData.ok && listData.channels) {
             for (const sc of listData.channels) {
-              if (!allSlackChannels.some(c => c.id === sc.id)) {
-                allSlackChannels.push({
-                  id: sc.id,
-                  name: sc.name,
-                  topic: sc.topic?.value,
-                  memberCount: sc.num_members,
-                });
+              if (!channels.some(c => c.id === sc.id)) {
+                channels.push({ id: sc.id, name: sc.name, topic: sc.topic?.value, memberCount: sc.num_members });
               }
             }
           }
-        } catch (err) {
-          console.warn("[Slack] Failed to fetch channels from manual token:", err);
+          cursor = listData.response_metadata?.next_cursor;
+        } while (cursor);
+        return channels;
+      }
+
+      if (integrationChannelId === "manual-slack") {
+        const manualToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
+        if (manualToken) {
+          try {
+            allSlackChannels = await fetchChannelsForToken(manualToken);
+          } catch (err) {
+            console.warn("[Slack] Failed to fetch channels from manual token:", err);
+          }
+        }
+      } else if (integrationChannelId) {
+        const ch = await storage.getActiveIntegrationChannelById(integrationChannelId, req.session.userId!);
+        if (ch && ch.platform === "slack") {
+          const creds = storage.getDecryptedCredentials(ch);
+          if (creds.bot_token) {
+            try {
+              allSlackChannels = await fetchChannelsForToken(creds.bot_token);
+            } catch (err) {
+              console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
+            }
+          }
+        }
+      } else {
+        const userChannels = await storage.getIntegrationChannels(req.session.userId!);
+        const slackChannels = userChannels.filter(c => c.platform === "slack" && c.isActive);
+        for (const ch of slackChannels) {
+          const creds = storage.getDecryptedCredentials(ch);
+          if (creds.bot_token) {
+            try {
+              const fetched = await fetchChannelsForToken(creds.bot_token);
+              for (const sc of fetched) {
+                if (!allSlackChannels.some(c => c.id === sc.id)) allSlackChannels.push(sc);
+              }
+            } catch (err) {
+              console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
+            }
+          }
+        }
+        const manualToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
+        if (manualToken) {
+          try {
+            const fetched = await fetchChannelsForToken(manualToken);
+            for (const sc of fetched) {
+              if (!allSlackChannels.some(c => c.id === sc.id)) allSlackChannels.push(sc);
+            }
+          } catch (err) {
+            console.warn("[Slack] Failed to fetch channels from manual token:", err);
+          }
         }
       }
 
@@ -2711,6 +2721,23 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         ...ch,
         credentials: Object.fromEntries(Object.entries(ch.credentials as Record<string, string>).map(([k, v]) => [k, nonSensitiveKeys.includes(k) ? v : "••••••"])),
       }));
+
+      const manualBotToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
+      if (manualBotToken) {
+        const alreadyHasManual = safe.some(c => c.id === "manual-slack");
+        if (!alreadyHasManual) {
+          safe.push({
+            id: "manual-slack",
+            userId: req.session.userId!,
+            platform: "slack",
+            name: "Slack (إعدادات يدوية)",
+            credentials: { bot_token: "••••••", connection_type: "manual" },
+            isActive: true,
+            createdAt: new Date(),
+          } as any);
+        }
+      }
+
       res.json(safe);
     } catch (error) {
       res.status(500).json({ error: "فشل جلب قنوات الربط" });
@@ -2816,12 +2843,34 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       if (!folder || folder.userId !== req.session.userId) {
         return res.status(404).json({ error: "المجلد غير موجود" });
       }
-      const channel = await storage.getIntegrationChannelById(integrationChannelId, req.session.userId!);
+      let resolvedChannelId = integrationChannelId;
+      if (integrationChannelId === "manual-slack") {
+        const manualBotToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;
+        const manualWebhook = (await storage.getSetting("slack_webhook_url", req.session.userId!))?.value;
+        if (!manualBotToken && !manualWebhook) {
+          return res.status(400).json({ error: "لا يوجد بوت Slack يدوي مضبوط في الإعدادات" });
+        }
+        const existingChannels = await storage.getIntegrationChannels(req.session.userId!);
+        let manualChannel = existingChannels.find(c => c.platform === "slack" && (c.credentials as any)?.connection_type === "manual-settings");
+        if (!manualChannel) {
+          const creds: Record<string, string> = { connection_type: "manual-settings" };
+          if (manualBotToken) creds.bot_token = manualBotToken;
+          if (manualWebhook) creds.webhook_url = manualWebhook;
+          manualChannel = await storage.createIntegrationChannel({
+            userId: req.session.userId!,
+            platform: "slack",
+            name: "Slack (إعدادات يدوية)",
+            credentials: creds,
+          });
+        }
+        resolvedChannelId = manualChannel.id;
+      }
+      const channel = await storage.getIntegrationChannelById(resolvedChannelId, req.session.userId!);
       if (!channel) return res.status(404).json({ error: "قناة الربط غير موجودة" });
       const mapping = await storage.createFolderChannelMapping({
         userId: req.session.userId!,
         folderId,
-        integrationChannelId,
+        integrationChannelId: resolvedChannelId,
         targetId: targetId.trim(),
       });
       res.json(mapping);

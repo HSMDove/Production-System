@@ -392,7 +392,13 @@ export default function Settings() {
   const telegramEnabled = localSettings.telegram_enabled === "true";
   const slackEnabled = localSettings.slack_enabled === "true";
 
-  const { data: slackChannels } = useQuery<SlackChannel[]>({ queryKey: ["/api/integrations/slack/channels"], enabled: slackEnabled });
+  const selectedMappingChannel = (integrationChannels || []).find(c => c.id === newMappingChannelId);
+  const isSlackMapping = selectedMappingChannel?.platform === "slack";
+  const { data: slackChannels } = useQuery<SlackChannel[]>({
+    queryKey: ["/api/integrations/slack/channels", newMappingChannelId],
+    queryFn: () => fetch(`/api/integrations/slack/channels?integrationChannelId=${encodeURIComponent(newMappingChannelId)}`, { credentials: "include" }).then(r => r.json()),
+    enabled: slackEnabled && isSlackMapping && !!newMappingChannelId,
+  });
 
   const themeOptions = useMemo(() => ([
     { value: "default", label: "الأساسي", color: "#F7CB46" },
@@ -1116,7 +1122,7 @@ export default function Settings() {
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">قناة الربط</Label>
-                          <Select value={newMappingChannelId} onValueChange={setNewMappingChannelId}>
+                          <Select value={newMappingChannelId} onValueChange={(v) => { setNewMappingChannelId(v); setNewMappingTargetId(""); }}>
                             <SelectTrigger data-testid="select-mapping-channel"><SelectValue placeholder="اختر قناة" /></SelectTrigger>
                             <SelectContent>
                               {(integrationChannels || []).filter(c => c.isActive).map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.platform === "telegram" ? "تيليجرام" : "سلاك"})</SelectItem>)}
