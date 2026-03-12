@@ -55,6 +55,12 @@ import {
   type TrainingSample,
   type InsertTrainingSample,
   type TrainingSampleType,
+  integrationChannels,
+  type IntegrationChannel,
+  type InsertIntegrationChannel,
+  folderChannelMappings,
+  type FolderChannelMapping,
+  type InsertFolderChannelMapping,
 } from "@shared/schema";
 
 const ENCRYPTED_PREFIX = "enc:v1:";
@@ -97,6 +103,29 @@ function decryptIfNeeded(key: string, value: string | null): string | null {
     return decrypted.toString("utf8");
   } catch {
     return null;
+  }
+}
+
+function encryptRawValue(value: string): string {
+  if (value.startsWith(ENCRYPTED_PREFIX)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${ENCRYPTED_PREFIX}${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptRawValue(value: string): string {
+  if (!value.startsWith(ENCRYPTED_PREFIX)) return value;
+  try {
+    const payload = value.slice(ENCRYPTED_PREFIX.length);
+    const [ivB64, tagB64, dataB64] = payload.split(":");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", getEncryptionKey(), Buffer.from(ivB64, "base64"));
+    decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+    const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]);
+    return decrypted.toString("utf8");
+  } catch {
+    return value;
   }
 }
 
@@ -789,6 +818,89 @@ export class DatabaseStorage implements IStorage {
   // ─── User Activity ─────────────────────────────────────────────────────────
   async updateUserLastActive(userId: string): Promise<void> {
     await db.update(users).set({ lastActiveAt: new Date() } as any).where(eq(users.id, userId));
+  }
+
+  // ─── Integration Channels ──────────────────────────────────────────────────
+  async getIntegrationChannels(userId: string): Promise<IntegrationChannel[]> {
+    return db.select().from(integrationChannels).where(eq(integrationChannels.userId, userId)).orderBy(desc(integrationChannels.createdAt));
+  }
+
+  async getIntegrationChannelById(id: string, userId: string): Promise<IntegrationChannel | undefined> {
+    const [channel] = await db.select().from(integrationChannels).where(and(eq(integrationChannels.id, id), eq(integrationChannels.userId, userId)));
+    return channel;
+  }
+
+  async createIntegrationChannel(data: { userId: string; platform: string; name: string; credentials: Record<string, string> }): Promise<IntegrationChannel> {
+    const encryptedCreds: Record<string, string> = {};
+    for (const [k, v] of Object.entries(data.credentials)) {
+      encryptedCreds[k] = encryptRawValue(v);
+    }
+    const [created] = await db.insert(integrationChannels).values({
+      userId: data.userId,
+      platform: data.platform,
+      name: data.name,
+      credentials: encryptedCreds,
+      isActive: true,
+    } as any).returning();
+    return created;
+  }
+
+  async updateIntegrationChannel(id: string, userId: string, updates: { name?: string; credentials?: Record<string, string>; isActive?: boolean }): Promise<IntegrationChannel | undefined> {
+    const setData: any = {};
+    if (updates.name !== undefined) setData.name = updates.name;
+    if (updates.isActive !== undefined) setData.isActive = updates.isActive;
+    if (updates.credentials) {
+      const encryptedCreds: Record<string, string> = {};
+      for (const [k, v] of Object.entries(updates.credentials)) {
+        encryptedCreds[k] = encryptRawValue(v);
+      }
+      setData.credentials = encryptedCreds;
+    }
+    const [updated] = await db.update(integrationChannels).set(setData).where(and(eq(integrationChannels.id, id), eq(integrationChannels.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteIntegrationChannel(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(integrationChannels).where(and(eq(integrationChannels.id, id), eq(integrationChannels.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  getDecryptedCredentials(channel: IntegrationChannel): Record<string, string> {
+    const decrypted: Record<string, string> = {};
+    const creds = channel.credentials as Record<string, string>;
+    for (const [k, v] of Object.entries(creds)) {
+      decrypted[k] = decryptRawValue(v);
+    }
+    return decrypted;
+  }
+
+  // ─── Folder-Channel Mappings ───────────────────────────────────────────────
+  async getFolderChannelMappings(userId: string): Promise<FolderChannelMapping[]> {
+    return db.select().from(folderChannelMappings).where(eq(folderChannelMappings.userId, userId));
+  }
+
+  async getMappingsForFolder(folderId: string, userId?: string): Promise<FolderChannelMapping[]> {
+    if (userId) {
+      return db.select().from(folderChannelMappings).where(and(eq(folderChannelMappings.folderId, folderId), eq(folderChannelMappings.userId, userId)));
+    }
+    return db.select().from(folderChannelMappings).where(eq(folderChannelMappings.folderId, folderId));
+  }
+
+  async createFolderChannelMapping(data: { userId: string; folderId: string; integrationChannelId: string; targetId: string }): Promise<FolderChannelMapping> {
+    const [created] = await db.insert(folderChannelMappings).values(data as any).returning();
+    return created;
+  }
+
+  async deleteFolderChannelMapping(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(folderChannelMappings).where(and(eq(folderChannelMappings.id, id), eq(folderChannelMappings.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getActiveIntegrationChannelById(id: string, userId?: string): Promise<IntegrationChannel | undefined> {
+    const conditions = [eq(integrationChannels.id, id), eq(integrationChannels.isActive, true)];
+    if (userId) conditions.push(eq(integrationChannels.userId, userId));
+    const [channel] = await db.select().from(integrationChannels).where(and(...conditions));
+    return channel;
   }
 }
 

@@ -441,3 +441,43 @@ export const apiUsageLogs = pgTable("api_usage_logs", {
 
 export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
 export type InsertApiUsageLog = typeof apiUsageLogs.$inferInsert;
+
+// Integration Channels — multiple Slack/Telegram bots per user
+export const integrationPlatforms = ["slack", "telegram"] as const;
+export type IntegrationPlatform = typeof integrationPlatforms[number];
+
+export const integrationChannels = pgTable("integration_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  platform: text("platform").notNull().$type<IntegrationPlatform>(),
+  name: text("name").notNull(),
+  credentials: jsonb("credentials").notNull().$type<Record<string, string>>(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertIntegrationChannelSchema = createInsertSchema(integrationChannels).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type IntegrationChannel = typeof integrationChannels.$inferSelect;
+export type InsertIntegrationChannel = z.infer<typeof insertIntegrationChannelSchema>;
+
+// Folder-Channel Mappings — route folder updates to specific channels
+export const folderChannelMappings = pgTable("folder_channel_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  folderId: varchar("folder_id").notNull().references(() => folders.id, { onDelete: "cascade" }),
+  integrationChannelId: varchar("integration_channel_id").notNull().references(() => integrationChannels.id, { onDelete: "cascade" }),
+  targetId: text("target_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFolderChannelMappingSchema = createInsertSchema(folderChannelMappings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type FolderChannelMapping = typeof folderChannelMappings.$inferSelect;
+export type InsertFolderChannelMapping = z.infer<typeof insertFolderChannelMappingSchema>;

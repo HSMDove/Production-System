@@ -28,7 +28,7 @@ AI-powered source discovery assistant. Found in:
 
 ### Data Storage
 
-The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for type-safe queries and schema management. The schema includes tables for `folders`, `sources`, `content`, `ideas`, `settings`, `prompt_templates` (renamed to "Content Templates" in UI), `idea_comments`, `idea_assignments`, `style_examples`, and `training_samples`. This design supports multi-tenancy by scoping resources like folders, ideas, and conversations by user ID. The `content` table includes a `usedForIdeas` flag to prevent duplicate use of news items for AI generation.
+The application uses PostgreSQL hosted on Neon, accessed via Drizzle ORM for type-safe queries and schema management. The schema includes tables for `folders`, `sources`, `content`, `ideas`, `settings`, `prompt_templates` (renamed to "Content Templates" in UI), `idea_comments`, `idea_assignments`, `style_examples`, `training_samples`, `integration_channels`, and `folder_channel_mappings`. This design supports multi-tenancy by scoping resources like folders, ideas, and conversations by user ID. The `content` table includes a `usedForIdeas` flag to prevent duplicate use of news items for AI generation.
 
 ### Fikri 2.0 Personal Training System
 
@@ -50,6 +50,16 @@ The design adopts an RTL-first approach, mirroring layouts for Arabic reading di
 
 - **OpenAI API**: Used for all AI functionalities including content rewriting, summarization, translation, explanation, and video idea generation. The architecture is provider-agnostic, allowing configuration of custom API endpoints (e.g., for Ollama, LM Studio).
 - **Customizable AI Providers**: Supports dynamic configuration of AI base URLs, API keys, and models via user settings.
+
+### Multi-Integration Smart Routing
+
+Users can add multiple Telegram bots or Slack webhooks as "integration channels", then map specific folders to specific channels. When new content arrives in a folder, the notifier checks for folder-channel mappings first (smart routing); if none exist, it falls back to the legacy global settings. Key components:
+- `integration_channels` table: stores platform, name, encrypted credentials (bot_token for Telegram, webhook_url for Slack), and active status
+- `folder_channel_mappings` table: maps a folder to an integration channel with a target ID (chat_id for Telegram, channel for Slack)
+- Storage methods in `server/storage.ts`: full CRUD for channels and mappings with credential encryption via `encryptRawValue`/`decryptRawValue`
+- API routes: `GET/POST/PUT/DELETE /api/integrations/channels`, `POST /api/integrations/channels/:id/test`, `GET/POST/DELETE /api/integrations/folder-mappings`
+- Smart routing logic in `server/notifier.ts` (`processNewContentNotificationsForFolder`): checks folder mappings first, falls back to legacy settings
+- Settings UI: "التوجيه الذكي" card in Settings → Notifications tab with channel management and folder mapping
 
 ### Notification Pipeline
 

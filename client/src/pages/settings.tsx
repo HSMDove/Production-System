@@ -16,11 +16,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bell, Bot, BrainCircuit, Check, CircleHelp, Copy, FileText, Link, Loader2, LogOut, Moon, Palette, Plus, RefreshCw, Save, Send, Sparkles, Sun, TestTube, Trash2, Upload, User, X } from "lucide-react";
+import { Bell, Bot, BrainCircuit, Check, CircleHelp, Copy, FileText, Hash, Link, Loader2, LogOut, Moon, Palette, Plus, RefreshCw, Route, Save, Send, Settings2, Sparkles, Sun, TestTube, ToggleLeft, Trash2, Upload, User, X } from "lucide-react";
 import { PromptTemplatesList } from "@/components/templates/prompt-templates-list";
 import { useAuth } from "@/hooks/use-auth";
 
 type PlatformIdEntry = { id: string; platform: string; platformId: string; label: string | null; createdAt: string };
+type IntegrationChannelEntry = { id: string; platform: string; name: string; credentials: Record<string, string>; isActive: boolean; createdAt: string };
+type FolderMappingEntry = { id: string; folderId: string; integrationChannelId: string; targetId: string; createdAt: string };
+type FolderEntry = { id: string; name: string; color: string };
 
 type SettingsData = Record<string, string | null>;
 
@@ -48,9 +51,21 @@ export default function Settings() {
   const [editingStyleMatrix, setEditingStyleMatrix] = useState(false);
   const [localStyleMatrix, setLocalStyleMatrix] = useState("");
 
+  const [showAddChannel, setShowAddChannel] = useState(false);
+  const [newChannelPlatform, setNewChannelPlatform] = useState<string>("telegram");
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelBotToken, setNewChannelBotToken] = useState("");
+  const [newChannelWebhookUrl, setNewChannelWebhookUrl] = useState("");
+  const [newMappingFolderId, setNewMappingFolderId] = useState("");
+  const [newMappingChannelId, setNewMappingChannelId] = useState("");
+  const [newMappingTargetId, setNewMappingTargetId] = useState("");
+
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
+  const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
+  const { data: folderMappings } = useQuery<FolderMappingEntry[]>({ queryKey: ["/api/integrations/folder-mappings"] });
+  const { data: folders } = useQuery<FolderEntry[]>({ queryKey: ["/api/folders"] });
 
   const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
   const telegramIds = useMemo(() => (platformIds || []).filter(p => p.platform === "telegram"), [platformIds]);
@@ -181,6 +196,70 @@ export default function Settings() {
       }
     },
     onError: () => toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" }),
+  });
+
+  const createChannelMutation = useMutation({
+    mutationFn: async () => {
+      const credentials: Record<string, string> = {};
+      if (newChannelPlatform === "telegram") credentials.bot_token = newChannelBotToken;
+      if (newChannelPlatform === "slack") credentials.webhook_url = newChannelWebhookUrl;
+      return apiRequest("POST", "/api/integrations/channels", { platform: newChannelPlatform, name: newChannelName, credentials });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/channels"] });
+      setShowAddChannel(false);
+      setNewChannelName("");
+      setNewChannelBotToken("");
+      setNewChannelWebhookUrl("");
+      toast({ title: "تمت الإضافة", description: "تم إضافة قناة الربط بنجاح" });
+    },
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل إضافة قناة الربط", variant: "destructive" }),
+  });
+
+  const deleteChannelMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/integrations/channels/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/channels"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/folder-mappings"] });
+      toast({ title: "تم الحذف", description: "تم حذف قناة الربط" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل حذف قناة الربط", variant: "destructive" }),
+  });
+
+  const toggleChannelMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => apiRequest("PUT", `/api/integrations/channels/${id}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/channels"] });
+      toast({ title: "تم التحديث" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل تحديث القناة", variant: "destructive" }),
+  });
+
+  const testChannelMutation = useMutation({
+    mutationFn: async ({ id, targetId }: { id: string; targetId?: string }) => apiRequest("POST", `/api/integrations/channels/${id}/test`, { targetId }),
+    onSuccess: (data: any) => toast({ title: data.success ? "نجاح" : "فشل", description: data.success ? "تم إرسال رسالة اختبار بنجاح" : (data.error || "فشل الاختبار"), variant: data.success ? "default" : "destructive" }),
+    onError: () => toast({ title: "خطأ", description: "فشل اختبار القناة", variant: "destructive" }),
+  });
+
+  const createMappingMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/integrations/folder-mappings", { folderId: newMappingFolderId, integrationChannelId: newMappingChannelId, targetId: newMappingTargetId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/folder-mappings"] });
+      setNewMappingFolderId("");
+      setNewMappingChannelId("");
+      setNewMappingTargetId("");
+      toast({ title: "تم الربط", description: "تم ربط المجلد بالقناة بنجاح" });
+    },
+    onError: (err: any) => toast({ title: "خطأ", description: err?.message || "فشل ربط المجلد", variant: "destructive" }),
+  });
+
+  const deleteMappingMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/integrations/folder-mappings/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations/folder-mappings"] });
+      toast({ title: "تم الحذف", description: "تم إزالة ربط المجلد" });
+    },
+    onError: () => toast({ title: "خطأ", description: "فشل إزالة ربط المجلد", variant: "destructive" }),
   });
 
   const fetchGdocMutation = useMutation({
@@ -579,6 +658,157 @@ export default function Settings() {
                       {testSlackBotMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TestTube className="h-4 w-4" />} اختبار البوت
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Route className="h-4 w-4" /> التوجيه الذكي — قنوات الربط المتعددة</CardTitle>
+                <CardDescription>أضف عدة بوتات أو حسابات لتيليجرام وسلاك، ثم وجّه كل مجلد لقناة محددة تلقائياً.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold flex items-center gap-2"><Settings2 className="h-4 w-4" /> قنوات الربط</h4>
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowAddChannel(true)} data-testid="button-add-integration-channel">
+                      <Plus className="h-3.5 w-3.5" /> إضافة قناة
+                    </Button>
+                  </div>
+
+                  {showAddChannel && (
+                    <div className="rounded-lg border p-4 space-y-3 bg-muted/30">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">المنصة</Label>
+                          <Select value={newChannelPlatform} onValueChange={setNewChannelPlatform}>
+                            <SelectTrigger data-testid="select-channel-platform"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="telegram">تيليجرام</SelectItem>
+                              <SelectItem value="slack">سلاك</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">اسم القناة (تسمية)</Label>
+                          <Input placeholder="مثال: بوت الأخبار، بوت العمل..." value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} data-testid="input-channel-name" />
+                        </div>
+                      </div>
+                      {newChannelPlatform === "telegram" && (
+                        <div className="space-y-1">
+                          <Label className="text-xs"><span dir="ltr">Bot Token</span></Label>
+                          <Input placeholder="123456789:ABCdef..." type="password" dir="ltr" value={newChannelBotToken} onChange={(e) => setNewChannelBotToken(e.target.value)} data-testid="input-channel-bot-token" />
+                        </div>
+                      )}
+                      {newChannelPlatform === "slack" && (
+                        <div className="space-y-1">
+                          <Label className="text-xs"><span dir="ltr">Webhook URL</span></Label>
+                          <Input placeholder="https://hooks.slack.com/services/..." type="password" dir="ltr" value={newChannelWebhookUrl} onChange={(e) => setNewChannelWebhookUrl(e.target.value)} data-testid="input-channel-webhook-url" />
+                        </div>
+                      )}
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => { setShowAddChannel(false); setNewChannelName(""); setNewChannelBotToken(""); setNewChannelWebhookUrl(""); }} data-testid="button-cancel-add-channel">إلغاء</Button>
+                        <Button size="sm" className="gap-1.5" onClick={() => createChannelMutation.mutate()} disabled={!newChannelName.trim() || (newChannelPlatform === "telegram" && !newChannelBotToken.trim()) || (newChannelPlatform === "slack" && !newChannelWebhookUrl.trim()) || createChannelMutation.isPending} data-testid="button-confirm-add-channel">
+                          {createChannelMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} إضافة
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {(integrationChannels || []).length === 0 && !showAddChannel && (
+                    <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg border-dashed">
+                      <Settings2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                      <p>لم تتم إضافة أي قناة ربط بعد</p>
+                      <p className="text-xs mt-1">أضف بوت تيليجرام أو Webhook سلاك لتوجيه الإشعارات</p>
+                    </div>
+                  )}
+
+                  {(integrationChannels || []).map(ch => (
+                    <div key={ch.id} className="rounded-lg border p-3 space-y-2" data-testid={`integration-channel-${ch.id}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {ch.platform === "telegram" ? <Send className="h-4 w-4 text-blue-500" /> : <Hash className="h-4 w-4 text-purple-500" />}
+                          <span className="font-medium text-sm">{ch.name}</span>
+                          <Badge variant="outline" className="text-[10px]">{ch.platform === "telegram" ? "تيليجرام" : "سلاك"}</Badge>
+                          {!ch.isActive && <Badge variant="secondary" className="text-[10px]">معطّل</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Switch dir="ltr" checked={ch.isActive} onCheckedChange={(v) => toggleChannelMutation.mutate({ id: ch.id, isActive: v })} data-testid={`switch-channel-active-${ch.id}`} />
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => testChannelMutation.mutate({ id: ch.id })} disabled={testChannelMutation.isPending} data-testid={`button-test-channel-${ch.id}`}>
+                            <TestTube className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteChannelMutation.mutate(ch.id)} disabled={deleteChannelMutation.isPending} data-testid={`button-delete-channel-${ch.id}`}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold flex items-center gap-2"><Route className="h-4 w-4" /> توجيه المجلدات</h4>
+                  <p className="text-xs text-muted-foreground">حدد لكل مجلد القناة والقروب/الشات اللي يرسل لها الإشعارات. إذا لم يُحدد توجيه للمجلد، سيستخدم الإعدادات العامة أعلاه.</p>
+
+                  {(folderMappings || []).length > 0 && (
+                    <div className="space-y-2">
+                      {(folderMappings || []).map(m => {
+                        const folder = (folders || []).find(f => f.id === m.folderId);
+                        const channel = (integrationChannels || []).find(c => c.id === m.integrationChannelId);
+                        return (
+                          <div key={m.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm" data-testid={`folder-mapping-${m.id}`}>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {folder && <Badge style={{ backgroundColor: folder.color, color: "#fff" }} className="text-xs">{folder.name}</Badge>}
+                              <span className="text-muted-foreground">→</span>
+                              {channel && <Badge variant="outline" className="text-xs gap-1">{channel.platform === "telegram" ? <Send className="h-3 w-3" /> : <Hash className="h-3 w-3" />}{channel.name}</Badge>}
+                              <span className="font-mono text-xs text-muted-foreground" dir="ltr">{m.targetId}</span>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => deleteMappingMutation.mutate(m.id)} disabled={deleteMappingMutation.isPending} data-testid={`button-delete-mapping-${m.id}`}>
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(integrationChannels || []).length > 0 && (folders || []).length > 0 && (
+                    <div className="rounded-lg border p-3 space-y-3 bg-muted/30">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">المجلد</Label>
+                          <Select value={newMappingFolderId} onValueChange={setNewMappingFolderId}>
+                            <SelectTrigger data-testid="select-mapping-folder"><SelectValue placeholder="اختر مجلد" /></SelectTrigger>
+                            <SelectContent>
+                              {(folders || []).map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">قناة الربط</Label>
+                          <Select value={newMappingChannelId} onValueChange={setNewMappingChannelId}>
+                            <SelectTrigger data-testid="select-mapping-channel"><SelectValue placeholder="اختر قناة" /></SelectTrigger>
+                            <SelectContent>
+                              {(integrationChannels || []).filter(c => c.isActive).map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.platform === "telegram" ? "تيليجرام" : "سلاك"})</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">{(integrationChannels || []).find(c => c.id === newMappingChannelId)?.platform === "slack" ? "Channel" : "Chat ID"}</Label>
+                          <Input placeholder={((integrationChannels || []).find(c => c.id === newMappingChannelId)?.platform === "slack") ? "#channel-name" : "مثال: -1001234567890"} value={newMappingTargetId} onChange={(e) => setNewMappingTargetId(e.target.value)} dir="ltr" className="font-mono text-xs" data-testid="input-mapping-target-id" />
+                        </div>
+                      </div>
+                      <Button size="sm" className="gap-1.5" onClick={() => createMappingMutation.mutate()} disabled={!newMappingFolderId || !newMappingChannelId || !newMappingTargetId.trim() || createMappingMutation.isPending} data-testid="button-add-mapping">
+                        {createMappingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} إضافة توجيه
+                      </Button>
+                    </div>
+                  )}
+
+                  {(integrationChannels || []).length === 0 && (
+                    <p className="text-xs text-muted-foreground border rounded-lg border-dashed p-3 text-center">أضف قناة ربط أولاً لتتمكن من توجيه المجلدات</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

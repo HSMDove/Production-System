@@ -327,23 +327,22 @@ export async function processNewContentNotificationsForFolder(
     return { processed: 0, notified: 0, errors: [] };
   }
 
+  const folderMappings = await storage.getMappingsForFolder(folder.id, userId);
+  const hasSmartRouting = folderMappings.length > 0;
+
   const globalTelegramEnabled = settingsMap.get("telegram_enabled") === "true";
   const globalSlackEnabled = settingsMap.get("slack_enabled") === "true";
 
-  const telegramEnabled = globalTelegramEnabled && folder.notifyTelegram;
-  const slackEnabled = globalSlackEnabled && folder.notifySlack;
+  if (!hasSmartRouting) {
+    const telegramEnabled = globalTelegramEnabled && folder.notifyTelegram;
+    const slackEnabled = globalSlackEnabled && folder.notifySlack;
 
-  if (!telegramEnabled && !slackEnabled) {
-    return { processed: 0, notified: 0, errors: [] };
+    if (!telegramEnabled && !slackEnabled) {
+      return { processed: 0, notified: 0, errors: [] };
+    }
   }
 
-  const telegramToken = settingsMap.get("telegram_bot_token") || "";
-  const telegramChatId = settingsMap.get("telegram_chat_id") || "";
-  const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
   const systemPrompt = composeAiSystemPrompt(settingsMap.get("ai_system_prompt"), settingsMap.get("fikri_persona_style"));
-  if (systemPrompt) {
-    console.log(`[Notifier Folder] Custom AI system prompt loaded: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
-  }
 
   let processed = 0;
   let notified = 0;
@@ -372,24 +371,58 @@ export async function processNewContentNotificationsForFolder(
 
       let sent = false;
 
-      if (telegramEnabled && telegramToken && telegramChatId) {
-        const telegramMsg = formatTelegramMessage(contentItem, rewrittenText);
-        const telegramSent = await sendTelegramMessage(telegramToken, telegramChatId, telegramMsg);
-        if (telegramSent) sent = true;
-        else errors.push(`Telegram failed for: ${contentItem.title}`);
-      }
+      if (hasSmartRouting) {
+        for (const mapping of folderMappings) {
+          try {
+            const channel = await storage.getActiveIntegrationChannelById(mapping.integrationChannelId, userId);
+            if (!channel) continue;
+            const creds = storage.getDecryptedCredentials(channel);
 
-      if (slackEnabled && slackWebhookUrl) {
-        const slackMsg = formatSlackMessage(contentItem, rewrittenText);
-        const slackSent = await sendSlackMessage(slackWebhookUrl, slackMsg);
-        if (slackSent) sent = true;
-        else errors.push(`Slack failed for: ${contentItem.title}`);
+            if (channel.platform === "telegram") {
+              const telegramMsg = formatTelegramMessage(contentItem, rewrittenText);
+              const telegramSent = await sendTelegramMessage(creds.bot_token, mapping.targetId, telegramMsg);
+              if (telegramSent) sent = true;
+              else errors.push(`Telegram (${channel.name}) failed for: ${contentItem.title}`);
+            } else if (channel.platform === "slack") {
+              const slackMsg = formatSlackMessage(contentItem, rewrittenText);
+              const webhookUrl = creds.webhook_url || "";
+              if (webhookUrl) {
+                const slackSent = await sendSlackMessage(webhookUrl, slackMsg);
+                if (slackSent) sent = true;
+                else errors.push(`Slack (${channel.name}) failed for: ${contentItem.title}`);
+              }
+            }
+          } catch (mappingError) {
+            console.error(`Error processing mapping ${mapping.id}:`, mappingError);
+            errors.push(`Mapping error for: ${contentItem.title}`);
+          }
+        }
+      } else {
+        const telegramEnabled = globalTelegramEnabled && folder.notifyTelegram;
+        const slackEnabled = globalSlackEnabled && folder.notifySlack;
+        const telegramToken = settingsMap.get("telegram_bot_token") || "";
+        const telegramChatId = settingsMap.get("telegram_chat_id") || "";
+        const slackWebhookUrl = settingsMap.get("slack_webhook_url") || "";
+
+        if (telegramEnabled && telegramToken && telegramChatId) {
+          const telegramMsg = formatTelegramMessage(contentItem, rewrittenText);
+          const telegramSent = await sendTelegramMessage(telegramToken, telegramChatId, telegramMsg);
+          if (telegramSent) sent = true;
+          else errors.push(`Telegram failed for: ${contentItem.title}`);
+        }
+
+        if (slackEnabled && slackWebhookUrl) {
+          const slackMsg = formatSlackMessage(contentItem, rewrittenText);
+          const slackSent = await sendSlackMessage(slackWebhookUrl, slackMsg);
+          if (slackSent) sent = true;
+          else errors.push(`Slack failed for: ${contentItem.title}`);
+        }
       }
 
       if (sent) {
         await storage.markContentNotified(contentId);
         notified++;
-      } else {
+      } else if (!hasSmartRouting) {
         errors.push(`No channel sent for: ${contentItem.title}`);
       }
     } catch (error) {

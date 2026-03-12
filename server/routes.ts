@@ -2527,6 +2527,142 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
+  // ─── Integration Channels (Multi-bot Smart Routing) ─────────────────────
+  app.get("/api/integrations/channels", requireAuth, async (req, res) => {
+    try {
+      const channels = await storage.getIntegrationChannels(req.session.userId!);
+      const safe = channels.map(ch => ({
+        ...ch,
+        credentials: Object.fromEntries(Object.keys(ch.credentials as Record<string, string>).map(k => [k, "••••••"])),
+      }));
+      res.json(safe);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب قنوات الربط" });
+    }
+  });
+
+  app.post("/api/integrations/channels", requireAuth, async (req, res) => {
+    try {
+      const { platform, name, credentials } = req.body;
+      if (!platform || !["slack", "telegram"].includes(platform)) {
+        return res.status(400).json({ error: "المنصة غير صحيحة (slack أو telegram)" });
+      }
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ error: "اسم القناة مطلوب" });
+      }
+      if (!credentials || typeof credentials !== "object") {
+        return res.status(400).json({ error: "بيانات الاعتماد مطلوبة" });
+      }
+      if (platform === "telegram" && !credentials.bot_token) {
+        return res.status(400).json({ error: "Bot Token مطلوب لتيليجرام" });
+      }
+      if (platform === "slack" && !credentials.webhook_url && !credentials.bot_token) {
+        return res.status(400).json({ error: "Webhook URL أو Bot Token مطلوب لسلاك" });
+      }
+      const channel = await storage.createIntegrationChannel({
+        userId: req.session.userId!,
+        platform,
+        name: name.trim(),
+        credentials,
+      });
+      res.json({ ...channel, credentials: Object.fromEntries(Object.keys(credentials).map((k: string) => [k, "••••••"])) });
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء قناة الربط" });
+    }
+  });
+
+  app.put("/api/integrations/channels/:id", requireAuth, async (req, res) => {
+    try {
+      const { name, credentials, isActive } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (credentials !== undefined) updates.credentials = credentials;
+      if (isActive !== undefined) updates.isActive = isActive;
+      const updated = await storage.updateIntegrationChannel(req.params.id, req.session.userId!, updates);
+      if (!updated) return res.status(404).json({ error: "القناة غير موجودة" });
+      res.json({ ...updated, credentials: Object.fromEntries(Object.keys((updated.credentials as Record<string, string>)).map(k => [k, "••••••"])) });
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل قناة الربط" });
+    }
+  });
+
+  app.delete("/api/integrations/channels/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteIntegrationChannel(req.params.id, req.session.userId!);
+      if (deleted) res.json({ success: true });
+      else res.status(404).json({ error: "القناة غير موجودة" });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف قناة الربط" });
+    }
+  });
+
+  app.post("/api/integrations/channels/:id/test", requireAuth, async (req, res) => {
+    try {
+      const channel = await storage.getIntegrationChannelById(req.params.id, req.session.userId!);
+      if (!channel) return res.status(404).json({ error: "القناة غير موجودة" });
+      const creds = storage.getDecryptedCredentials(channel);
+      const { targetId } = req.body;
+      if (channel.platform === "telegram") {
+        const chatId = targetId || creds.default_chat_id || "";
+        if (!chatId) return res.status(400).json({ error: "Chat ID مطلوب للاختبار" });
+        const result = await testTelegramConnection(creds.bot_token, chatId);
+        return res.json(result);
+      } else if (channel.platform === "slack") {
+        const webhookUrl = creds.webhook_url || "";
+        if (!webhookUrl) return res.status(400).json({ error: "Webhook URL مطلوب للاختبار" });
+        const result = await testSlackConnection(webhookUrl);
+        return res.json(result);
+      }
+      res.status(400).json({ error: "منصة غير مدعومة" });
+    } catch (error) {
+      res.status(500).json({ error: "فشل اختبار قناة الربط" });
+    }
+  });
+
+  // ─── Folder-Channel Mappings ───────────────────────────────────────────────
+  app.get("/api/integrations/folder-mappings", requireAuth, async (req, res) => {
+    try {
+      const mappings = await storage.getFolderChannelMappings(req.session.userId!);
+      res.json(mappings);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب تخطيط المجلدات" });
+    }
+  });
+
+  app.post("/api/integrations/folder-mappings", requireAuth, async (req, res) => {
+    try {
+      const { folderId, integrationChannelId, targetId } = req.body;
+      if (!folderId || !integrationChannelId || !targetId) {
+        return res.status(400).json({ error: "جميع الحقول مطلوبة: المجلد، قناة الربط، معرف القناة المستهدفة" });
+      }
+      const folder = await storage.getFolderById(folderId);
+      if (!folder || folder.userId !== req.session.userId) {
+        return res.status(404).json({ error: "المجلد غير موجود" });
+      }
+      const channel = await storage.getIntegrationChannelById(integrationChannelId, req.session.userId!);
+      if (!channel) return res.status(404).json({ error: "قناة الربط غير موجودة" });
+      const mapping = await storage.createFolderChannelMapping({
+        userId: req.session.userId!,
+        folderId,
+        integrationChannelId,
+        targetId: targetId.trim(),
+      });
+      res.json(mapping);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء تخطيط المجلد" });
+    }
+  });
+
+  app.delete("/api/integrations/folder-mappings/:id", requireAuth, async (req, res) => {
+    try {
+      const deleted = await storage.deleteFolderChannelMapping(req.params.id, req.session.userId!);
+      if (deleted) res.json({ success: true });
+      else res.status(404).json({ error: "التخطيط غير موجود" });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف تخطيط المجلد" });
+    }
+  });
+
   // Style Examples (Legacy — kept for backward compatibility, no longer used in UI)
   app.get("/api/style-examples", requireAuth, async (req, res) => {
     try {
