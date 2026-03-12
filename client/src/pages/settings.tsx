@@ -1057,7 +1057,7 @@ export default function Settings() {
                     </div>
                   )}
 
-                  {(integrationChannels || []).map(ch => (
+                  {(integrationChannels || []).filter(ch => ch.id !== "manual-slack").map(ch => (
                     <div key={ch.id} className="rounded-lg border p-3 space-y-2" data-testid={`integration-channel-${ch.id}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
