@@ -1416,6 +1416,8 @@ export async function registerRoutes(
         try {
           const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
 
+          const fallbackName = (event as any).username || platformUser!.name || undefined;
+
           const namePromise = (botToken && slackUserId)
             ? fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
                 method: "GET",
@@ -1429,23 +1431,21 @@ export async function registerRoutes(
                     || info.user.real_name
                     || info.user.name) as string;
                 }
-                return undefined;
+                return fallbackName;
               })
-              .catch((err: any) => { console.warn("[Slack] Failed to fetch user info:", err); return undefined; })
-            : Promise.resolve(undefined);
+              .catch(() => fallbackName)
+            : Promise.resolve(fallbackName);
 
-          const [slackDisplayName, conversation] = await Promise.all([
+          const [slackDisplayName, conversation, result] = await Promise.all([
             namePromise,
             storage.createAssistantConversation({
               title: `Slack - ${text.slice(0, 50)}`,
               userId: platformUser!.id,
             } as any),
+            runAssistantEngine(text, [], platformUser!.id, fallbackName),
           ]);
 
-          const senderDisplayName = slackDisplayName || (event as any).username || platformUser!.name || undefined;
-          if (senderDisplayName) console.log(`[Slack] Sender name: "${senderDisplayName}"`);
-
-          const result = await runAssistantEngine(text, [], platformUser!.id, senderDisplayName);
+          if (slackDisplayName) console.log(`[Slack] Sender name: "${slackDisplayName}"`);
           console.log(`[Slack] AI response ready, action: ${result.action}`);
 
           await storage.createAssistantMessage({
