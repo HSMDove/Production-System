@@ -1420,7 +1420,7 @@ export async function registerRoutes(
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${replyToken}` },
             body: JSON.stringify({
               channel: event.channel,
-              text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 الـ Slack User ID حقك هو: \`${slackUserId}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اكتب الـ Member ID حقك\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
+              text: `⚠️ أهلاً! أنا فكري 2.0 من نَسَق\n\nللأسف حسابك في Slack مو مربوط بالمنصة بعد.\n\n🔑 بياناتك:\n• الـ Slack User ID حقك: \`${slackUserId}\`\n• الـ Channel ID حق هالمحادثة: \`${event.channel}\`\n\n📋 عشان تربط نفسك:\n1. ادخل على نَسَق → الإعدادات → الإشعارات\n2. في قسم Slack اضغط (+) وأضف الـ Member ID حقك: \`${slackUserId}\`\n3. احفظ الإعدادات\n\nبعدها أقدر أساعدك! 🤖`,
               thread_ts: event.thread_ts || event.ts,
             }),
           }).catch(err => console.error("[Slack] Failed to send bouncer message:", err));
