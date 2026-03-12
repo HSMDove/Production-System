@@ -4,8 +4,10 @@ import { useLocation } from "wouter";
 import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
-  Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock
+  Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock,
+  Sparkles, RotateCcw
 } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +17,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "tickets" | "settings" | "admins" | "audit";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "settings" | "admins" | "audit";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
@@ -27,6 +29,7 @@ export default function AdminDashboard() {
     { id: "users", label: "المستخدمون", icon: Users },
     { id: "announcements", label: "الإعلانات", icon: Megaphone },
     { id: "banners", label: "الشريط العلوي", icon: Bell },
+    { id: "welcome", label: "بطاقات الترحيب", icon: Sparkles },
     { id: "tickets", label: "الشكاوى والتذاكر", icon: MessageSquare },
     { id: "settings", label: "إعدادات النظام", icon: Settings },
     { id: "admins", label: "إدارة المدراء", icon: Shield },
@@ -80,6 +83,7 @@ export default function AdminDashboard() {
         {activeTab === "users" && <UsersPanel />}
         {activeTab === "announcements" && <AnnouncementsPanel />}
         {activeTab === "banners" && <BannersPanel />}
+        {activeTab === "welcome" && <WelcomeCardsPanel />}
         {activeTab === "tickets" && <TicketsPanel />}
         {activeTab === "settings" && <SystemSettingsPanel />}
         {activeTab === "admins" && <AdminsPanel />}
@@ -682,6 +686,232 @@ function AuditPanel() {
         {(!logs || logs.length === 0) && (
           <div className="text-center py-8 text-muted-foreground">لا توجد سجلات بعد</div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function WelcomeCardsPanel() {
+  const { toast } = useToast();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ sortOrder: 0, title: "", body: "", emoji: "", showUserName: false, isFinal: false, isActive: true });
+
+  type WCard = {
+    id: string; sortOrder: number; title: string; body: string; emoji: string | null;
+    showUserName: boolean; isFinal: boolean; isActive: boolean; createdAt: string;
+  };
+
+  const { data, isLoading } = useQuery<{ cards: WCard[]; displayMode: string }>({ queryKey: ["/api/admin/welcome-cards"] });
+
+  const createMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/admin/welcome-cards", form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/welcome-cards"] });
+      setShowAdd(false);
+      setForm({ sortOrder: 0, title: "", body: "", emoji: "", showUserName: false, isFinal: false, isActive: true });
+      toast({ title: "تم", description: "تم إنشاء البطاقة" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data: d }: { id: string; data: any }) => apiRequest("PUT", "/api/admin/welcome-cards/" + id, d),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/welcome-cards"] });
+      setEditingId(null);
+      toast({ title: "تم", description: "تم تعديل البطاقة" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", "/api/admin/welcome-cards/" + id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/welcome-cards"] });
+      toast({ title: "تم", description: "تم حذف البطاقة" });
+    },
+  });
+
+  const modeMutation = useMutation({
+    mutationFn: async (mode: string) => apiRequest("PUT", "/api/admin/welcome-display-mode", { mode }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/welcome-cards"] });
+      toast({ title: "تم", description: "تم تغيير وضع العرض" });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/admin/welcome-cards/reset-views"),
+    onSuccess: () => toast({ title: "تم", description: "تم إعادة ضبط المشاهدات — ستظهر البطاقات لجميع المستخدمين مجدداً" }),
+  });
+
+  if (isLoading) return <PanelLoader />;
+
+  const cards = data?.cards || [];
+  const displayMode = data?.displayMode || "once";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold">بطاقات الترحيب</h2>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending} className="gap-1" data-testid="button-reset-views">
+            <RotateCcw className="h-3 w-3" />
+            إعادة ضبط المشاهدات
+          </Button>
+          <Button size="sm" onClick={() => { setShowAdd(true); setForm({ sortOrder: cards.length + 1, title: "", body: "", emoji: "", showUserName: false, isFinal: false, isActive: true }); }} className="gap-1" data-testid="button-add-welcome-card">
+            <Plus className="h-3 w-3" />
+            إضافة بطاقة
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border p-4 mb-4 bg-muted/30 space-y-3">
+        <Label className="text-sm font-medium">وضع العرض</Label>
+        <div className="flex gap-2">
+          {[
+            { value: "once", label: "مرة واحدة" },
+            { value: "always", label: "دائماً" },
+            { value: "disabled", label: "معطّل" },
+          ].map((opt) => (
+            <Button
+              key={opt.value}
+              size="sm"
+              variant={displayMode === opt.value ? "default" : "outline"}
+              onClick={() => modeMutation.mutate(opt.value)}
+              data-testid={"button-mode-" + opt.value}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {displayMode === "once" && "تظهر البطاقات مرة واحدة فقط لكل مستخدم"}
+          {displayMode === "always" && "تظهر البطاقات في كل مرة يفتح المستخدم الموقع"}
+          {displayMode === "disabled" && "البطاقات معطلة ولن تظهر لأحد"}
+        </p>
+      </div>
+
+      {showAdd && (
+        <div className="rounded-lg border p-4 mb-4 space-y-3 bg-primary/5">
+          <h3 className="font-medium text-sm">بطاقة جديدة</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">الترتيب</Label>
+              <Input type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: parseInt(e.target.value) || 0 })} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">إيموجي</Label>
+              <Input value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} className="mt-1" placeholder="👋" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">العنوان</Label>
+            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1" data-testid="input-wc-title" />
+          </div>
+          <div>
+            <Label className="text-xs">النص (استخدم {"{name}"} لاسم المستخدم)</Label>
+            <Textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className="mt-1 min-h-[80px]" data-testid="input-wc-body" />
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-xs"><Switch checked={form.showUserName} onCheckedChange={(v) => setForm({ ...form, showUserName: v })} /> يعرض اسم المستخدم</label>
+            <label className="flex items-center gap-2 text-xs"><Switch checked={form.isFinal} onCheckedChange={(v) => setForm({ ...form, isFinal: v })} /> بطاقة ختامية</label>
+            <label className="flex items-center gap-2 text-xs"><Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} /> مفعّلة</label>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => createMutation.mutate()} disabled={!form.title.trim() || !form.body.trim() || createMutation.isPending} className="gap-1" data-testid="button-save-wc">
+              {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} حفظ
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>إلغاء</Button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {cards.map((card) => (
+          <div key={card.id} className={`rounded-lg border p-4 transition-colors ${card.isActive ? "" : "opacity-50"}`} data-testid={"wc-" + card.id}>
+            {editingId === card.id ? (
+              <WelcomeCardEditForm
+                card={card}
+                onSave={(d) => updateMutation.mutate({ id: card.id, data: d })}
+                onCancel={() => setEditingId(null)}
+                saving={updateMutation.isPending}
+              />
+            ) : (
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                  <span className="text-lg font-bold">{card.sortOrder}</span>
+                  {card.emoji && <span className="text-2xl">{card.emoji}</span>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium">{card.title}</p>
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2 whitespace-pre-wrap">{card.body}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    {card.showUserName && <Badge variant="outline" className="text-xs">يعرض الاسم</Badge>}
+                    {card.isFinal && <Badge variant="outline" className="text-xs">ختامية</Badge>}
+                    {!card.isActive && <Badge variant="destructive" className="text-xs">معطلة</Badge>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant="ghost" onClick={() => setEditingId(card.id)} data-testid={"button-edit-wc-" + card.id}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteMutation.mutate(card.id)} data-testid={"button-delete-wc-" + card.id}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {cards.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">لا توجد بطاقات ترحيب بعد</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WelcomeCardEditForm({ card, onSave, onCancel, saving }: { card: any; onSave: (d: any) => void; onCancel: () => void; saving: boolean }) {
+  const [f, setF] = useState({
+    sortOrder: card.sortOrder,
+    title: card.title,
+    body: card.body,
+    emoji: card.emoji || "",
+    showUserName: card.showUserName,
+    isFinal: card.isFinal,
+    isActive: card.isActive,
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">الترتيب</Label>
+          <Input type="number" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: parseInt(e.target.value) || 0 })} className="mt-1" />
+        </div>
+        <div>
+          <Label className="text-xs">إيموجي</Label>
+          <Input value={f.emoji} onChange={(e) => setF({ ...f, emoji: e.target.value })} className="mt-1" />
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">العنوان</Label>
+        <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className="mt-1" />
+      </div>
+      <div>
+        <Label className="text-xs">النص</Label>
+        <Textarea value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} className="mt-1 min-h-[80px]" />
+      </div>
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-xs"><Switch checked={f.showUserName} onCheckedChange={(v) => setF({ ...f, showUserName: v })} /> يعرض الاسم</label>
+        <label className="flex items-center gap-2 text-xs"><Switch checked={f.isFinal} onCheckedChange={(v) => setF({ ...f, isFinal: v })} /> ختامية</label>
+        <label className="flex items-center gap-2 text-xs"><Switch checked={f.isActive} onCheckedChange={(v) => setF({ ...f, isActive: v })} /> مفعّلة</label>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => onSave(f)} disabled={saving} className="gap-1">
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} حفظ
+        </Button>
+        <Button size="sm" variant="outline" onClick={onCancel}>إلغاء</Button>
       </div>
     </div>
   );

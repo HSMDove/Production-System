@@ -22,7 +22,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
 import { FikriOverlay } from "@/components/fikri/fikri-overlay";
-import { TeaserBanner } from "@/components/teaser-banner";
+import { WelcomeCards } from "@/components/welcome-cards";
 import { TopBannerDisplay } from "@/components/announcements/top-banner";
 import { AnnouncementModal } from "@/components/announcements/announcement-modal";
 
@@ -59,7 +59,7 @@ function App() {
               <TopBannerDisplay />
               <Router />
               <FikriOverlay />
-              <TeaserBanner />
+              <WelcomeCards />
               <AnnouncementModal />
             </AuthGuard>
           </FikriOverlayProvider>

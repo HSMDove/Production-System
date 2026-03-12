@@ -74,6 +74,17 @@ A password-protected admin layer built on top of the OTP auth system. Key compon
 - **Shield icon**: Admin users see a shield icon in the header navigation linking to `/admin/login`
 - **Dynamic version**: App version shown at bottom of settings page is read from `app_version` system setting via `/api/version` endpoint (public, no auth required)
 
+### Welcome Cards System
+
+Animated welcome card slideshow displayed to users after login. Replaces the old TeaserBanner. Key components:
+- **Database tables**: `welcome_cards` (sort_order, title, body, emoji, show_user_name, is_final, is_active), `welcome_card_views` (per-user completion tracking)
+- **Display modes** via `welcome_display_mode` system setting: `once` (show once per user), `always` (every login), `disabled` (off)
+- **Name interpolation**: Cards with `show_user_name=true` replace `{name}` in title/body with the user's name
+- **User API**: `GET /api/welcome-cards` (returns active cards + show flag based on mode/view status), `POST /api/welcome-cards/seen` (mark as seen)
+- **Admin API**: Full CRUD under `/api/admin/welcome-cards`, `PUT /api/admin/welcome-display-mode`, `POST /api/admin/welcome-cards/reset-views`
+- **Frontend component**: `client/src/components/welcome-cards.tsx` — fullscreen modal overlay with card pagination, dot indicators, and animated transitions
+- **Admin dashboard**: "بطاقات الترحيب" panel with card management, display mode toggle, and view reset
+
 ### Support Ticket System
 
 Users can submit support tickets ("عندي مشكلة") from the Settings → Account tab. Key components:

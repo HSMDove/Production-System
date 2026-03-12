@@ -72,6 +72,10 @@ import {
   adminAuditLogs,
   type AdminAuditLog,
   type AdminRole,
+  welcomeCards,
+  type WelcomeCard,
+  welcomeCardViews,
+  type WelcomeCardView,
   supportTickets,
   type SupportTicket,
   type InsertSupportTicket,
@@ -1079,6 +1083,48 @@ export class DatabaseStorage implements IStorage {
       adminCount: Number(adminCount.count),
     };
   }
+  // ─── Welcome Cards ──────────────────────────────────────────────────────
+
+  async getActiveWelcomeCards(): Promise<WelcomeCard[]> {
+    return db.select().from(welcomeCards).where(eq(welcomeCards.isActive, true)).orderBy(welcomeCards.sortOrder);
+  }
+
+  async getAllWelcomeCards(): Promise<WelcomeCard[]> {
+    return db.select().from(welcomeCards).orderBy(welcomeCards.sortOrder);
+  }
+
+  async getWelcomeCardById(id: string): Promise<WelcomeCard | undefined> {
+    const [card] = await db.select().from(welcomeCards).where(eq(welcomeCards.id, id));
+    return card;
+  }
+
+  async createWelcomeCard(data: { sortOrder: number; title: string; body: string; emoji?: string; showUserName?: boolean; isFinal?: boolean; isActive?: boolean }): Promise<WelcomeCard> {
+    const [card] = await db.insert(welcomeCards).values(data as any).returning();
+    return card;
+  }
+
+  async updateWelcomeCard(id: string, data: Partial<{ sortOrder: number; title: string; body: string; emoji: string; showUserName: boolean; isFinal: boolean; isActive: boolean }>): Promise<WelcomeCard> {
+    const [card] = await db.update(welcomeCards).set({ ...data, updatedAt: new Date() } as any).where(eq(welcomeCards.id, id)).returning();
+    return card;
+  }
+
+  async deleteWelcomeCard(id: string): Promise<void> {
+    await db.delete(welcomeCards).where(eq(welcomeCards.id, id));
+  }
+
+  async hasUserSeenWelcome(userId: string): Promise<boolean> {
+    const [view] = await db.select().from(welcomeCardViews).where(eq(welcomeCardViews.userId, userId));
+    return !!view;
+  }
+
+  async markWelcomeSeen(userId: string): Promise<void> {
+    await db.insert(welcomeCardViews).values({ userId } as any).onConflictDoNothing();
+  }
+
+  async resetWelcomeViews(): Promise<void> {
+    await db.delete(welcomeCardViews);
+  }
+
   // ─── Support Tickets ─────────────────────────────────────────────────────
 
   async createTicket(data: InsertSupportTicket): Promise<SupportTicket> {

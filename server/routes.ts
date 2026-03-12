@@ -3201,6 +3201,113 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
+  // ─── Welcome Cards (User) ──────────────────────────────────────────────
+
+  app.get("/api/welcome-cards", requireAuth, async (req, res) => {
+    try {
+      const displayMode = await storage.getSystemSetting("welcome_display_mode");
+      const mode = displayMode?.value || "once";
+
+      if (mode === "disabled") return res.json({ cards: [], show: false });
+
+      if (mode === "once") {
+        const seen = await storage.hasUserSeenWelcome(req.session.userId!);
+        if (seen) return res.json({ cards: [], show: false });
+      }
+
+      const cards = await storage.getActiveWelcomeCards();
+      res.json({ cards, show: cards.length > 0 });
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب بطاقات الترحيب" });
+    }
+  });
+
+  app.post("/api/welcome-cards/seen", requireAuth, async (req, res) => {
+    try {
+      await storage.markWelcomeSeen(req.session.userId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل تسجيل المشاهدة" });
+    }
+  });
+
+  // ─── Welcome Cards (Admin) ─────────────────────────────────────────────
+
+  app.get("/api/admin/welcome-cards", requireAdmin, async (_req, res) => {
+    try {
+      const cards = await storage.getAllWelcomeCards();
+      const displayMode = await storage.getSystemSetting("welcome_display_mode");
+      res.json({ cards, displayMode: displayMode?.value || "once" });
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب البطاقات" });
+    }
+  });
+
+  const welcomeCardSchema = z.object({
+    sortOrder: z.number().int(),
+    title: z.string().min(1),
+    body: z.string().min(1),
+    emoji: z.string().optional(),
+    showUserName: z.boolean().optional(),
+    isFinal: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  });
+
+  app.post("/api/admin/welcome-cards", requireAdmin, async (req, res) => {
+    try {
+      const parsed = welcomeCardSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const card = await storage.createWelcomeCard(parsed.data);
+      await storage.createAuditLog(req.session.userId!, "welcome_card_created", "إنشاء بطاقة ترحيب: " + parsed.data.title, req.ip || undefined);
+      res.json(card);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء البطاقة" });
+    }
+  });
+
+  app.put("/api/admin/welcome-cards/:id", requireAdmin, async (req, res) => {
+    try {
+      const parsed = welcomeCardSchema.partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "بيانات غير صالحة" });
+      const card = await storage.updateWelcomeCard(req.params.id, parsed.data);
+      await storage.createAuditLog(req.session.userId!, "welcome_card_updated", "تعديل بطاقة ترحيب: " + req.params.id, req.ip || undefined);
+      res.json(card);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل البطاقة" });
+    }
+  });
+
+  app.delete("/api/admin/welcome-cards/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteWelcomeCard(req.params.id);
+      await storage.createAuditLog(req.session.userId!, "welcome_card_deleted", "حذف بطاقة ترحيب: " + req.params.id, req.ip || undefined);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف البطاقة" });
+    }
+  });
+
+  app.put("/api/admin/welcome-display-mode", requireAdmin, async (req, res) => {
+    try {
+      const { mode } = z.object({ mode: z.enum(["once", "always", "disabled"]) }).parse(req.body);
+      const setting = await storage.upsertSystemSetting("welcome_display_mode", mode, "عدد مرات ظهور بطاقات الترحيب");
+      await storage.createAuditLog(req.session.userId!, "welcome_mode_updated", "تغيير وضع الترحيب: " + mode, req.ip || undefined);
+      res.json(setting);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تغيير الوضع" });
+    }
+  });
+
+  app.post("/api/admin/welcome-cards/reset-views", requireAdmin, async (req, res) => {
+    try {
+      await storage.resetWelcomeViews();
+      await storage.createAuditLog(req.session.userId!, "welcome_views_reset", "إعادة ضبط مشاهدات الترحيب", req.ip || undefined);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل إعادة الضبط" });
+    }
+  });
+
   // ─── Public version endpoint ──────────────────────────────────────────────
   app.get("/api/version", async (_req, res) => {
     try {

@@ -550,6 +550,31 @@ export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
 
 // ─── Support Tickets ─────────────────────────────────────────────────────────
 
+// ─── Welcome Cards ───────────────────────────────────────────────────────────
+
+export const welcomeCards = pgTable("welcome_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sortOrder: integer("sort_order").notNull().default(0),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  emoji: text("emoji"),
+  showUserName: boolean("show_user_name").notNull().default(false),
+  isFinal: boolean("is_final").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type WelcomeCard = typeof welcomeCards.$inferSelect;
+
+export const welcomeCardViews = pgTable("welcome_card_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  completedAt: timestamp("completed_at").defaultNow().notNull(),
+});
+export type WelcomeCardView = typeof welcomeCardViews.$inferSelect;
+
+// ─── Support Tickets ─────────────────────────────────────────────────────────
+
 export const ticketStatuses = ["open", "in_progress", "resolved"] as const;
 export type TicketStatus = typeof ticketStatuses[number];
 
