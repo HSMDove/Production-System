@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ChevronLeft, Rocket } from "lucide-react";
@@ -21,11 +21,19 @@ type WelcomeResponse = {
   show: boolean;
 };
 
+type Direction = "next" | "prev";
+type Phase = "stable" | "fade-out" | "repositioned" | "fade-in";
+
+const DURATION = 250;
+
 export function WelcomeCards() {
   const { user } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visible, setVisible] = useState(false);
-  const [animating, setAnimating] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [phase, setPhase] = useState<Phase>("stable");
+  const [direction, setDirection] = useState<Direction>("next");
+  const busy = useRef(false);
 
   const { data } = useQuery<WelcomeResponse>({
     queryKey: ["/api/welcome-cards"],
@@ -48,6 +56,46 @@ export function WelcomeCards() {
     }
   }, [data]);
 
+  const slideTo = useCallback((newIndex: number, dir: Direction) => {
+    if (busy.current) return;
+    busy.current = true;
+    setDirection(dir);
+    setPhase("fade-out");
+
+    setTimeout(() => {
+      setCurrentIndex(newIndex);
+      setPhase("repositioned");
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setPhase("fade-in");
+          setTimeout(() => {
+            setPhase("stable");
+            busy.current = false;
+          }, DURATION);
+        });
+      });
+    }, DURATION);
+  }, []);
+
+  const goNext = useCallback(() => {
+    if (busy.current || !data) return;
+    const cards = data.cards;
+    const isLast = currentIndex === cards.length - 1;
+    if (isLast) {
+      markSeenMutation.mutate();
+      setClosing(true);
+      setTimeout(() => setVisible(false), 350);
+      return;
+    }
+    slideTo(currentIndex + 1, "next");
+  }, [currentIndex, data, slideTo, markSeenMutation]);
+
+  const goPrev = useCallback(() => {
+    if (busy.current || currentIndex <= 0) return;
+    slideTo(currentIndex - 1, "prev");
+  }, [currentIndex, slideTo]);
+
   if (!visible || !data?.show || data.cards.length === 0) return null;
 
   const cards = data.cards;
@@ -58,43 +106,57 @@ export function WelcomeCards() {
   const replaceName = (text: string, shouldReplace: boolean) =>
     shouldReplace ? text.replace(/\{name\}/g, userName) : text;
 
-  const goNext = () => {
-    if (isLast) {
-      markSeenMutation.mutate();
-      setAnimating(true);
-      setTimeout(() => setVisible(false), 300);
-      return;
-    }
-    setAnimating(true);
-    setTimeout(() => {
-      setCurrentIndex((i) => i + 1);
-      setAnimating(false);
-    }, 200);
-  };
+  const exitX = direction === "next" ? "-50px" : "50px";
+  const enterX = direction === "next" ? "50px" : "-50px";
 
-  const goPrev = () => {
-    if (currentIndex > 0) {
-      setAnimating(true);
-      setTimeout(() => {
-        setCurrentIndex((i) => i - 1);
-        setAnimating(false);
-      }, 200);
-    }
-  };
+  let contentStyle: React.CSSProperties;
+  switch (phase) {
+    case "fade-out":
+      contentStyle = {
+        opacity: 0,
+        transform: `translateX(${exitX})`,
+        transition: `opacity ${DURATION}ms cubic-bezier(0.4,0,0.2,1), transform ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
+      };
+      break;
+    case "repositioned":
+      contentStyle = {
+        opacity: 0,
+        transform: `translateX(${enterX})`,
+        transition: "none",
+      };
+      break;
+    case "fade-in":
+      contentStyle = {
+        opacity: 1,
+        transform: "translateX(0)",
+        transition: `opacity ${DURATION}ms cubic-bezier(0.4,0,0.2,1), transform ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
+      };
+      break;
+    default:
+      contentStyle = {
+        opacity: 1,
+        transform: "translateX(0)",
+        transition: `opacity ${DURATION}ms cubic-bezier(0.4,0,0.2,1), transform ${DURATION}ms cubic-bezier(0.4,0,0.2,1)`,
+      };
+  }
 
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+      style={{
+        background: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(4px)",
+        opacity: closing ? 0 : 1,
+        transition: closing ? "opacity 0.35s ease-out" : "none",
+      }}
     >
       <div
         dir="rtl"
-        className="relative mx-4 w-full max-w-md overflow-hidden"
+        className="relative mx-4 w-full max-w-md"
         style={{
-          animation: animating ? "none" : "welcome-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both",
-          opacity: animating ? 0.3 : 1,
-          transform: animating ? "scale(0.95)" : "scale(1)",
-          transition: "opacity 0.2s, transform 0.2s",
+          animation: "welcome-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both",
+          transform: closing ? "scale(0.92)" : undefined,
+          transition: closing ? "transform 0.35s ease-out" : undefined,
         }}
       >
         <div className="rounded-2xl border-2 border-primary/30 bg-card shadow-2xl overflow-hidden">
@@ -105,20 +167,24 @@ export function WelcomeCards() {
             }}
           />
 
-          <div className="relative px-8 py-10 text-center space-y-5">
-            {card.emoji && (
-              <div className="text-5xl mb-2">{card.emoji}</div>
-            )}
+          <div className="relative px-8 py-10 text-center">
+            <div className="overflow-hidden" style={{ minHeight: "160px" }}>
+              <div style={contentStyle}>
+                {card.emoji && (
+                  <div className="text-5xl mb-4">{card.emoji}</div>
+                )}
 
-            <h2 className="text-xl font-bold leading-relaxed">
-              {replaceName(card.title, card.showUserName)}
-            </h2>
+                <h2 className="text-xl font-bold leading-relaxed">
+                  {replaceName(card.title, card.showUserName)}
+                </h2>
 
-            <p className="text-sm text-muted-foreground leading-[1.9] whitespace-pre-wrap">
-              {replaceName(card.body, card.showUserName)}
-            </p>
+                <p className="text-sm text-muted-foreground leading-[1.9] whitespace-pre-wrap mt-4">
+                  {replaceName(card.body, card.showUserName)}
+                </p>
+              </div>
+            </div>
 
-            <div className="flex items-center justify-center gap-1.5 pt-2">
+            <div className="flex items-center justify-center gap-1.5 pt-5">
               {cards.map((_, i) => (
                 <span
                   key={i}
@@ -131,7 +197,7 @@ export function WelcomeCards() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-3 pt-4">
               {currentIndex > 0 && (
                 <Button
                   variant="ghost"
