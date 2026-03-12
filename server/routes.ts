@@ -1503,17 +1503,29 @@ export async function registerRoutes(
   });
 
   // ─── Slack OAuth Flow ───────────────────────────────────────────────────
+  function getOAuthRedirectUri(req: any): string {
+    const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+    const host = req.get("host");
+    return `${proto}://${host}/api/integrations/slack/oauth/callback`;
+  }
+
   app.get("/api/integrations/slack/oauth/start", requireAuth, async (req, res) => {
     try {
       const clientId = process.env.SLACK_CLIENT_ID;
       if (!clientId) return res.status(500).json({ error: "SLACK_CLIENT_ID غير مضبوط" });
 
-      const redirectUri = process.env.SLACK_REDIRECT_URI || `${req.protocol}://${req.get("host")}/api/integrations/slack/oauth/callback`;
+      const redirectUri = getOAuthRedirectUri(req);
       const scopes = "channels:read,chat:write,channels:history,users:read";
       const { randomBytes } = await import("crypto");
       const nonce = randomBytes(24).toString("hex");
       (req.session as any).slackOAuthState = nonce;
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => (err ? reject(err) : resolve()));
+      });
+
       const slackUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${nonce}`;
+      console.log(`[Slack OAuth] Start — redirectUri=${redirectUri}`);
       res.json({ url: slackUrl });
     } catch (error) {
       console.error("[Slack OAuth] Start error:", error);
@@ -1528,7 +1540,7 @@ export async function registerRoutes(
 
       const expectedState = (req.session as any).slackOAuthState;
       if (!expectedState || expectedState !== state) {
-        console.error("[Slack OAuth] State mismatch — possible CSRF");
+        console.error("[Slack OAuth] State mismatch — expected:", expectedState, "got:", state);
         return res.redirect("/settings?slack_oauth=error&msg=state_mismatch");
       }
       delete (req.session as any).slackOAuthState;
@@ -1541,7 +1553,7 @@ export async function registerRoutes(
       const clientSecret = process.env.SLACK_CLIENT_SECRET;
       if (!clientId || !clientSecret) return res.status(500).send("OAuth not configured");
 
-      const redirectUri = process.env.SLACK_REDIRECT_URI || `${req.protocol}://${req.get("host")}/api/integrations/slack/oauth/callback`;
+      const redirectUri = getOAuthRedirectUri(req);
 
       const tokenRes = await fetch("https://slack.com/api/oauth.v2.access", {
         method: "POST",
