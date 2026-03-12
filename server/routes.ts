@@ -3674,7 +3674,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   });
 
   const updateTicketStatusSchema = z.object({
-    status: z.enum(["open", "in_progress", "resolved"]),
+    status: z.enum(["open", "in_progress", "resolved", "cancelled"]),
   });
 
   app.patch("/api/admin/tickets/:id/status", requireAdmin, async (req, res) => {

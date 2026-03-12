@@ -169,7 +169,7 @@ export default function Settings() {
     else if (hasOAuthSlackConfig && !hasManualSlackConfig) setSlackConnectionTab("auto");
   }, [hasManualSlackConfig, hasOAuthSlackConfig]);
 
-  type TicketEntry = { id: string; title: string; description: string; imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string };
+  type TicketEntry = { id: string; ticketNumber: number | null; title: string; description: string; imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string };
   type TicketReplyEntry = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
 
   const { data: myTickets } = useQuery<TicketEntry[]>({ queryKey: ["/api/tickets"], enabled: showMyTickets });
@@ -223,6 +223,7 @@ export default function Settings() {
     open: { label: "خامل", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
     in_progress: { label: "جارٍ العمل عليها", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
     resolved: { label: "تم العمل عليها", color: "bg-green-500/20 text-green-400 border-green-500/30" },
+    cancelled: { label: "ملغية", color: "bg-red-500/20 text-red-400 border-red-500/30" },
   };
 
   const categoryLabels: Record<string, string> = {
@@ -603,6 +604,7 @@ export default function Settings() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono text-muted-foreground shrink-0">#{t.ticketNumber}</span>
                                 <p className="font-medium text-sm truncate">{t.title}</p>
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                   {categoryLabels[t.category] || t.category}
@@ -629,6 +631,7 @@ export default function Settings() {
                       <Button size="sm" variant="ghost" onClick={() => setSelectedTicketId(null)} data-testid="button-back-tickets">
                         <ChevronDown className="h-4 w-4 rotate-90" />
                       </Button>
+                      <span className="text-xs font-mono text-muted-foreground shrink-0">#{selectedTicketData.ticket.ticketNumber}</span>
                       <span className="font-medium text-sm flex-1 truncate">{selectedTicketData.ticket.title}</span>
                       <span className={`text-xs px-2 py-1 rounded-full border ${statusLabels[selectedTicketData.ticket.status]?.color || ""}`}>
                         {statusLabels[selectedTicketData.ticket.status]?.label || selectedTicketData.ticket.status}
@@ -661,7 +664,7 @@ export default function Settings() {
                       ))}
                     </div>
 
-                    {selectedTicketData.ticket.status !== "resolved" && (
+                    {selectedTicketData.ticket.status !== "resolved" && selectedTicketData.ticket.status !== "cancelled" && (
                       <div className="flex gap-2">
                         <Input
                           value={ticketReplyText}

@@ -575,7 +575,7 @@ export type WelcomeCardView = typeof welcomeCardViews.$inferSelect;
 
 // ─── Support Tickets ─────────────────────────────────────────────────────────
 
-export const ticketStatuses = ["open", "in_progress", "resolved"] as const;
+export const ticketStatuses = ["open", "in_progress", "resolved", "cancelled"] as const;
 export type TicketStatus = typeof ticketStatuses[number];
 
 export const ticketCategories = ["complaint", "suggestion"] as const;
@@ -584,6 +584,7 @@ export type TicketCategory = typeof ticketCategories[number];
 export const supportTickets = pgTable("support_tickets", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ticketNumber: integer("ticket_number").unique(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   imageUrls: text("image_urls").array(),
@@ -595,6 +596,7 @@ export const supportTickets = pgTable("support_tickets", {
 
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
   id: true,
+  ticketNumber: true,
   createdAt: true,
   updatedAt: true,
 });
