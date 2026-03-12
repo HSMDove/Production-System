@@ -1415,7 +1415,7 @@ export async function registerRoutes(
       (async () => {
         try {
           const botToken = (await storage.getSetting("slack_bot_token", platformUser!.id))?.value || "";
-          const fallbackName = event.username || platformUser!.name || undefined;
+          const fallbackName = event.username || event.user || platformUser!.name || undefined;
 
           const namePromise: Promise<string | undefined> = (botToken && slackUserId)
             ? fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
@@ -1435,17 +1435,16 @@ export async function registerRoutes(
               .catch(() => fallbackName)
             : Promise.resolve(fallbackName);
 
-          const [senderDisplayName, conversation] = await Promise.all([
+          const [senderDisplayName, conversation, result] = await Promise.all([
             namePromise,
             storage.createAssistantConversation({
               title: `Slack - ${text.slice(0, 50)}`,
               userId: platformUser!.id,
             } as any),
+            runAssistantEngine(text, [], platformUser!.id, fallbackName),
           ]);
 
-          console.log(`[Slack] Sender name: "${senderDisplayName}"`);
-          const result = await runAssistantEngine(text, [], platformUser!.id, senderDisplayName);
-          console.log(`[Slack] AI response ready, action: ${result.action}`);
+          console.log(`[Slack] Sender: "${senderDisplayName}", AI action: ${result.action}`);
 
           await storage.createAssistantMessage({
             conversationId: conversation.id,
@@ -1470,6 +1469,10 @@ export async function registerRoutes(
             return;
           }
 
+          const replyText = senderDisplayName
+            ? `مرحباً ${senderDisplayName}،\n${result.answer}`
+            : result.answer;
+
           const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
             method: "POST",
             headers: {
@@ -1478,7 +1481,7 @@ export async function registerRoutes(
             },
             body: JSON.stringify({
               channel: event.channel,
-              text: result.answer,
+              text: replyText,
               thread_ts: event.thread_ts || event.ts,
             }),
           });
