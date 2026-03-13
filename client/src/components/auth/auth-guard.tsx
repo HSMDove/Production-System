@@ -3,7 +3,9 @@ import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
-const PUBLIC_ROUTES = ["/login", "/verify", "/onboarding"];
+const AUTH_ROUTES = ["/login", "/verify", "/onboarding"];
+const STATIC_PUBLIC_ROUTES = ["/privacy"];
+const PUBLIC_ROUTES = [...AUTH_ROUTES, ...STATIC_PUBLIC_ROUTES];
 const ADMIN_ROUTES = ["/admin"];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -26,7 +28,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && user.onboardingCompleted && isPublicRoute) {
+    const isStaticPublic = STATIC_PUBLIC_ROUTES.some((r) => location.startsWith(r));
+    if (user && user.onboardingCompleted && isPublicRoute && !isStaticPublic) {
       navigate("/");
       return;
     }

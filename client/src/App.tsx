@@ -22,6 +22,7 @@ import VerifyOTPPage from "@/pages/verify-otp";
 import OnboardingPage from "@/pages/onboarding";
 import AdminLoginPage from "@/pages/admin-login";
 import AdminDashboard from "@/pages/admin-dashboard";
+import PrivacyPage from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 import { FikriOverlayProvider } from "@/contexts/fikri-overlay-context";
 import { FikriOverlay } from "@/components/fikri/fikri-overlay";
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/split-view" component={SplitView} />
       <Route path="/model" component={ModelAssistantPage} />
+      <Route path="/privacy" component={PrivacyPage} />
       <Route component={NotFound} />
     </Switch>
   );
