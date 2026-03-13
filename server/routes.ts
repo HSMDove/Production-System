@@ -1319,6 +1319,14 @@ export async function registerRoutes(
     });
   });
 
+  const slackEventDedup = new Map<string, number>();
+  setInterval(() => {
+    const cutoff = Date.now() - 60_000;
+    for (const [key, ts] of slackEventDedup) {
+      if (ts < cutoff) slackEventDedup.delete(key);
+    }
+  }, 30_000);
+
   app.post("/api/integrations/slack/events", async (req: any, res) => {
     try {
       const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : JSON.stringify(req.body || {});
@@ -1374,13 +1382,20 @@ export async function registerRoutes(
 
       // Ignore bot messages (including our own)
       if (event.bot_id || event.subtype === "bot_message") {
-        console.log("[Slack] Ignoring bot message");
         return res.json({ ok: true });
       }
 
       // Handle app_mention and direct messages
       const supportedTypes = ["app_mention", "message"];
       if (!supportedTypes.includes(event.type)) return res.json({ ok: true });
+
+      // Dedup: if we get both app_mention and message for the same ts, only process once
+      const eventKey = `${event.channel}:${event.ts}`;
+      if (slackEventDedup.has(eventKey)) {
+        console.log(`[Slack] Dedup — skipping duplicate event ${eventKey}`);
+        return res.json({ ok: true });
+      }
+      slackEventDedup.set(eventKey, Date.now());
 
       let text: string = event.text || "";
       text = text.replace(/<@[A-Z0-9]+>/g, "").trim();
@@ -1441,36 +1456,36 @@ export async function registerRoutes(
             const oauthToken = await findBotTokenForTeam(payload.team_id);
             if (oauthToken) botToken = oauthToken;
           }
-          const fallbackName = event.username || event.user || platformUser!.name || undefined;
 
-          const namePromise: Promise<string | undefined> = (botToken && slackUserId)
-            ? fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
+          let senderDisplayName: string | undefined = platformUser!.name || undefined;
+          if (botToken && slackUserId) {
+            try {
+              const infoRes = await fetch(`https://slack.com/api/users.info?user=${slackUserId}`, {
                 method: "GET",
                 headers: { Authorization: `Bearer ${botToken}` },
-              })
-              .then(r => r.json() as Promise<any>)
-              .then(info => {
-                if (info.ok && info.user) {
-                  return (info.user.profile?.display_name
-                    || info.user.profile?.real_name
-                    || info.user.real_name
-                    || info.user.name) as string;
-                }
-                return fallbackName;
-              })
-              .catch(() => fallbackName)
-            : Promise.resolve(fallbackName);
+              });
+              const info = await infoRes.json() as any;
+              if (info.ok && info.user) {
+                senderDisplayName = info.user.profile?.display_name
+                  || info.user.profile?.real_name
+                  || info.user.real_name
+                  || info.user.name
+                  || senderDisplayName;
+              }
+            } catch {}
+          }
 
-          const [senderDisplayName, conversation, result] = await Promise.all([
-            namePromise,
+          console.log(`[Slack] Sender resolved: "${senderDisplayName}"`);
+
+          const [conversation, result] = await Promise.all([
             storage.createAssistantConversation({
               title: `Slack - ${text.slice(0, 50)}`,
               userId: platformUser!.id,
             } as any),
-            runAssistantEngine(text, [], platformUser!.id, fallbackName),
+            runAssistantEngine(text, [], platformUser!.id, senderDisplayName),
           ]);
 
-          console.log(`[Slack] Sender: "${senderDisplayName}", AI action: ${result.action}`);
+          console.log(`[Slack] AI action: ${result.action}`);
 
           await storage.createAssistantMessage({
             conversationId: conversation.id,
@@ -1495,10 +1510,6 @@ export async function registerRoutes(
             return;
           }
 
-          const replyText = senderDisplayName
-            ? `مرحباً ${senderDisplayName}،\n${result.answer}`
-            : result.answer;
-
           const slackRes = await fetch("https://slack.com/api/chat.postMessage", {
             method: "POST",
             headers: {
@@ -1507,7 +1518,7 @@ export async function registerRoutes(
             },
             body: JSON.stringify({
               channel: event.channel,
-              text: replyText,
+              text: result.answer,
               thread_ts: event.thread_ts || event.ts,
             }),
           });
