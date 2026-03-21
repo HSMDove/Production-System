@@ -1,0 +1,18 @@
+{
+  "brand.name": "نَهْج",
+  "brand.description": "منصة NahjHub لإدارة المحتوى وتوليد أفكار الفيديوهات بالذكاء الاصطناعي",
+  "nav.folders": "ملفات الأخبار",
+  "nav.ideas": "الأفكار",
+  "nav.calendar": "التقويم",
+  "nav.analytics": "التحليلات",
+  "nav.trends": "الترند",
+  "nav.fikri": "فكري 2.0",
+  "nav.settings": "الإعدادات",
+  "fikri.name": "فكري 2.0",
+  "fikri.welcome": "هلا! أنا فكري 2.0 🤝 جاهز أساعدك في الأخبار والأفكار بسرعة.",
+  "fikri.open": "افتح فكري 2.0",
+  "theme.defaultDark": "وهج",
+  "theme.techField": "نبض",
+  "theme.techVoice": "أثير",
+  "lang.saArabic": "العربية - لهجة سعودية"
+}
