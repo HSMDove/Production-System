@@ -47,11 +47,11 @@ export function AuthShell({
         </section>
 
         <Card className="auth-form-panel">
-          <CardHeader className="space-y-3">
+          <CardHeader className="space-y-3 pb-4 md:pb-5">
             <CardTitle>{panelTitle}</CardTitle>
             <CardDescription>{panelDescription}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-6">
             {children}
           </CardContent>
         </Card>

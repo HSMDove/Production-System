@@ -40,7 +40,7 @@ function FolderPane({ folderId }: { folderId: string }) {
       <div className="flex items-center gap-2 p-3 border-b bg-muted/30 flex-shrink-0">
         <div
           className="flex h-6 w-6 items-center justify-center rounded flex-shrink-0"
-          style={{ backgroundColor: folder?.color || "#3b82f6" }}
+          style={{ backgroundColor: folder?.color || "#6d8df7" }}
         >
           <Folder className="h-3.5 w-3.5 text-white" />
         </div>

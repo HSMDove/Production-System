@@ -25,7 +25,7 @@ import type { Folder } from "@/lib/types";
 const folderFormSchema = z.object({
   name: z.string().min(1, "اسم المجلد مطلوب"),
   description: z.string().optional(),
-  color: z.string().default("#3b82f6"),
+  color: z.string().default("#6d8df7"),
 });
 
 type FolderFormValues = z.infer<typeof folderFormSchema>;
@@ -39,14 +39,14 @@ interface FolderDialogProps {
 }
 
 const colorOptions = [
-  "#3b82f6", // blue
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#8b5cf6", // violet
-  "#ec4899", // pink
-  "#14b8a6", // teal
-  "#f97316", // orange
+  "#6d8df7",
+  "#63c3ab",
+  "#e6b363",
+  "#e5867a",
+  "#9a84f7",
+  "#e58fbd",
+  "#58b8c6",
+  "#e89b69",
 ];
 
 export function FolderDialog({
@@ -61,7 +61,7 @@ export function FolderDialog({
     defaultValues: {
       name: "",
       description: "",
-      color: "#3b82f6",
+      color: "#6d8df7",
     },
   });
 
@@ -70,13 +70,13 @@ export function FolderDialog({
       form.reset({
         name: folder.name,
         description: folder.description || "",
-        color: folder.color || "#3b82f6",
+        color: folder.color || "#6d8df7",
       });
     } else {
       form.reset({
         name: "",
         description: "",
-        color: "#3b82f6",
+        color: "#6d8df7",
       });
     }
   }, [folder, form]);
@@ -143,12 +143,15 @@ export function FolderDialog({
                           key={color}
                           type="button"
                           onClick={() => field.onChange(color)}
-                          className={`h-8 w-8 rounded-md transition-all ${
+                          className={`h-9 w-9 rounded-xl border-[2px] border-border shadow-[0_3px_0_0_rgba(0,0,0,0.22)] transition-all ${
                             field.value === color
-                              ? "ring-2 ring-offset-2 ring-primary"
+                              ? "ring-2 ring-offset-2 ring-primary scale-105"
                               : ""
                           }`}
-                          style={{ backgroundColor: color }}
+                          style={{
+                            backgroundColor: color,
+                            backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0))",
+                          }}
                           data-testid={`button-color-${color}`}
                         />
                       ))}

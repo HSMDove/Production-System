@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, Sparkles, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { t } from "@/i18n";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 import { useAuth } from "@/hooks/use-auth";
-import { useTheme } from "@/components/theme-provider";
-import { getThemeOption } from "@/lib/theme-options";
 import {
   Sheet,
   SheetContent,
@@ -29,9 +27,7 @@ export function Header() {
   const [location] = useLocation();
   const { setOpen } = useFikriOverlay();
   const { isAdmin } = useAuth();
-  const { theme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const activeTheme = getThemeOption(theme);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -50,10 +46,9 @@ export function Header() {
         <div className="nb-header-shell">
           <div className="nb-header-stripes" aria-hidden="true" />
           <div className="relative flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-5">
-            <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center justify-between gap-3">
               <Link href="/" className="group flex min-w-0 items-center gap-3">
                 <div className="flex min-w-0 flex-col">
-                  <span className="nb-kicker mb-2 w-fit">غرفة صناعة المحتوى</span>
                   <span className="text-3xl font-black leading-none tracking-[-0.08em] sm:text-4xl" data-testid="text-logo">
                     نَسَق
                   </span>
@@ -75,17 +70,7 @@ export function Header() {
                     <SheetHeader>
                       <SheetTitle className="text-right text-2xl font-black">التنقل</SheetTitle>
                     </SheetHeader>
-                    <div className="mt-5 rounded-[22px] border-[3px] border-black/85 bg-card p-3 shadow-[6px_6px_0_0_rgba(0,0,0,0.88)]">
-                      <div className="mb-4 flex items-center justify-between gap-3 rounded-[18px] border-[3px] border-black/85 bg-background px-3 py-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-black uppercase tracking-[0.18em] text-foreground/55">المظهر النشط</p>
-                          <p className="mt-1 text-lg font-black">{activeTheme.label}</p>
-                        </div>
-                        <span
-                          className="h-5 w-5 rounded-full border-[2px] border-black/85"
-                          style={{ backgroundColor: activeTheme.color }}
-                        />
-                      </div>
+                    <div className="mt-5 rounded-[22px] border-[3px] border-border bg-card p-3 shadow-[6px_6px_0_0_rgba(0,0,0,0.88)]">
                       <nav className="flex flex-col gap-2">
                         {navItems.map((item) => {
                           if (item.href === "/model") {
@@ -149,21 +134,10 @@ export function Header() {
                     </div>
                   </SheetContent>
                 </Sheet>
-              </div>
+                </div>
             </div>
 
-            <div className="hidden items-center gap-2 rounded-[20px] border-[3px] border-black/85 bg-background px-3 py-2 shadow-[4px_4px_0_0_rgba(0,0,0,0.88)] lg:flex">
-              <span
-                className="h-4 w-4 rounded-full border-[2px] border-black/85"
-                style={{ backgroundColor: activeTheme.color }}
-              />
-              <div className="leading-tight">
-                <p className="text-[0.65rem] font-black uppercase tracking-[0.22em] text-foreground/55">المظهر</p>
-                <p className="text-sm font-black">{activeTheme.label}</p>
-              </div>
-            </div>
-
-            <nav className="hidden flex-wrap items-center gap-2 lg:flex">
+            <nav className="hidden flex-wrap items-center gap-2.5 lg:flex">
           {navItems.map((item) => {
             if (item.href === "/model") {
               if (location === "/settings") return null;

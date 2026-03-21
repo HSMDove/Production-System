@@ -111,9 +111,8 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="space-y-8">
-        <div className="flex items-start justify-between gap-4 flex-wrap bg-primary/8 backdrop-blur-sm p-6 rounded-3xl border-[3px] border-primary/30 shadow-[0_4px_0_0_hsl(var(--primary)/0.3)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-l from-primary/15 via-primary/8 to-transparent" />
-          <div className="relative z-10">
+        <div className="dashboard-hero-shell flex flex-wrap items-start justify-between gap-4 p-6 sm:p-7">
+          <div className="relative z-10 max-w-2xl">
             <h1 className="text-3xl font-black tracking-tight" data-testid="text-page-title">
               {welcomePrefix} {user?.name || "مستخدم"} {emoji}
             </h1>
@@ -121,14 +120,14 @@ export default function Dashboard() {
               نظّم مصادرك وأفكارك في نَسَق، واصنع محتوى راقي...
             </p>
           </div>
-          <div className="flex gap-3 relative z-10">
+          <div className="relative z-10 flex flex-wrap gap-3">
             <Link href="/split-view">
-              <Button variant="outline" className="gap-2 bg-card border-primary/20 hover:border-primary/50 transition-colors shadow-sm" data-testid="button-split-view">
+              <Button variant="outline" className="gap-2" data-testid="button-split-view">
                 <Columns2 className="h-4 w-4 text-primary" />
                 عرض مقسم
               </Button>
             </Link>
-            <Button onClick={handleAddFolder} className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)] border-none">
+            <Button onClick={handleAddFolder} className="gap-2">
               <FolderOpen className="h-4 w-4" />
               مجلد جديد
             </Button>
@@ -141,13 +140,13 @@ export default function Dashboard() {
             المجلدات
           </h2>
           {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-[160px] rounded-lg" />
+                <Skeleton key={i} className="h-[17rem] rounded-lg" />
               ))}
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {folders?.map((folder) => (
                 <FolderCard
                   key={folder.id}

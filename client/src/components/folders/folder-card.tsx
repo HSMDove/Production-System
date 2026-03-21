@@ -105,6 +105,7 @@ export function FolderCountdown({ folderId, refreshInterval }: { folderId: strin
 export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   const sourceCount = folder._count?.sources ?? 0;
   const contentCount = folder._count?.content ?? 0;
+  const folderColor = folder.color || "#6d8df7";
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<FolderType>) => {
@@ -139,15 +140,18 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
   return (
     <Card 
-      className="group glass-surface rounded-[1.618rem] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/50"
+      className="folder-surface group glass-surface flex h-full min-h-[17rem] flex-col rounded-[1.618rem]"
       data-testid={`card-folder-${folder.id}`}
     >
       <Link href={`/folder/${folder.id}`}>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3 cursor-pointer px-[calc(0.75rem*1.618)] pt-[calc(0.75rem*1.618)]">
+        <CardHeader className="cursor-pointer px-5 pb-3 pt-5">
           <div className="flex items-center gap-3">
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-md flex-shrink-0"
-              style={{ backgroundColor: folder.color || "#3b82f6" }}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-[2px] border-white/45"
+              style={{
+                backgroundColor: folderColor,
+                backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0))",
+              }}
             >
               <Folder className="h-6 w-6 text-white" />
             </div>
@@ -200,7 +204,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
         </CardHeader>
       </Link>
 
-      <CardContent className="pt-0 space-y-[calc(0.5rem*1.618)] px-[calc(0.75rem*1.618)] pb-[calc(0.75rem*1.618)]">
+      <CardContent className="flex flex-1 flex-col space-y-4 px-5 pb-5 pt-0">
         <Link href={`/folder/${folder.id}`}>
           <div className="flex items-center gap-4 text-sm text-muted-foreground cursor-pointer flex-wrap">
             <div className="flex items-center gap-1.5">
@@ -213,7 +217,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
           </div>
         </Link>
 
-        <div className="border-t pt-3 space-y-2">
+        <div className="border-t border-border/70 pt-3 space-y-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -299,7 +303,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
           </div>
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-auto text-xs text-muted-foreground">
           أُنشئ {formatDistanceToNow(new Date(folder.createdAt), { addSuffix: true, locale: ar })}
         </p>
       </CardContent>

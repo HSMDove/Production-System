@@ -118,7 +118,7 @@ export default function VerifyOTPPage() {
           <p className="text-sm font-medium text-primary" dir="ltr">{email}</p>
         </div>
 
-        <div className="flex gap-2.5 justify-center" dir="ltr" onPaste={handlePaste}>
+        <div className="flex justify-center gap-2 sm:gap-2.5" dir="ltr" onPaste={handlePaste}>
           {digits.map((digit, i) => (
             <input
               key={i}
@@ -132,7 +132,7 @@ export default function VerifyOTPPage() {
               disabled={verifyMutation.isPending}
               data-testid={`input-otp-digit-${i}`}
               autoFocus={i === 0}
-              className="h-14 w-12 rounded-[16px] border-[3px] border-black/90 bg-background text-center text-2xl font-black leading-none tracking-none text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-12 w-10 rounded-[16px] border-[3px] border-border bg-background text-center text-xl font-black leading-none tracking-none text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-14 sm:w-12 sm:text-2xl"
               style={{ caretColor: "transparent", textAlign: "center", textAlignLast: "center" }}
             />
           ))}
