@@ -37,15 +37,18 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div dir="rtl" className="min-h-screen bg-background flex">
-      <aside className="w-64 border-l bg-card min-h-screen p-4 flex flex-col" data-testid="admin-sidebar">
+    <div dir="rtl" className="min-h-screen bg-background px-3 py-4 sm:px-5 sm:py-6">
+      <div className="flex min-h-[calc(100vh-2rem)] flex-col gap-4 lg:flex-row">
+      <aside className="w-full lg:w-72 rounded-[2rem] border-4 border-foreground bg-card p-4 shadow-brutal flex flex-col" data-testid="admin-sidebar">
         <div className="mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Shield className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-bold">لوحة التحكم</h1>
+          <div className="rounded-[1.5rem] border-4 border-foreground bg-primary p-4 text-primary-foreground shadow-brutal-sm">
+            <div className="mb-2 flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              <h1 className="text-2xl font-black">لوحة الإدارة</h1>
+            </div>
+            <p className="text-xs font-bold opacity-90">{user?.email}</p>
+            {isSuperAdmin && <Badge variant="outline" className="mt-3 border-foreground bg-card text-foreground text-xs">مدير أعلى</Badge>}
           </div>
-          <p className="text-xs text-muted-foreground">{user?.email}</p>
-          {isSuperAdmin && <Badge variant="outline" className="mt-1 text-xs">مدير أعلى</Badge>}
         </div>
 
         <nav className="space-y-1 flex-1">
@@ -54,10 +57,10 @@ export default function AdminDashboard() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               data-testid={`tab-${tab.id}`}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`w-full rounded-[1.25rem] border-4 px-4 py-3 text-sm font-black transition-all shadow-brutal-sm ${
                 activeTab === tab.id
-                  ? "bg-primary text-primary-foreground font-medium"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "border-foreground bg-secondary text-secondary-foreground -translate-y-1"
+                  : "border-foreground bg-card text-muted-foreground hover:-translate-y-1 hover:text-foreground"
               }`}
             >
               <tab.icon className="h-4 w-4" />
@@ -66,7 +69,7 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="space-y-2 pt-4 border-t">
+        <div className="space-y-2 border-t-4 border-foreground pt-4">
           <Button variant="ghost" className="w-full justify-start gap-2 text-sm" onClick={() => navigate("/")} data-testid="button-back-app">
             <ChevronLeft className="h-4 w-4" />
             العودة للتطبيق
@@ -78,7 +81,12 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      <main className="flex-1 p-6 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto rounded-[2rem] border-4 border-foreground bg-card p-5 shadow-brutal sm:p-7">
+        <div className="mb-6 rounded-[1.75rem] border-4 border-foreground bg-nb-pink px-5 py-5 shadow-brutal-sm">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-foreground/70">ADMIN CONTROL ROOM</p>
+          <h2 className="mt-2 text-4xl font-black tracking-[-0.05em]">لوحة صلبة. قرارات واضحة.</h2>
+          <p className="mt-2 max-w-3xl text-sm font-bold text-foreground/80 sm:text-base">نقلنا الإدارة إلى واجهة Neobrutalism أكثر تباينًا: حدود سوداء، بطاقات سميكة، وعناصر قراءة أسرع.</p>
+        </div>
         {activeTab === "analytics" && <AnalyticsPanel />}
         {activeTab === "users" && <UsersPanel />}
         {activeTab === "announcements" && <AnnouncementsPanel />}
@@ -89,6 +97,7 @@ export default function AdminDashboard() {
         {activeTab === "admins" && <AdminsPanel />}
         {activeTab === "audit" && <AuditPanel />}
       </main>
+      </div>
     </div>
   );
 }
@@ -112,12 +121,12 @@ function AnalyticsPanel() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-6">الإحصائيات العامة</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {stats.map((s) => (
-          <div key={s.label} className="card bg-card p-5" data-testid={`stat-${s.label}`}>
-            <p className="text-sm text-muted-foreground">{s.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+      <h2 className="mb-6 text-3xl font-black tracking-[-0.04em]">الإحصائيات العامة</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {stats.map((s, index) => (
+          <div key={s.label} className={`rounded-[1.75rem] border-4 border-foreground p-5 shadow-brutal ${index % 3 === 0 ? "bg-nb-yellow" : index % 3 === 1 ? "bg-nb-pink" : "bg-nb-blue"}`} data-testid={`stat-${s.label}`}>
+            <p className="text-sm font-black text-foreground/70">{s.label}</p>
+            <p className={`mt-2 text-4xl font-black ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -924,7 +933,7 @@ function TicketsPanel() {
 
   type AdminTicket = {
     id: string; userId: string; title: string; description: string;
-    imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string;
+    ticketNumber: number | null; imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string;
     userEmail: string; userName: string;
   };
   type Reply = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };

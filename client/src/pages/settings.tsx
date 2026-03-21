@@ -231,10 +231,10 @@ export default function Settings() {
     suggestion: "اقتراح",
   };
 
-  const addPlatformIdMutation = useMutation({
-    mutationFn: async (data: { platform: string; platformId: string; label?: string }) =>
+  const addPlatformIdMutation = useMutation<any, any, { platform: string; platformId: string; label?: string }>({
+    mutationFn: async (data) =>
       apiRequest("POST", "/api/auth/platform-ids", data),
-    onSuccess: (_data: any, variables: { platform: string }) => {
+    onSuccess: (_data: any, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       if (variables.platform === "slack") { setNewSlackId(""); setNewSlackLabel(""); }
@@ -409,9 +409,9 @@ export default function Settings() {
   });
 
   const themeOptions = useMemo(() => ([
-    { value: "default", label: "الأساسي", color: "#F7CB46" },
-    { value: "tech-field", label: "تيك فيلد", color: "#FE90E8" },
-    { value: "tech-voice", label: "تيك فويس", color: "#C0F7FE" },
+    { value: "default", label: "ذهبي صاخب", description: "قاعدة صفراء دافئة مع لمسات حبرية قوية", color: "#F7CB46", surface: "#FFDC8B" },
+    { value: "tech-field", label: "لكمة وردية", description: "وردي نيون جريء مستلهم من البطاقات المرحة", color: "#FE90E8", surface: "#FFC0F2" },
+    { value: "tech-voice", label: "سماوي رقمي", description: "سماوي تقني حاد بتباين حديث وواضح", color: "#C0F7FE", surface: "#99E885" },
   ] as const), []);
 
   if (isLoading) {
@@ -426,26 +426,38 @@ export default function Settings() {
 
   return (
     <MainLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-4 pb-24" dir="rtl">
-        <Card>
-          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-settings-title">الإعدادات</h1>
-              <p className="text-muted-foreground mt-1">إدارة الحساب، الإشعارات، إعدادات فكري، والمظهر بشكل منظم.</p>
+      <div className="mx-auto w-full max-w-6xl space-y-5 pb-24" dir="rtl">
+        <section className="nb-hero-panel overflow-hidden p-5 sm:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border-4 border-foreground bg-nb-pink px-4 py-1.5 text-xs font-black text-foreground shadow-brutal-sm">
+                <Settings2 className="h-4 w-4" />
+                لوحة التحكم الشخصية
+              </div>
+              <div>
+                <h1 className="nb-display text-4xl sm:text-5xl" data-testid="text-settings-title">إعدادات نَسَق — بنكهة جريئة</h1>
+                <p className="mt-2 max-w-2xl text-base font-bold text-foreground/80 sm:text-lg">كل شيء من الحساب والثيمات إلى قنوات Slack وذكاء فكري صار داخل لوحة أكثر جرأة ووضوحًا.</p>
+              </div>
             </div>
-            <Button onClick={() => saveMutation.mutate(localSettings)} disabled={!hasChanges || saveMutation.isPending} className="gap-2" data-testid="button-save-settings">
-              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              حفظ التغييرات
-            </Button>
-          </CardContent>
-        </Card>
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[360px]">
+              <div className="nb-mini-tile bg-nb-blue">
+                <span className="text-xs font-black uppercase tracking-[0.2em]">Version</span>
+                <span className="text-2xl font-black">{appVersion}</span>
+              </div>
+              <Button onClick={() => saveMutation.mutate(localSettings)} disabled={!hasChanges || saveMutation.isPending} className="h-auto min-h-[84px] gap-3 text-lg" data-testid="button-save-settings">
+                {saveMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                {hasChanges ? "احفظ الضربة الأخيرة" : "كل شيء محفوظ"}
+              </Button>
+            </div>
+          </div>
+        </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto gap-1">
-            <TabsTrigger value="account">الحساب</TabsTrigger>
-            <TabsTrigger value="appearance">المظهر</TabsTrigger>
-            <TabsTrigger value="notifications">الإشعارات</TabsTrigger>
-            <TabsTrigger value="fikri">فكري 2.0 والذكاء</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-[1.6rem] border-4 border-foreground bg-card p-2 shadow-brutal lg:grid-cols-4">
+            <TabsTrigger className="rounded-2xl border-2 border-transparent px-4 py-3 text-sm font-black data-[state=active]:border-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="account">الحساب</TabsTrigger>
+            <TabsTrigger className="rounded-2xl border-2 border-transparent px-4 py-3 text-sm font-black data-[state=active]:border-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground" value="appearance">المظهر</TabsTrigger>
+            <TabsTrigger className="rounded-2xl border-2 border-transparent px-4 py-3 text-sm font-black data-[state=active]:border-foreground data-[state=active]:bg-accent data-[state=active]:text-accent-foreground" value="notifications">الإشعارات</TabsTrigger>
+            <TabsTrigger className="rounded-2xl border-2 border-transparent px-4 py-3 text-sm font-black data-[state=active]:border-foreground data-[state=active]:bg-nb-green data-[state=active]:text-foreground" value="fikri">فكري 2.0 والذكاء</TabsTrigger>
           </TabsList>
 
           <TabsContent value="account" className="space-y-4">
@@ -711,18 +723,33 @@ export default function Settings() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Palette className="h-4 w-4" /> السمة</CardTitle>
-                <CardDescription>تخصيص ألوان التطبيق.</CardDescription>
+                <CardTitle className="flex items-center gap-2"><Palette className="h-4 w-4" /> السمات الجريئة</CardTitle>
+                <CardDescription>أسماء أوضح، ألوان أقوى، وهوية بصرية أقرب لأسلوب Neobrutalism.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-3">
+              <CardContent className="grid gap-4 sm:grid-cols-3">
                 {themeOptions.map((option) => {
                   const isSelected = theme === option.value;
                   return (
-                    <Button key={option.value} variant={isSelected ? "default" : "outline"} className="justify-center gap-2" onClick={() => setTheme(option.value as any)} data-testid={`button-theme-${option.value}`}>
-                      <span className="h-4 w-4 rounded-full border-2 border-foreground/30" style={{ backgroundColor: option.color }} />
-                      {option.label}
-                      {isSelected && <Check className="h-4 w-4" />}
-                    </Button>
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setTheme(option.value as any)}
+                      data-testid={`button-theme-${option.value}`}
+                      className={`group rounded-[1.75rem] border-4 border-foreground p-4 text-right shadow-brutal transition-all hover:-translate-y-1 ${isSelected ? "bg-primary text-primary-foreground" : "bg-card"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-black">{option.label}</p>
+                          <p className={`mt-1 text-sm font-bold ${isSelected ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{option.description}</p>
+                        </div>
+                        {isSelected && <Check className="mt-1 h-5 w-5 shrink-0" />}
+                      </div>
+                      <div className="mt-4 grid grid-cols-3 gap-2">
+                        <span className="h-10 rounded-2xl border-4 border-foreground" style={{ backgroundColor: option.color }} />
+                        <span className="h-10 rounded-2xl border-4 border-foreground" style={{ backgroundColor: option.surface }} />
+                        <span className="h-10 rounded-2xl border-4 border-foreground bg-background" />
+                      </div>
+                    </button>
                   );
                 })}
               </CardContent>
@@ -899,7 +926,7 @@ export default function Settings() {
                                 {slackIds.map((entry) => (
                                   <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-auto-${entry.id}`}>
                                     {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
-                                    <button className="hover:text-destructive transition-colors" onClick={() => deletePlatformIdMutation.mutate(entry.id)}>
+                                    <button className="hover:text-destructive transition-colors" onClick={() => removePlatformIdMutation.mutate(entry.id)}>
                                       <X className="h-3 w-3" />
                                     </button>
                                   </Badge>

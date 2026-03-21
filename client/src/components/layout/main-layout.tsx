@@ -15,13 +15,13 @@ export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="min-h-screen overflow-hidden">
       <Header />
-      <main className="h-[calc(100svh-3.5rem)] sm:h-[calc(100svh-4rem)] overflow-y-auto w-full max-w-[1800px] mx-auto px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 xl:px-12 2xl:px-16">
+      <main className="h-[calc(100svh-4.5rem)] overflow-y-auto w-full max-w-[1880px] mx-auto px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 xl:px-12 2xl:px-16">
         {children}
       </main>
 
       {showFikriLauncher && (
         <button
-          className="fixed z-[150] flex flex-col items-center gap-0.5 transition-transform duration-150 hover:scale-110 active:scale-95"
+          className="fixed z-[150] flex flex-col items-center gap-1 transition-transform duration-150 hover:-translate-y-1 active:translate-y-1"
           style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))", left: "1.25rem" }}
           data-testid="button-fikri-fab"
           onClick={() => setOpen(true)}
@@ -29,10 +29,10 @@ export function MainLayout({ children }: MainLayoutProps) {
           <img
             src={fikriImage}
             alt="فكري"
-            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover drop-shadow-lg"
+            className="h-14 w-14 rounded-[1.4rem] border-4 border-foreground object-cover shadow-brutal sm:h-16 sm:w-16"
             draggable={false}
           />
-          <span className="text-[10px] sm:text-xs font-bold text-foreground drop-shadow-sm">فكري 2</span>
+          <span className="rounded-full border-4 border-foreground bg-card px-2 py-0.5 text-[10px] font-black text-foreground shadow-brutal-sm sm:text-xs">فكري 2</span>
         </button>
       )}
     </div>

@@ -11,9 +11,9 @@ import {
 import { useTheme, type AppTheme } from "@/components/theme-provider";
 
 const themeItems: Array<{ value: AppTheme; label: string; color: string }> = [
-  { value: "default", label: "الأساسي", color: "#F7CB46" },
-  { value: "tech-field", label: "تيك فيلد", color: "#FE90E8" },
-  { value: "tech-voice", label: "تيك فويس", color: "#C0F7FE" },
+  { value: "default", label: "ذهبي صاخب", color: "#F7CB46" },
+  { value: "tech-field", label: "لكمة وردية", color: "#FE90E8" },
+  { value: "tech-voice", label: "سماوي رقمي", color: "#C0F7FE" },
 ];
 
 export function ThemeToggle() {
