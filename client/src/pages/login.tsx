@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,22 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { defaultLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { data: pageContent } = useQuery<LoginPageContent>({
+    queryKey: ["/api/page-content/login"],
+    queryFn: async () => {
+      const response = await fetch("/api/page-content/login");
+      if (!response.ok) throw new Error("Failed to fetch login page content");
+      return response.json();
+    },
+    initialData: defaultLoginPageContent,
+    staleTime: 60_000,
+  });
 
   const sendOTPMutation = useMutation({
     mutationFn: (email: string) =>
@@ -47,22 +58,18 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="بوابة الدخول"
-      title="ادخل إلى نَسَق بهدوء بصري وثقة"
-      description="تجربة دخول واضحة، سريعة، ومتسقة مع هوية المنتج الجديدة. لا ضوضاء بصرية ولا عناصر متنافرة."
-      panelTitle="تسجيل الدخول"
-      panelDescription="أدخل بريدك الإلكتروني وسنرسل لك رمز تحقق صالح لمدة خمس دقائق."
+      eyebrow={pageContent.login.eyebrow}
+      title={pageContent.login.title}
+      description={pageContent.login.description}
+      panelTitle={pageContent.login.panelTitle}
+      panelDescription={pageContent.login.panelDescription}
       icon={<Mail className="h-6 w-6" />}
-      highlights={[
-        "واجهة مصقولة ومريحة على الجوال واللابتوب",
-        "مسافات ومحاذاة موحدة مثل بقية النظام",
-        "تباين أوضح عبر مظاهر وهج ونبض وأثير",
-      ]}
-      footer={
+      highlights={pageContent.login.highlights}
+      footer={pageContent.login.footerNote ? (
         <p className="text-center text-xs font-bold text-muted-foreground">
-          سيتم إرسال رمز مكوّن من 6 أرقام صالح لمدة 5 دقائق
+          {pageContent.login.footerNote}
         </p>
-      }
+      ) : undefined}
     >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

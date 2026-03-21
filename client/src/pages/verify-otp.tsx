@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,22 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/hooks/use-auth";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { defaultLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 
 export default function VerifyOTPPage() {
   const [, navigate] = useLocation();
   const email = sessionStorage.getItem("otp_email") || "";
   const { toast } = useToast();
+  const { data: pageContent } = useQuery<LoginPageContent>({
+    queryKey: ["/api/page-content/login"],
+    queryFn: async () => {
+      const response = await fetch("/api/page-content/login");
+      if (!response.ok) throw new Error("Failed to fetch login page content");
+      return response.json();
+    },
+    initialData: defaultLoginPageContent,
+    staleTime: 60_000,
+  });
 
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -99,17 +110,13 @@ export default function VerifyOTPPage() {
 
   return (
     <AuthShell
-      eyebrow="تحقق آمن"
-      title="خطوة أخيرة قبل الدخول"
-      description="أدخل رمز التحقق الذي أرسلناه إلى بريدك. الواجهة هنا تحافظ على نفس البناء والمسافات والحضور البصري لبقية النظام."
-      panelTitle="تأكيد البريد الإلكتروني"
-      panelDescription="أدخل الرمز المكوّن من 6 أرقام، أو أعد الإرسال إذا لم يصلك البريد بعد."
+      eyebrow={pageContent.verify.eyebrow}
+      title={pageContent.verify.title}
+      description={pageContent.verify.description}
+      panelTitle={pageContent.verify.panelTitle}
+      panelDescription={pageContent.verify.panelDescription}
       icon={<ArrowRight className="h-6 w-6" />}
-      highlights={[
-        "شبكة OTP واضحة ومريحة للمس",
-        "أزرار هادئة ومفهومة بصرياً",
-        "تدرج منسق بين حالات الانتظار والخطأ والإعادة",
-      ]}
+      highlights={pageContent.verify.highlights}
     >
         <div className="text-center space-y-1">
           <p className="text-muted-foreground text-sm">

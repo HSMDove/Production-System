@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FloatingDotsBg } from "@/components/auth/floating-dots-bg";
 
 type AuthShellProps = {
   eyebrow: string;
@@ -27,25 +26,7 @@ export function AuthShell({
 }: AuthShellProps) {
   return (
     <div dir="rtl" className="auth-stage">
-      <FloatingDotsBg />
-
       <div className="auth-shell-grid">
-        <section className="auth-hero-panel">
-          <div className="auth-icon-badge">{icon}</div>
-          <span className="nb-kicker">{eyebrow}</span>
-          <h1 className="auth-title">{title}</h1>
-          <p className="auth-description">{description}</p>
-
-          <div className="auth-highlight-grid">
-            {highlights.map((item) => (
-              <div key={item} className="auth-highlight-card">
-                <span className="auth-highlight-dot" aria-hidden="true" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
         <Card className="auth-form-panel">
           <CardHeader className="space-y-3 pb-4 md:pb-5">
             <CardTitle>{panelTitle}</CardTitle>
@@ -55,6 +36,24 @@ export function AuthShell({
             {children}
           </CardContent>
         </Card>
+
+        <section className="auth-hero-panel">
+          <div className="auth-icon-badge">{icon}</div>
+          <span className="nb-kicker">{eyebrow}</span>
+          <h1 className="auth-title">{title}</h1>
+          {description ? <p className="auth-description">{description}</p> : null}
+
+          {highlights.length > 0 ? (
+            <div className="auth-highlight-grid">
+              {highlights.map((item) => (
+                <div key={item} className="auth-highlight-card">
+                  <span className="auth-highlight-dot" aria-hidden="true" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
       </div>
 
       {footer && <div className="auth-footer">{footer}</div>}

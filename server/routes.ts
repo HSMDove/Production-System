@@ -28,6 +28,12 @@ import {
   type Idea,
   type AssistantConversation,
 } from "@shared/schema";
+import {
+  defaultLoginPageContent,
+  loginPageContentAdminSchema,
+  parseLoginPageContent,
+  type LoginPageContent,
+} from "@shared/login-page-content";
 
 type AssistantChatRequest = {
   message: string;
@@ -41,6 +47,29 @@ function normalizeText(value: string): string {
 function truncate(value: string | null | undefined, max = 220): string {
   if (!value) return "";
   return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+const managedPageKeys = {
+  login: "page_content_login",
+} as const;
+
+type ManagedPageKey = keyof typeof managedPageKeys;
+
+function isManagedPageKey(value: string): value is ManagedPageKey {
+  return value in managedPageKeys;
+}
+
+async function getManagedPageContent(pageKey: ManagedPageKey): Promise<LoginPageContent> {
+  const setting = await storage.getSystemSetting(managedPageKeys[pageKey]);
+  if (!setting?.value) {
+    return defaultLoginPageContent;
+  }
+
+  try {
+    return parseLoginPageContent(JSON.parse(setting.value));
+  } catch {
+    return defaultLoginPageContent;
+  }
 }
 
 
@@ -447,6 +476,19 @@ export async function registerRoutes(
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: "Failed to get flags" });
+    }
+  });
+
+  app.get("/api/page-content/:pageKey", async (req, res) => {
+    try {
+      const { pageKey } = req.params;
+      if (!isManagedPageKey(pageKey)) {
+        return res.status(404).json({ error: "الصفحة غير مدعومة" });
+      }
+
+      res.json(await getManagedPageContent(pageKey));
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب محتوى الصفحة" });
     }
   });
 
@@ -3442,6 +3484,50 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       res.json(setting);
     } catch (error) {
       res.status(500).json({ error: "فشل تعديل الإعداد" });
+    }
+  });
+
+  app.get("/api/admin/page-content/:pageKey", requireAdmin, async (req, res) => {
+    try {
+      const { pageKey } = req.params;
+      if (!isManagedPageKey(pageKey)) {
+        return res.status(404).json({ error: "الصفحة غير مدعومة" });
+      }
+
+      res.json(await getManagedPageContent(pageKey));
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب محتوى الصفحة" });
+    }
+  });
+
+  app.put("/api/admin/page-content/:pageKey", requireAdmin, async (req, res) => {
+    try {
+      const { pageKey } = req.params;
+      if (!isManagedPageKey(pageKey)) {
+        return res.status(404).json({ error: "الصفحة غير مدعومة" });
+      }
+
+      const parsed = loginPageContentAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "بيانات غير صالحة", details: parsed.error.flatten() });
+      }
+
+      const normalized = parseLoginPageContent(parsed.data);
+      await storage.upsertSystemSetting(
+        managedPageKeys[pageKey],
+        JSON.stringify(normalized),
+        "محتوى صفحة تسجيل الدخول والتحقق",
+      );
+      await storage.createAuditLog(
+        req.session.userId!,
+        "page_content_updated",
+        `تحديث محتوى الصفحة: ${pageKey}`,
+        req.ip || undefined,
+      );
+
+      res.json(normalized);
+    } catch (error) {
+      res.status(500).json({ error: "فشل حفظ محتوى الصفحة" });
     }
   });
 

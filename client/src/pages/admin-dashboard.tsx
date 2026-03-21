@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -16,8 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { defaultLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "settings" | "admins" | "audit";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit";
 
 const tabDescriptions: Record<Tab, string> = {
   analytics: "ملخص تنفيذي سريع لحركة النظام والمستخدمين والمحتوى داخل المنصة.",
@@ -26,6 +27,7 @@ const tabDescriptions: Record<Tab, string> = {
   banners: "بناء الشريط العلوي وإبرازه كنقطة اتصال مرئية عالية الوضوح داخل المنتج.",
   welcome: "ضبط بطاقات الترحيب وتسلسل ظهورها للمستخدمين بطريقة مرنة وقابلة للتجربة.",
   tickets: "متابعة الشكاوى والاقتراحات والرد عليها من داخل مساحة إدارة واحدة.",
+  pages: "تحرير محتوى الصفحات الثابتة في التطبيق مثل شاشة تسجيل الدخول والتحقق دون تعديل الكود.",
   settings: "مفاتيح تشغيل المنصة والإعدادات العامة التي تتحكم في سلوك النظام بالكامل.",
   admins: "إدارة الحسابات الإدارية والصلاحيات وكلمات المرور دون مغادرة اللوحة.",
   audit: "سجل قرارات الإدارة والعمليات الحساسة لمراجعة التغييرات بدقة.",
@@ -43,6 +45,7 @@ export default function AdminDashboard() {
     { id: "banners", label: "الشريط العلوي", icon: Bell },
     { id: "welcome", label: "بطاقات الترحيب", icon: Sparkles },
     { id: "tickets", label: "الشكاوى والتذاكر", icon: MessageSquare },
+    { id: "pages", label: "الصفحات", icon: Eye },
     { id: "settings", label: "إعدادات النظام", icon: Settings },
     { id: "admins", label: "إدارة المدراء", icon: Shield },
     { id: "audit", label: "سجل التدقيق", icon: FileText },
@@ -143,6 +146,7 @@ export default function AdminDashboard() {
           {activeTab === "banners" && <BannersPanel />}
           {activeTab === "welcome" && <WelcomeCardsPanel />}
           {activeTab === "tickets" && <TicketsPanel />}
+          {activeTab === "pages" && <PagesPanel />}
           {activeTab === "settings" && <SystemSettingsPanel />}
           {activeTab === "admins" && <AdminsPanel />}
           {activeTab === "audit" && <AuditPanel />}
@@ -566,6 +570,158 @@ function SystemSettingsPanel() {
             <p className="text-sm font-mono" dir="ltr">{s.value || "—"}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function PagesPanel() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<LoginPageContent>({
+    queryKey: ["/api/admin/page-content/login"],
+  });
+  const [selectedPage, setSelectedPage] = useState<"login">("login");
+  const [form, setForm] = useState<LoginPageContent>(defaultLoginPageContent);
+
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+    }
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: LoginPageContent) => apiRequest("PUT", "/api/admin/page-content/login", payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/page-content/login"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/page-content/login"] });
+      toast({ title: "تم حفظ محتوى الصفحة" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حفظ محتوى الصفحة", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <PanelLoader />;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="card bg-card p-4">
+          <h2 className="mb-4 text-xl font-bold">صفحات التطبيق</h2>
+          <button
+            type="button"
+            onClick={() => setSelectedPage("login")}
+            className={`w-full rounded-[20px] border-[3px] px-4 py-4 text-right transition-all ${
+              selectedPage === "login"
+                ? "border-border bg-primary text-primary-foreground shadow-[5px_5px_0_0_rgba(0,0,0,0.88)]"
+                : "border-border bg-background text-foreground shadow-[4px_4px_0_0_rgba(0,0,0,0.82)]"
+            }`}
+            data-testid="admin-page-login"
+          >
+            <span className="block text-sm font-black">صفحة تسجيل الدخول</span>
+            <span className={`mt-1 block text-xs ${selectedPage === "login" ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+              تعديل محتوى شاشة الدخول والتحقق
+            </span>
+          </button>
+        </aside>
+
+        <div className="space-y-4">
+          <div className="card bg-card p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-black">شاشة الدخول</h3>
+                <p className="text-sm text-muted-foreground">النصوص والبطاقات الظاهرة في صفحة تسجيل الدخول.</p>
+              </div>
+              <Button
+                onClick={() => saveMutation.mutate(form)}
+                disabled={saveMutation.isPending}
+                data-testid="button-save-login-page-content"
+              >
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+                حفظ التعديلات
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>شريط أعلى البطاقة</Label>
+                <Input value={form.login.eyebrow} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, eyebrow: e.target.value } }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>عنوان الجانب البصري</Label>
+                <Input value={form.login.title} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, title: e.target.value } }))} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>وصف الجانب البصري</Label>
+                <Textarea value={form.login.description} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, description: e.target.value } }))} className="min-h-[110px]" />
+              </div>
+              <div className="space-y-2">
+                <Label>عنوان نموذج الدخول</Label>
+                <Input value={form.login.panelTitle} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, panelTitle: e.target.value } }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>وصف نموذج الدخول</Label>
+                <Input value={form.login.panelDescription} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, panelDescription: e.target.value } }))} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>الملاحظة السفلية</Label>
+                <Input value={form.login.footerNote} onChange={(e) => setForm((prev) => ({ ...prev, login: { ...prev.login, footerNote: e.target.value } }))} />
+              </div>
+              {[0, 1, 2].map((index) => (
+                <div key={`login-highlight-${index}`} className="space-y-2">
+                  <Label>{`بطاقة ${index + 1}`}</Label>
+                  <Input
+                    value={form.login.highlights[index] || ""}
+                    onChange={(e) => {
+                      const next = [...form.login.highlights];
+                      next[index] = e.target.value;
+                      setForm((prev) => ({ ...prev, login: { ...prev.login, highlights: next } }));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card bg-card p-5">
+            <h3 className="mb-4 text-lg font-black">شاشة التحقق</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>شريط أعلى البطاقة</Label>
+                <Input value={form.verify.eyebrow} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, eyebrow: e.target.value } }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>عنوان الجانب البصري</Label>
+                <Input value={form.verify.title} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, title: e.target.value } }))} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>وصف الجانب البصري</Label>
+                <Textarea value={form.verify.description} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, description: e.target.value } }))} className="min-h-[110px]" />
+              </div>
+              <div className="space-y-2">
+                <Label>عنوان نموذج التحقق</Label>
+                <Input value={form.verify.panelTitle} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, panelTitle: e.target.value } }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>وصف نموذج التحقق</Label>
+                <Input value={form.verify.panelDescription} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, panelDescription: e.target.value } }))} />
+              </div>
+              {[0, 1, 2].map((index) => (
+                <div key={`verify-highlight-${index}`} className="space-y-2">
+                  <Label>{`بطاقة ${index + 1}`}</Label>
+                  <Input
+                    value={form.verify.highlights[index] || ""}
+                    onChange={(e) => {
+                      const next = [...form.verify.highlights];
+                      next[index] = e.target.value;
+                      setForm((prev) => ({ ...prev, verify: { ...prev.verify, highlights: next } }));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
