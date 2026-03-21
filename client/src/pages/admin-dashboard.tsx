@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { defaultLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
+import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 
 type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit";
 
@@ -589,15 +589,32 @@ function PagesPanel() {
     }
   }, [data]);
 
+  const updateHighlights = (section: "login" | "verify", index: number, value: string) => {
+    setForm((prev) => {
+      const next = [...prev[section].highlights];
+      while (next.length <= index) {
+        next.push("");
+      }
+      next[index] = value;
+      return {
+        ...prev,
+        [section]: {
+          ...prev[section],
+          highlights: next,
+        },
+      };
+    });
+  };
+
   const saveMutation = useMutation({
-    mutationFn: (payload: LoginPageContent) => apiRequest("PUT", "/api/admin/page-content/login", payload),
+    mutationFn: (payload: LoginPageContent) => apiRequest("PUT", "/api/admin/page-content/login", parseLoginPageContent(payload)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/page-content/login"] });
       queryClient.invalidateQueries({ queryKey: ["/api/page-content/login"] });
       toast({ title: "تم حفظ محتوى الصفحة" });
     },
-    onError: () => {
-      toast({ title: "خطأ", description: "فشل حفظ محتوى الصفحة", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل حفظ محتوى الصفحة", variant: "destructive" });
     },
   });
 
@@ -672,11 +689,7 @@ function PagesPanel() {
                   <Label>{`بطاقة ${index + 1}`}</Label>
                   <Input
                     value={form.login.highlights[index] || ""}
-                    onChange={(e) => {
-                      const next = [...form.login.highlights];
-                      next[index] = e.target.value;
-                      setForm((prev) => ({ ...prev, login: { ...prev.login, highlights: next } }));
-                    }}
+                    onChange={(e) => updateHighlights("login", index, e.target.value)}
                   />
                 </div>
               ))}
@@ -706,16 +719,16 @@ function PagesPanel() {
                 <Label>وصف نموذج التحقق</Label>
                 <Input value={form.verify.panelDescription} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, panelDescription: e.target.value } }))} />
               </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>ملاحظة أسفل نموذج التحقق</Label>
+                <Input value={form.verify.footerNote} onChange={(e) => setForm((prev) => ({ ...prev, verify: { ...prev.verify, footerNote: e.target.value } }))} />
+              </div>
               {[0, 1, 2].map((index) => (
                 <div key={`verify-highlight-${index}`} className="space-y-2">
                   <Label>{`بطاقة ${index + 1}`}</Label>
                   <Input
                     value={form.verify.highlights[index] || ""}
-                    onChange={(e) => {
-                      const next = [...form.verify.highlights];
-                      next[index] = e.target.value;
-                      setForm((prev) => ({ ...prev, verify: { ...prev.verify, highlights: next } }));
-                    }}
+                    onChange={(e) => updateHighlights("verify", index, e.target.value)}
                   />
                 </div>
               ))}

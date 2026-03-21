@@ -122,7 +122,7 @@ export default function VerifyOTPPage() {
           <p className="text-muted-foreground text-sm">
             أرسلنا رمزاً مكوناً من 6 أرقام إلى
           </p>
-          <p className="text-sm font-medium text-primary" dir="ltr">{email}</p>
+          <p className="text-sm font-black text-foreground" dir="ltr">{email}</p>
         </div>
 
         <div className="flex justify-center gap-2 sm:gap-2.5" dir="ltr" onPaste={handlePaste}>

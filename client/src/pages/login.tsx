@@ -84,7 +84,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="pr-10 pl-4 text-left"
+                className="w-full pr-11 pl-4 text-left text-base"
                 dir="ltr"
                 autoComplete="email"
                 autoFocus
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            className="w-full gap-2"
+            className="w-full gap-2 font-black text-black"
             disabled={!email.trim() || sendOTPMutation.isPending}
             data-testid="button-send-otp"
           >

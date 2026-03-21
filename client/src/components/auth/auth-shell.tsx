@@ -7,7 +7,7 @@ type AuthShellProps = {
   description: string;
   panelTitle: string;
   panelDescription: string;
-  icon: ReactNode;
+  icon?: ReactNode;
   highlights: string[];
   children: ReactNode;
   footer?: ReactNode;
@@ -34,11 +34,11 @@ export function AuthShell({
           </CardHeader>
           <CardContent className="space-y-6">
             {children}
+            {footer ? <div className="auth-panel-footer">{footer}</div> : null}
           </CardContent>
         </Card>
 
         <section className="auth-hero-panel">
-          <div className="auth-icon-badge">{icon}</div>
           <span className="nb-kicker">{eyebrow}</span>
           <h1 className="auth-title">{title}</h1>
           {description ? <p className="auth-description">{description}</p> : null}
@@ -55,8 +55,6 @@ export function AuthShell({
           ) : null}
         </section>
       </div>
-
-      {footer && <div className="auth-footer">{footer}</div>}
     </div>
   );
 }
