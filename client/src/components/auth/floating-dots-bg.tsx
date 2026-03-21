@@ -32,11 +32,11 @@ export function FloatingDotsBg() {
     resize();
     window.addEventListener("resize", resize);
 
-    const count = Math.min(80, Math.floor((window.innerWidth * window.innerHeight) / 12000));
+    const count = Math.min(42, Math.floor((window.innerWidth * window.innerHeight) / 22000));
 
     dotsRef.current = Array.from({ length: count }, () => {
       const depth = Math.random();
-      const size = 2 + depth * 6;
+      const size = 1.5 + depth * 3.5;
       return {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
@@ -44,9 +44,9 @@ export function FloatingDotsBg() {
         baseY: 0,
         size,
         depth,
-        speedX: (Math.random() - 0.5) * 0.3 * (1 - depth * 0.5),
-        speedY: (Math.random() - 0.5) * 0.2 * (1 - depth * 0.5),
-        opacity: 0.08 + depth * 0.18,
+        speedX: (Math.random() - 0.5) * 0.12 * (1 - depth * 0.5),
+        speedY: (Math.random() - 0.5) * 0.1 * (1 - depth * 0.5),
+        opacity: 0.035 + depth * 0.08,
         hue: 220 + Math.random() * 40,
       };
     });
@@ -80,8 +80,8 @@ export function FloatingDotsBg() {
         const dx = mx - drawX;
         const dy = my - drawY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 120) {
-          const push = (1 - dist / 120) * 15 * dot.depth;
+        if (dist > 0 && dist < 120) {
+          const push = (1 - dist / 120) * 8 * dot.depth;
           drawX -= (dx / dist) * push;
           drawY -= (dy / dist) * push;
         }
@@ -98,36 +98,14 @@ export function FloatingDotsBg() {
         ctx.arc(drawX, drawY, dot.size, 0, Math.PI * 2);
 
         const isDark = document.documentElement.classList.contains("dark");
-        const alpha = dot.opacity * (isDark ? 1.2 : 0.8);
+        const alpha = dot.opacity * (isDark ? 1.05 : 0.9);
         ctx.fillStyle = isDark
-          ? `hsla(${dot.hue}, 60%, 65%, ${alpha})`
-          : `hsla(${dot.hue}, 50%, 45%, ${alpha})`;
+          ? `hsla(${dot.hue}, 54%, 66%, ${alpha})`
+          : `hsla(${dot.hue}, 42%, 40%, ${alpha})`;
         ctx.fill();
       }
 
       ctx.filter = "none";
-
-      for (let i = 0; i < dotsRef.current.length; i++) {
-        for (let j = i + 1; j < dotsRef.current.length; j++) {
-          const a = dotsRef.current[i];
-          const b = dotsRef.current[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 100 && Math.abs(a.depth - b.depth) < 0.3) {
-            const isDark = document.documentElement.classList.contains("dark");
-            const lineAlpha = (1 - dist / 100) * 0.06 * (isDark ? 1.5 : 1);
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.strokeStyle = isDark
-              ? `rgba(160, 180, 255, ${lineAlpha})`
-              : `rgba(80, 100, 180, ${lineAlpha})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
-          }
-        }
-      }
 
       animRef.current = requestAnimationFrame(animate);
     };

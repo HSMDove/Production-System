@@ -18,8 +18,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="nb-orb nb-orb-secondary" aria-hidden="true" />
       <Header />
       <main className="relative z-[1] flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1800px] px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 xl:px-12 2xl:px-16">
-        {children}
+        <div className="page-frame py-4 sm:py-6 md:py-8">
+          {children}
         </div>
       </main>
 

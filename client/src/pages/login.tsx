@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { FloatingDotsBg } from "@/components/auth/floating-dots-bg";
+import { Label } from "@/components/ui/label";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -45,26 +46,29 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      dir="rtl"
-      className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden"
+    <AuthShell
+      eyebrow="بوابة الدخول"
+      title="ادخل إلى نَسَق بهدوء بصري وثقة"
+      description="تجربة دخول واضحة، سريعة، ومتسقة مع هوية المنتج الجديدة. لا ضوضاء بصرية ولا عناصر متنافرة."
+      panelTitle="تسجيل الدخول"
+      panelDescription="أدخل بريدك الإلكتروني وسنرسل لك رمز تحقق صالح لمدة خمس دقائق."
+      icon={<Mail className="h-6 w-6" />}
+      highlights={[
+        "واجهة مصقولة ومريحة على الجوال واللابتوب",
+        "مسافات ومحاذاة موحدة مثل بقية النظام",
+        "تباين أوضح عبر مظاهر وهج ونبض وأثير",
+      ]}
+      footer={
+        <p className="text-center text-xs font-bold text-muted-foreground">
+          سيتم إرسال رمز مكوّن من 6 أرقام صالح لمدة 5 دقائق
+        </p>
+      }
     >
-      <FloatingDotsBg />
-
-      <div className="w-full max-w-sm space-y-6 relative z-10">
-        <div className="text-center space-y-2">
-          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
-          <p className="text-muted-foreground text-sm font-semibold">
-            أدخل بريدك الإلكتروني لتلقّي رمز الدخول
-          </p>
-        </div>
-
-        <div className="card bg-card/80 backdrop-blur-xl p-6 space-y-4 border border-border/50 shadow-xl">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="email-input">
+            <Label className="text-sm font-black" htmlFor="email-input">
               البريد الإلكتروني
-            </label>
+            </Label>
             <div className="relative">
               <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -73,7 +77,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="pr-10 text-left"
+                className="pr-10 pl-4 text-left"
                 dir="ltr"
                 autoComplete="email"
                 autoFocus
@@ -102,12 +106,6 @@ export default function LoginPage() {
             )}
           </Button>
         </form>
-        </div>
-
-        <p className="text-center text-xs text-muted-foreground">
-          سيتم إرسال رمز مكوّن من 6 أرقام صالح لمدة 5 دقائق
-        </p>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

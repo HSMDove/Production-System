@@ -169,7 +169,7 @@ export function IdeaCard({ idea, onEdit, onDelete, onInlineUpdate, onCardClick, 
     <Card
       ref={setNodeRef}
       style={style}
-      className="group cursor-pointer glass-surface rounded-[1.35rem] hover:scale-[1.01] transition-all duration-300"
+      className="group cursor-pointer glass-surface rounded-[1.35rem] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/45"
       onClick={handleCardClick}
       data-testid={`card-idea-${idea.id}`}
     >

@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { Label } from "@/components/ui/label";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
@@ -39,24 +41,34 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-2">
-            <Shield className="h-8 w-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">لوحة التحكم</h1>
-          <p className="text-muted-foreground text-sm">
-            مرحباً {user?.name || user?.email} — أدخل كلمة مرور المدير
-          </p>
-        </div>
-
-        <div className="card bg-card p-6 space-y-4">
+    <AuthShell
+      eyebrow="وضع الإدارة"
+      title="بوابة الإدارة محكومة وواضحة"
+      description="هذه الواجهة تستخدم نفس لغة المنتج ولكن بدرجة أعلى من الانضباط البصري لتقليل الخطأ ورفع الوضوح عند المهام الحساسة."
+      panelTitle="تسجيل دخول الإدارة"
+      panelDescription={`مرحباً ${user?.name || user?.email || "بك"}، أدخل كلمة مرور المدير للانتقال إلى لوحة التحكم.`}
+      icon={<Shield className="h-6 w-6" />}
+      highlights={[
+        "تباين مرتفع للعناصر الحرجة",
+        "ترتيب عمودي واضح للمهام الحساسة",
+        "تجربة متجاوبة ومتسقة مع بقية التطبيق",
+      ]}
+      footer={
+        <Button
+          variant="ghost"
+          className="mx-auto w-full max-w-sm text-muted-foreground"
+          onClick={() => navigate("/")}
+          data-testid="button-back-to-app"
+        >
+          العودة للتطبيق
+        </Button>
+      }
+    >
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="admin-password">
+              <Label className="text-sm font-black" htmlFor="admin-password">
                 كلمة مرور المدير
-              </label>
+              </Label>
               <div className="relative">
                 <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -69,10 +81,10 @@ export default function AdminLoginPage() {
                   dir="ltr"
                   autoFocus
                   data-testid="input-admin-password"
-                  disabled={verifyMutation.isPending}
-                />
-              </div>
+                disabled={verifyMutation.isPending}
+              />
             </div>
+          </div>
 
             <Button
               type="submit"
@@ -90,20 +102,9 @@ export default function AdminLoginPage() {
                   <ArrowLeft className="h-4 w-4" />
                   دخول لوحة التحكم
                 </>
-              )}
-            </Button>
+            )}
+          </Button>
           </form>
-        </div>
-
-        <Button
-          variant="ghost"
-          className="w-full text-muted-foreground"
-          onClick={() => navigate("/")}
-          data-testid="button-back-to-app"
-        >
-          العودة للتطبيق
-        </Button>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

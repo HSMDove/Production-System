@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { AuthUser } from "@/hooks/use-auth";
-import { FloatingDotsBg } from "@/components/auth/floating-dots-bg";
+import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function VerifyOTPPage() {
   const [, navigate] = useLocation();
@@ -98,16 +98,19 @@ export default function VerifyOTPPage() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
-      <FloatingDotsBg />
-
-      <div className="w-full max-w-sm space-y-6 relative z-10">
-        <div className="text-center space-y-2">
-          <h1 className="text-5xl font-black tracking-tighter text-foreground">نَسَق</h1>
-          <p className="text-muted-foreground text-sm font-semibold">تحقق من بريدك</p>
-        </div>
-
-        <div className="card bg-card/80 backdrop-blur-xl p-6 space-y-6 border border-border/50 shadow-xl">
+    <AuthShell
+      eyebrow="تحقق آمن"
+      title="خطوة أخيرة قبل الدخول"
+      description="أدخل رمز التحقق الذي أرسلناه إلى بريدك. الواجهة هنا تحافظ على نفس البناء والمسافات والحضور البصري لبقية النظام."
+      panelTitle="تأكيد البريد الإلكتروني"
+      panelDescription="أدخل الرمز المكوّن من 6 أرقام، أو أعد الإرسال إذا لم يصلك البريد بعد."
+      icon={<ArrowRight className="h-6 w-6" />}
+      highlights={[
+        "شبكة OTP واضحة ومريحة للمس",
+        "أزرار هادئة ومفهومة بصرياً",
+        "تدرج منسق بين حالات الانتظار والخطأ والإعادة",
+      ]}
+    >
         <div className="text-center space-y-1">
           <p className="text-muted-foreground text-sm">
             أرسلنا رمزاً مكوناً من 6 أرقام إلى
@@ -129,8 +132,8 @@ export default function VerifyOTPPage() {
               disabled={verifyMutation.isPending}
               data-testid={`input-otp-digit-${i}`}
               autoFocus={i === 0}
-              className="w-12 h-14 rounded-lg border-2 border-border bg-background text-center text-2xl font-black text-foreground outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ caretColor: "transparent" }}
+              className="h-14 w-12 rounded-[16px] border-[3px] border-black/90 bg-background text-center text-2xl font-black leading-none tracking-none text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:ring-4 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ caretColor: "transparent", textAlign: "center", textAlignLast: "center" }}
             />
           ))}
         </div>
@@ -141,36 +144,36 @@ export default function VerifyOTPPage() {
             جاري التحقق...
           </div>
         )}
-        </div>
 
         <div className="space-y-3">
-          <Button
-            variant="ghost"
-            className="w-full gap-2"
-            onClick={() => navigate("/login")}
-            disabled={verifyMutation.isPending}
-            data-testid="button-back-to-login"
-          >
-            <ArrowRight className="h-4 w-4" />
-            تغيير البريد الإلكتروني
-          </Button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => navigate("/login")}
+              disabled={verifyMutation.isPending}
+              data-testid="button-back-to-login"
+            >
+              <ArrowRight className="h-4 w-4" />
+              تغيير البريد الإلكتروني
+            </Button>
 
-          <Button
-            variant="ghost"
-            className="w-full gap-2 text-muted-foreground"
-            onClick={() => resendMutation.mutate()}
-            disabled={resendCooldown > 0 || resendMutation.isPending}
-            data-testid="button-resend-otp"
-          >
-            {resendMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {resendCooldown > 0 ? `إعادة الإرسال (${resendCooldown}ث)` : "إعادة إرسال الرمز"}
-          </Button>
+            <Button
+              variant="ghost"
+              className="w-full gap-2 text-muted-foreground"
+              onClick={() => resendMutation.mutate()}
+              disabled={resendCooldown > 0 || resendMutation.isPending}
+              data-testid="button-resend-otp"
+            >
+              {resendMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {resendCooldown > 0 ? `إعادة الإرسال (${resendCooldown}ث)` : "إعادة إرسال الرمز"}
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

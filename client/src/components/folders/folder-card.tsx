@@ -139,7 +139,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
   return (
     <Card 
-      className="group glass-surface rounded-[1.618rem] transition-all duration-300 hover:scale-[1.01] hover:border-primary/40"
+      className="group glass-surface rounded-[1.618rem] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/50"
       data-testid={`card-folder-${folder.id}`}
     >
       <Link href={`/folder/${folder.id}`}>
