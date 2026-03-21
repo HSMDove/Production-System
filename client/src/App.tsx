@@ -61,7 +61,7 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider defaultTheme="default-dark" storageKey="tech-voice-theme">
+        <ThemeProvider defaultTheme="hayawi" storageKey="tech-voice-theme">
           <TooltipProvider>
             <FikriOverlayProvider>
               <AuthGuard>

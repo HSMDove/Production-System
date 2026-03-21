@@ -1322,9 +1322,9 @@ export async function registerRoutes(
   const slackEventDedup = new Map<string, number>();
   setInterval(() => {
     const cutoff = Date.now() - 60_000;
-    for (const [key, ts] of slackEventDedup) {
+    Array.from(slackEventDedup.entries()).forEach(([key, ts]) => {
       if (ts < cutoff) slackEventDedup.delete(key);
-    }
+    });
   }, 30_000);
 
   app.post("/api/integrations/slack/events", async (req: any, res) => {
@@ -1407,7 +1407,7 @@ export async function registerRoutes(
       // ── Bouncer Logic: Look up platform user ──
       let platformUser = slackUserId ? await storage.getUserByPlatformId("slack", slackUserId) : undefined;
 
-      async function findBotTokenForTeam(teamId?: string): Promise<string | undefined> {
+      const findBotTokenForTeam = async (teamId?: string): Promise<string | undefined> => {
         const allUsrs = await storage.getAllUsers();
         for (const u of allUsrs) {
           const channels = await storage.getIntegrationChannels(u.id);
@@ -1422,7 +1422,7 @@ export async function registerRoutes(
           if (manualToken) return manualToken;
         }
         return undefined;
-      }
+      };
 
       if (!platformUser) {
         console.log(`[Slack] User ${slackUserId} not linked — sending bouncer message`);
@@ -1646,7 +1646,7 @@ export async function registerRoutes(
       const integrationChannelId = req.query.integrationChannelId as string | undefined;
       let allSlackChannels: { id: string; name: string; topic?: string; memberCount?: number }[] = [];
 
-      async function fetchChannelsForToken(token: string) {
+      const fetchChannelsForToken = async (token: string) => {
         const channels: typeof allSlackChannels = [];
         let cursor: string | undefined;
         do {
@@ -1666,7 +1666,7 @@ export async function registerRoutes(
           cursor = listData.response_metadata?.next_cursor;
         } while (cursor);
         return channels;
-      }
+      };
 
       if (integrationChannelId === "manual-slack") {
         const manualToken = (await storage.getSetting("slack_bot_token", req.session.userId!))?.value;

@@ -1,4 +1,4 @@
-const emojiRegex = /(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F)(?:\u200D(?:\p{Emoji_Presentation}|\p{Emoji}\uFE0F))*/gu;
+const emojiRegex = /(?:[\u00A9\u00AE\u203C-\u3299]|[\uD83C-\uDBFF][\uDC00-\uDFFF]|\u200D|\uFE0F)+/g;
 
 function emojiToCodepoints(emoji: string): string {
   const codepoints: string[] = [];

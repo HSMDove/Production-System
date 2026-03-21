@@ -41,7 +41,7 @@ export function Header() {
   }, [location]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-card" style={{ paddingTop: "env(safe-area-inset-top, 0px)", WebkitPosition: "sticky" as any }}>
+    <header className="sticky top-0 z-50 w-full border-b bg-card" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       <div className="container flex h-14 items-center justify-between gap-2 px-3 sm:h-16 sm:px-4 md:px-8">
         <Link href="/" className="flex items-center group">
           <span className="text-2xl font-black sm:text-3xl tracking-tighter bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent px-1" data-testid="text-logo">نَسَق</span>

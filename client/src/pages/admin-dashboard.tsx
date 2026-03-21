@@ -925,7 +925,7 @@ function TicketsPanel() {
   type AdminTicket = {
     id: string; userId: string; title: string; description: string;
     imageUrls: string[] | null; category: string; status: string; createdAt: string; updatedAt: string;
-    userEmail: string; userName: string;
+    userEmail: string; userName: string; ticketNumber: number | null;
   };
   type Reply = { id: string; ticketId: string; userId: string; message: string; isAdmin: boolean; createdAt: string };
 

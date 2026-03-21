@@ -21,6 +21,7 @@ import { PromptTemplatesList } from "@/components/templates/prompt-templates-lis
 import { useAuth } from "@/hooks/use-auth";
 
 type PlatformIdEntry = { id: string; platform: string; platformId: string; label: string | null; createdAt: string };
+type PlatformIdPayload = { platform: string; platformId: string; label?: string };
 type IntegrationChannelEntry = { id: string; platform: string; name: string; credentials: Record<string, string>; isActive: boolean; createdAt: string };
 type FolderMappingEntry = { id: string; folderId: string; integrationChannelId: string; targetId: string; createdAt: string };
 type FolderEntry = { id: string; name: string; color: string };
@@ -231,10 +232,10 @@ export default function Settings() {
     suggestion: "اقتراح",
   };
 
-  const addPlatformIdMutation = useMutation({
-    mutationFn: async (data: { platform: string; platformId: string; label?: string }) =>
+  const addPlatformIdMutation = useMutation<any, Error, PlatformIdPayload>({
+    mutationFn: async (data) =>
       apiRequest("POST", "/api/auth/platform-ids", data),
-    onSuccess: (_data: any, variables: { platform: string }) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/platform-ids"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       if (variables.platform === "slack") { setNewSlackId(""); setNewSlackLabel(""); }
@@ -409,9 +410,9 @@ export default function Settings() {
   });
 
   const themeOptions = useMemo(() => ([
-    { value: "default", label: "الأساسي", color: "#F7CB46" },
-    { value: "tech-field", label: "تيك فيلد", color: "#FE90E8" },
-    { value: "tech-voice", label: "تيك فويس", color: "#C0F7FE" },
+    { value: "hayawi", label: "حيوي", color: "#D9FF6B" },
+    { value: "ibdai", label: "إبداعي", color: "#FFA8E8" },
+    { value: "classic", label: "كلاسيكي", color: "#F4E4B8" },
   ] as const), []);
 
   if (isLoading) {
@@ -899,7 +900,7 @@ export default function Settings() {
                                 {slackIds.map((entry) => (
                                   <Badge key={entry.id} variant="secondary" className="gap-1.5 px-2.5 py-1 font-mono text-xs" data-testid={`badge-slack-id-auto-${entry.id}`}>
                                     {entry.label ? `${entry.label}: ` : ""}{entry.platformId}
-                                    <button className="hover:text-destructive transition-colors" onClick={() => deletePlatformIdMutation.mutate(entry.id)}>
+                                    <button className="hover:text-destructive transition-colors" onClick={() => removePlatformIdMutation.mutate(entry.id)}>
                                       <X className="h-3 w-3" />
                                     </button>
                                   </Badge>
