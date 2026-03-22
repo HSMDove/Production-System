@@ -410,10 +410,33 @@ async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
     }
   }
   
+  // ── Fallback: try headless browser ──
+  console.log(`[Twitter] All Nitter instances failed for @${username}, trying headless browser...`);
+  try {
+    const { scrapeTwitterWithBrowser } = await import("./browser-scraper");
+    const tweets = await scrapeTwitterWithBrowser(source.url);
+    if (tweets.length > 0) {
+      console.log(`[Twitter] Browser scraped ${tweets.length} tweets from @${username}`);
+      const items: InsertContent[] = tweets.map(t => ({
+        folderId: source.folderId,
+        sourceId: source.id,
+        title: t.title,
+        summary: t.summary,
+        originalUrl: t.url,
+        imageUrl: t.imageUrl,
+        publishedAt: t.publishedAt,
+      }));
+      return { sourceId: source.id, items };
+    }
+  } catch (browserErr) {
+    console.error(`[Twitter] Browser fallback failed:`, browserErr instanceof Error ? browserErr.message : browserErr);
+    errors.push(`browser: ${browserErr instanceof Error ? browserErr.message : "unknown"}`);
+  }
+
   return {
     sourceId: source.id,
     items: [],
-    error: `All Nitter instances failed for @${username}. Errors: ${errors.join("; ")}`,
+    error: `فشل جلب تغريدات @${username} — جميع الطرق فشلت. ${errors.join("; ")}`,
   };
 }
 
@@ -696,10 +719,18 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
     }
 
     // YouTube: limit to 10 latest videos (RSS usually has 15), skip freshness filter
-    // YouTube RSS already returns only the latest ~15 videos, so no need for date filtering
     const maxItems = source.type === "youtube" ? 10 : 20;
     const skipFreshness = source.type === "youtube";
-    return await fetchFromRSSUrl(rssUrl, source, maxItems, skipFreshness);
+    try {
+      return await fetchFromRSSUrl(rssUrl, source, maxItems, skipFreshness);
+    } catch (rssErr) {
+      // If RSS parsing fails (e.g. 403), fallback to browser for website sources
+      if (source.type === "website") {
+        console.log(`[Fetcher] RSS failed for website source, falling back to browser scraping...`);
+        return await scrapeWebsiteContent(source);
+      }
+      throw rssErr;
+    }
   } catch (error) {
     console.error(`Error fetching from ${source.type} source ${source.url}:`, error);
     return {
@@ -961,28 +992,43 @@ function extractNextJsNews(html: string, baseUrl: string): ScrapedArticle[] {
 async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
   console.log(`[Scraper] Scraping website: ${source.url}`);
   const items: InsertContent[] = [];
+  let html = "";
+  let usedBrowser = false;
 
   try {
-    let res = await fetch(source.url, {
-      headers: { ...SCRAPE_BROWSER_HEADERS, "User-Agent": getRandomUA() },
-      signal: AbortSignal.timeout(15000),
-      redirect: "follow",
-    });
-    // Retry with different UA on 403
-    if (res.status === 403) {
-      console.log(`[Scraper] Got 403, retrying with different User-Agent...`);
-      res = await fetch(source.url, {
-        headers: {
-          ...SCRAPE_BROWSER_HEADERS,
-          "User-Agent": USER_AGENTS[1],
-          "Referer": `https://www.google.com/search?q=${encodeURIComponent(new URL(source.url).hostname)}`,
-        },
+    // ── Step 1: Try normal fetch first (fast) ──
+    try {
+      let res = await fetch(source.url, {
+        headers: { ...SCRAPE_BROWSER_HEADERS, "User-Agent": getRandomUA() },
         signal: AbortSignal.timeout(15000),
         redirect: "follow",
       });
+      if (res.status === 403) {
+        console.log(`[Scraper] Got 403, retrying with different User-Agent...`);
+        res = await fetch(source.url, {
+          headers: {
+            ...SCRAPE_BROWSER_HEADERS,
+            "User-Agent": USER_AGENTS[1],
+            "Referer": `https://www.google.com/search?q=${encodeURIComponent(new URL(source.url).hostname)}`,
+          },
+          signal: AbortSignal.timeout(15000),
+          redirect: "follow",
+        });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      html = await res.text();
+    } catch (fetchErr) {
+      // ── Step 2: Fallback to headless browser ──
+      console.log(`[Scraper] Normal fetch failed (${fetchErr instanceof Error ? fetchErr.message : "unknown"}), trying headless browser...`);
+      try {
+        const { scrapePageWithBrowser } = await import("./browser-scraper");
+        html = await scrapePageWithBrowser(source.url);
+        usedBrowser = true;
+      } catch (browserErr) {
+        console.error(`[Scraper] Browser fallback also failed:`, browserErr instanceof Error ? browserErr.message : browserErr);
+        throw fetchErr;
+      }
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const html = await res.text();
 
     // ── Strategy 1: Next.js __NEXT_DATA__ ──────────────────────────────────
     const nextJsArticles = extractNextJsNews(html, source.url);
@@ -991,7 +1037,6 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
       for (const article of nextJsArticles.slice(0, 20)) {
         if (shouldFilterContent(article.title, article.summary)) continue;
         if (!isContentFresh(article.publishedAt)) {
-          // For Next.js sites, accept items without dates (they're usually current)
           if (article.publishedAt !== null) {
             console.log(`[Scraper] Skipped old Next.js item: ${article.title}`);
             continue;
@@ -1015,7 +1060,6 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
       const articleLinks = extractArticleLinks(html, source.url);
       console.log(`[Scraper] Found ${articleLinks.length} candidate links, fetching OG for top ones...`);
 
-      // Score links: prefer paths with date patterns or news-like segments
       const datePattern = /\/\d{4}\/\d{2}\/|\/\d{8}\/|\/\d{4}-\d{2}-\d{2}/;
       const newsPattern = /\/(news|article|story|خبر|بيان|أخبار|مقال|تقرير)\//i;
       const scored = articleLinks.map(url => {
@@ -1027,7 +1071,6 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
         return { url, score };
       }).sort((a, b) => b.score - a.score);
 
-      // Fetch OG metadata for top candidates in parallel (limited)
       const candidates = scored.slice(0, 30).map(s => s.url);
       const fetchLimit = pLimit(5);
       const ogResults = await Promise.all(
@@ -1059,6 +1102,30 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
           publishedAt: article.publishedAt,
         });
         if (items.length >= 15) break;
+      }
+    }
+
+    // ── Strategy 3: If text-based strategies found nothing, try browser article extraction ──
+    if (items.length === 0) {
+      console.log(`[Scraper] No items from text parsing, trying headless browser article extraction...`);
+      try {
+        const { scrapeArticlesWithBrowser } = await import("./browser-scraper");
+        const browserArticles = await scrapeArticlesWithBrowser(source.url);
+        for (const article of browserArticles) {
+          if (shouldFilterContent(article.title, article.summary)) continue;
+          items.push({
+            folderId: source.folderId,
+            sourceId: source.id,
+            title: article.title,
+            summary: article.summary,
+            originalUrl: article.url,
+            imageUrl: article.imageUrl,
+            publishedAt: article.publishedAt,
+          });
+          if (items.length >= 15) break;
+        }
+      } catch (browserErr) {
+        console.error(`[Scraper] Browser article extraction failed:`, browserErr instanceof Error ? browserErr.message : browserErr);
       }
     }
 

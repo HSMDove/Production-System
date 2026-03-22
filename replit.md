@@ -108,12 +108,23 @@ Users can submit support tickets ("عندي مشكلة") from the Settings → A
 - **Drizzle ORM**: Used for interacting with the PostgreSQL database.
 - **connect-pg-simple**: For PostgreSQL-backed session storage.
 
+### Headless Browser Scraping Engine
+
+For protected websites that block normal HTTP requests (403/anti-bot), a Puppeteer-based headless browser engine provides fallback scraping. Key components:
+- **File**: `server/browser-scraper.ts` — shared browser pool with lazy launch, singleton lock, 60s idle auto-close
+- **Dependencies**: `puppeteer-core`, `puppeteer-extra`, `puppeteer-extra-plugin-stealth` + system Chromium via Nix
+- **CHROMIUM_PATH**: `/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium` (override with `CHROMIUM_PATH` env var if Nix path changes)
+- **Functions**: `scrapePageWithBrowser(url)` returns rendered HTML, `scrapeArticlesWithBrowser(url)` extracts article links/titles via DOM queries, `scrapeTwitterWithBrowser(url)` extracts tweets
+- **Fallback chain** in `server/fetcher.ts`: normal fetch → retry with different User-Agent → headless browser page render → browser article extraction
+- **Important**: `page.evaluate` calls use raw JS strings (not TypeScript functions) to avoid esbuild's `__name` injection breaking browser context. URLs are passed safely via `JSON.stringify` + `window.__extractBaseUrl`.
+
 ### Third-Party Libraries
 
 - **RSS Parser**: For parsing RSS feeds.
 - **date-fns**: For date formatting and manipulation, with Arabic locale support.
 - **Radix UI**: Provides accessible component primitives for the UI.
 - **Lucide React**: Icon library.
+- **Puppeteer Extra + Stealth**: Headless browser scraping with bot detection bypass.
 
 ### Development Tools
 
