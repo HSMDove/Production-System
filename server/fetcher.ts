@@ -684,9 +684,9 @@ export async function fetchRSSFeed(source: Source): Promise<FetchResult> {
 
       case "website":
         rssUrl = await discoverWebsiteRSS(source.url);
-        
         if (!rssUrl) {
-          throw new Error("Could not find RSS feed for this website. The site may not have an RSS feed.");
+          // No RSS feed found — fall back to HTML scraping
+          return await scrapeWebsiteContent(source);
         }
         break;
 
@@ -773,6 +773,273 @@ async function fetchOGImage(url: string): Promise<string | null> {
     return null;
   } catch (error) {
     return null;
+  }
+}
+
+// ─── Website HTML Scraper (fallback when no RSS) ─────────────────────────────
+const SCRAPE_BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+};
+
+interface ScrapedArticle {
+  title: string;
+  url: string;
+  summary: string | null;
+  imageUrl: string | null;
+  publishedAt: Date | null;
+}
+
+function resolveAbsoluteUrl(href: string, baseUrl: string): string | null {
+  try {
+    if (href.startsWith("http")) return href;
+    const base = new URL(baseUrl);
+    if (href.startsWith("//")) return `${base.protocol}${href}`;
+    if (href.startsWith("/")) return `${base.protocol}//${base.host}${href}`;
+    return `${base.protocol}//${base.host}/${href}`;
+  } catch { return null; }
+}
+
+function extractOGMetadata(html: string, pageUrl: string): Partial<ScrapedArticle> {
+  const get = (pattern: RegExp): string | null => {
+    const m = html.match(pattern);
+    return m ? m[1].trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">") : null;
+  };
+  const title =
+    get(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i) ||
+    get(/<title[^>]*>([^<]+)<\/title>/i);
+  const description =
+    get(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
+  let imageUrl =
+    get(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
+    get(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+  if (imageUrl && !imageUrl.startsWith("http")) imageUrl = resolveAbsoluteUrl(imageUrl, pageUrl);
+  const pubDateStr =
+    get(/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i) ||
+    get(/<time[^>]+datetime=["']([^"']+)["']/i);
+  const publishedAt = pubDateStr ? new Date(pubDateStr) : null;
+  return { title: title || undefined, summary: description || null, imageUrl: imageUrl || null, publishedAt: publishedAt && !isNaN(publishedAt.getTime()) ? publishedAt : null };
+}
+
+// Extract news article links from an HTML page
+function extractArticleLinks(html: string, baseUrl: string): string[] {
+  const seen = new Set<string>();
+  const results: string[] = [];
+  const base = new URL(baseUrl);
+
+  // Regex patterns that match news/article URL patterns
+  const hrefPattern = /href=["']([^"'#?]+)["']/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = hrefPattern.exec(html)) !== null) {
+    const href = match[1].trim();
+    if (!href || href === "/" || href.startsWith("mailto:") || href.startsWith("tel:")) continue;
+
+    const resolved = resolveAbsoluteUrl(href, baseUrl);
+    if (!resolved) continue;
+
+    // Only same-host links
+    try {
+      const u = new URL(resolved);
+      if (u.host !== base.host) continue;
+    } catch { continue; }
+
+    if (seen.has(resolved)) continue;
+
+    // Heuristic: URLs that look like news articles (have a path beyond just / or /news/)
+    const path = new URL(resolved).pathname;
+    // Skip very short paths, or purely section paths
+    if (path === "/" || path === "" || path.split("/").filter(Boolean).length < 2) continue;
+    // Skip static resources
+    if (/\.(css|js|png|jpg|jpeg|gif|webp|svg|ico|woff|woff2|ttf|pdf)(\?|$)/i.test(path)) continue;
+    // Skip anchor links, query-only, etc.
+    if (resolved.includes("#")) continue;
+
+    seen.add(resolved);
+    results.push(resolved);
+  }
+
+  return results;
+}
+
+// Try to extract news from Next.js __NEXT_DATA__ 
+function extractNextJsNews(html: string, baseUrl: string): ScrapedArticle[] {
+  const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!nextDataMatch) return [];
+  
+  try {
+    const data = JSON.parse(nextDataMatch[1]);
+    const pageProps = data?.props?.pageProps || {};
+    const results: ScrapedArticle[] = [];
+    const base = new URL(baseUrl);
+
+    // Look for arrays in pageProps that contain news-like objects
+    function extractFromObj(obj: any, depth = 0): void {
+      if (depth > 3 || !obj || typeof obj !== "object") return;
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          // Check if this looks like a news article
+          if (item && typeof item === "object" && (item.title || item.headline || item.name) && (item.url || item.link || item.href || item.uuid || item.sharable_link || item.slug || item.id)) {
+            const title = item.title || item.headline || item.name;
+            if (typeof title !== "string" || title.length < 5) continue;
+            
+            // Build URL
+            let url = item.url || item.link || item.href;
+            if (!url && item.sharable_link) url = item.sharable_link.startsWith("http") ? item.sharable_link : `https://${item.sharable_link}`;
+            if (!url && item.slug) url = `${base.protocol}//${base.host}/${item.slug}`;
+            if (!url && item.uuid) url = `${base.protocol}//${base.host}/${item.uuid}`;
+            if (!url) continue;
+            if (!url.startsWith("http")) url = resolveAbsoluteUrl(url, baseUrl) || url;
+            
+            // Date
+            let publishedAt: Date | null = null;
+            const rawDate = item.published_at || item.publishedAt || item.created_at || item.date || item.pubDate;
+            if (rawDate) {
+              if (typeof rawDate === "number") {
+                // Unix timestamp — handle both seconds and milliseconds
+                publishedAt = new Date(rawDate > 1e10 ? rawDate : rawDate * 1000);
+              } else {
+                publishedAt = new Date(rawDate);
+              }
+              if (isNaN(publishedAt.getTime())) publishedAt = null;
+            }
+            
+            // Image
+            let imageUrl: string | null = null;
+            if (item.image) {
+              imageUrl = typeof item.image === "string" ? item.image : (item.image?.path || item.image?.url || item.image?.src || null);
+            } else if (item.thumbnail || item.cover) {
+              imageUrl = typeof (item.thumbnail || item.cover) === "string" ? (item.thumbnail || item.cover) : null;
+            }
+            if (imageUrl && !imageUrl.startsWith("http")) imageUrl = resolveAbsoluteUrl(imageUrl, baseUrl);
+            
+            results.push({
+              title,
+              url,
+              summary: item.summary || item.description || item.excerpt || item.subtitle || null,
+              imageUrl: imageUrl || null,
+              publishedAt,
+            });
+          }
+          if (depth < 3) extractFromObj(item, depth + 1);
+        }
+      } else {
+        for (const value of Object.values(obj)) {
+          extractFromObj(value, depth + 1);
+        }
+      }
+    }
+
+    extractFromObj(pageProps);
+    return results;
+  } catch { return []; }
+}
+
+async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
+  console.log(`[Scraper] Scraping website: ${source.url}`);
+  const items: InsertContent[] = [];
+
+  try {
+    const res = await fetch(source.url, {
+      headers: SCRAPE_BROWSER_HEADERS,
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+
+    // ── Strategy 1: Next.js __NEXT_DATA__ ──────────────────────────────────
+    const nextJsArticles = extractNextJsNews(html, source.url);
+    if (nextJsArticles.length > 0) {
+      console.log(`[Scraper] Found ${nextJsArticles.length} items from Next.js data`);
+      for (const article of nextJsArticles.slice(0, 20)) {
+        if (shouldFilterContent(article.title, article.summary)) continue;
+        if (!isContentFresh(article.publishedAt)) {
+          // For Next.js sites, accept items without dates (they're usually current)
+          if (article.publishedAt !== null) {
+            console.log(`[Scraper] Skipped old Next.js item: ${article.title}`);
+            continue;
+          }
+        }
+        items.push({
+          folderId: source.folderId,
+          sourceId: source.id,
+          title: article.title,
+          summary: article.summary,
+          originalUrl: article.url,
+          imageUrl: article.imageUrl,
+          publishedAt: article.publishedAt,
+        });
+        if (items.length >= 15) break;
+      }
+    }
+
+    // ── Strategy 2: Extract article links + fetch OG metadata ──────────────
+    if (items.length < 5) {
+      const articleLinks = extractArticleLinks(html, source.url);
+      console.log(`[Scraper] Found ${articleLinks.length} candidate links, fetching OG for top ones...`);
+
+      // Score links: prefer paths with date patterns or news-like segments
+      const datePattern = /\/\d{4}\/\d{2}\/|\/\d{8}\/|\/\d{4}-\d{2}-\d{2}/;
+      const newsPattern = /\/(news|article|story|خبر|بيان|أخبار|مقال|تقرير)\//i;
+      const scored = articleLinks.map(url => {
+        let score = 0;
+        if (datePattern.test(url)) score += 3;
+        if (newsPattern.test(url)) score += 2;
+        const segments = new URL(url).pathname.split("/").filter(Boolean).length;
+        if (segments >= 2 && segments <= 5) score += 1;
+        return { url, score };
+      }).sort((a, b) => b.score - a.score);
+
+      // Fetch OG metadata for top candidates in parallel (limited)
+      const candidates = scored.slice(0, 30).map(s => s.url);
+      const fetchLimit = pLimit(5);
+      const ogResults = await Promise.all(
+        candidates.map(url => fetchLimit(async () => {
+          try {
+            const r = await fetch(url, { headers: SCRAPE_BROWSER_HEADERS, signal: AbortSignal.timeout(8000), redirect: "follow" });
+            if (!r.ok) return null;
+            const pageHtml = await r.text();
+            const meta = extractOGMetadata(pageHtml, url);
+            if (!meta.title || meta.title.length < 5) return null;
+            return { ...meta, url } as ScrapedArticle;
+          } catch { return null; }
+        }))
+      );
+
+      for (const article of ogResults.filter(Boolean) as ScrapedArticle[]) {
+        if (shouldFilterContent(article.title!, article.summary)) continue;
+        if (!isContentFresh(article.publishedAt)) {
+          if (article.publishedAt !== null) continue;
+        }
+        if (items.some(i => i.originalUrl === article.url)) continue;
+        items.push({
+          folderId: source.folderId,
+          sourceId: source.id,
+          title: article.title!,
+          summary: article.summary,
+          originalUrl: article.url,
+          imageUrl: article.imageUrl,
+          publishedAt: article.publishedAt,
+        });
+        if (items.length >= 15) break;
+      }
+    }
+
+    if (items.length === 0) {
+      throw new Error("تعذّر استخراج مقالات من هذا الموقع — لا يحتوي على RSS ولم تُكتشف مقالات قابلة للجلب.");
+    }
+
+    console.log(`[Scraper] Done: ${items.length} items from ${source.url}`);
+    return { sourceId: source.id, items };
+  } catch (error: any) {
+    console.error(`[Scraper] Error scraping ${source.url}:`, error?.message || error);
+    throw error;
   }
 }
 
