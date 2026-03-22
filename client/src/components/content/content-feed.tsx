@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, ImageOff, Send, Check, Eye } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, Send, Check, Eye } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +89,22 @@ function getSourceIcon(type: string) {
   }
 }
 
+function getThumbnailPlaceholder(sourceType: string | undefined) {
+  switch (sourceType) {
+    case "youtube":
+      return { bg: "bg-red-100 dark:bg-red-900/30", icon: <SiYoutube className="h-8 w-8 text-red-500" /> };
+    case "twitter":
+      return { bg: "bg-slate-100 dark:bg-slate-800", icon: <SiX className="h-8 w-8 text-slate-600 dark:text-slate-300" /> };
+    case "tiktok":
+      return { bg: "bg-pink-100 dark:bg-pink-900/30", icon: <SiTiktok className="h-8 w-8 text-pink-500" /> };
+    case "website":
+      return { bg: "bg-blue-100 dark:bg-blue-900/30", icon: <Globe className="h-8 w-8 text-blue-500" /> };
+    case "rss":
+    default:
+      return { bg: "bg-orange-100 dark:bg-orange-900/30", icon: <Rss className="h-8 w-8 text-orange-500" /> };
+  }
+}
+
 function getSourceDisplayName(item: ContentWithSource): string {
   if (item.source?.name && item.source.name !== "Unknown") {
     return item.source.name;
@@ -166,14 +182,16 @@ function ContentCard({ item, showSmartView }: {
   const hasValidImage = item.imageUrl && !imageError;
   const ageBand = getContentAgeBand(item);
   const ageAccent = getAgeAccentStyles(ageBand);
+  const thumbPlaceholder = getThumbnailPlaceholder(item.source?.type);
   
   return (
     <Card 
-      className={`glass-surface content-news-card rounded-[1.35rem] transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
+      className={`glass-surface content-news-card transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
-        <div className="flex flex-row gap-[calc(0.5rem*1.618)] p-[calc(0.75rem*1.618)]">
+        <div className="flex flex-row gap-3 p-4 min-h-[100px]">
+          {/* Age accent bar */}
           <div className="flex flex-col gap-2 items-center self-stretch">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -191,10 +209,12 @@ function ContentCard({ item, showSmartView }: {
               <Check className="h-3 w-3 text-primary shrink-0" />
             )}
           </div>
-          <div className="flex-shrink-0 relative">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
+
+          {/* Thumbnail — fixed 80×80, no broken icon ever */}
+          <div className="flex-shrink-0">
+            <div className="w-20 h-20 rounded-lg overflow-hidden border border-border/50">
               {hasValidImage ? (
-                <>
+                <div className="relative w-full h-full">
                   <img 
                     src={item.imageUrl!} 
                     alt={displayTitle}
@@ -203,24 +223,22 @@ function ContentCard({ item, showSmartView }: {
                   />
                   {isVideo && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <Play className="h-6 w-6 text-white fill-white" />
+                      <Play className="h-5 w-5 text-white fill-white" />
                     </div>
                   )}
-                </>
+                </div>
               ) : (
-                <div className="flex flex-col items-center justify-center text-muted-foreground">
-                  {isVideo ? (
-                    <Play className="h-6 w-6" />
-                  ) : (
-                    <ImageOff className="h-6 w-6" />
-                  )}
+                <div className={`w-full h-full flex items-center justify-center ${thumbPlaceholder.bg}`}>
+                  {thumbPlaceholder.icon}
                 </div>
               )}
             </div>
           </div>
           
-          <div className="flex-1 min-w-0 flex flex-col justify-between">
-            <div className="space-y-1.5">
+          {/* Main content */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
+            <div className="space-y-1">
+              {/* Source & Date Row */}
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   {getSourceIcon(item.source?.type || "rss")}
@@ -241,14 +259,16 @@ function ContentCard({ item, showSmartView }: {
                 )}
               </div>
               
+              {/* Title — always 2 lines max */}
               <h3 
-                className="text-sm sm:text-base font-semibold leading-tight line-clamp-2 text-foreground" 
+                className="text-sm font-semibold leading-snug line-clamp-2 text-foreground" 
                 dir="auto"
                 data-testid={`text-content-title-${item.id}`}
               >
                 {displayTitle}
               </h3>
               
+              {/* Summary — 2 lines max on sm+ */}
               {displaySummary && (
                 <p 
                   className="hidden sm:block text-xs text-muted-foreground line-clamp-2" 
@@ -259,7 +279,7 @@ function ContentCard({ item, showSmartView }: {
               )}
             </div>
             
-            <div className="flex items-center gap-1 mt-2 flex-wrap">
+            <div className="flex items-center gap-1 flex-wrap">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -335,15 +355,16 @@ function ContentSkeleton() {
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex flex-row gap-[calc(0.5rem*1.618)] p-[calc(0.75rem*1.618)]">
-          <Skeleton className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-md" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-3 w-24" />
+        <div className="flex flex-row gap-3 p-4 min-h-[100px]">
+          <Skeleton className="w-20 h-20 flex-shrink-0 rounded-lg" />
+          <div className="flex-1 space-y-2 pt-1">
+            <Skeleton className="h-3 w-28" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4" />
-            <div className="flex gap-2 pt-1">
-              <Skeleton className="h-6 w-14" />
-              <Skeleton className="h-6 w-14" />
+            <div className="flex gap-2 pt-2">
+              <Skeleton className="h-6 w-7 rounded" />
+              <Skeleton className="h-6 w-14 rounded" />
+              <Skeleton className="h-6 w-10 rounded" />
             </div>
           </div>
         </div>

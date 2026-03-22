@@ -392,24 +392,30 @@ async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
   }
 
   const errors: string[] = [];
-  
-  const TWITTER_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+  // Cursor-based: only fetch tweets after lastFetched (or last 7 days on first fetch)
+  const cursor: Date = source.lastFetched
+    ? new Date(source.lastFetched)
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   for (const instance of NITTER_INSTANCES) {
     const rssUrl = `${instance}/${username}/rss`;
     try {
-      console.log(`[Twitter] Trying ${instance} for @${username}...`);
-      const result = await fetchFromRSSUrl(rssUrl, source, 15);
-      const now = Date.now();
-      result.items = result.items.filter(item => {
-        if (!item.publishedAt) return true;
-        return (now - new Date(item.publishedAt).getTime()) <= TWITTER_MAX_AGE_MS;
-      });
+      console.log(`[Twitter] Trying ${instance} for @${username} (cursor: ${cursor.toISOString()})...`);
+      const result = await fetchFromRSSUrl(rssUrl, source, 50, true); // skip freshness filter — we use cursor
+      // Keep only items published AFTER the cursor, sort oldest→newest
+      result.items = result.items
+        .filter(item => {
+          if (!item.publishedAt) return false;
+          return new Date(item.publishedAt) > cursor;
+        })
+        .sort((a, b) => new Date(a.publishedAt!).getTime() - new Date(b.publishedAt!).getTime());
+
       if (result.items.length > 0) {
-        console.log(`[Twitter] Success: ${result.items.length} recent tweets from ${instance}`);
+        console.log(`[Twitter] Success: ${result.items.length} new tweets from ${instance} (since ${cursor.toISOString()})`);
         return result;
       }
-      console.log(`[Twitter] ${instance} returned 0 recent items (within 48h), trying next...`);
+      console.log(`[Twitter] ${instance}: no new tweets since cursor, trying next...`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.log(`[Twitter] ${instance} failed: ${msg}`);
@@ -422,14 +428,12 @@ async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
   try {
     const { scrapeTwitterWithBrowser } = await import("./browser-scraper");
     const tweets = await scrapeTwitterWithBrowser(source.url);
-    const now = Date.now();
-    const recentTweets = tweets.filter(t => {
-      if (!t.publishedAt) return true;
-      return (now - new Date(t.publishedAt).getTime()) <= TWITTER_MAX_AGE_MS;
-    });
-    if (recentTweets.length > 0) {
-      console.log(`[Twitter] Browser scraped ${recentTweets.length} recent tweets from @${username}`);
-      const items: InsertContent[] = recentTweets.map(t => ({
+    const newTweets = tweets
+      .filter(t => t.publishedAt && new Date(t.publishedAt) > cursor)
+      .sort((a, b) => new Date(a.publishedAt!).getTime() - new Date(b.publishedAt!).getTime());
+    if (newTweets.length > 0) {
+      console.log(`[Twitter] Browser scraped ${newTweets.length} new tweets from @${username} (since cursor)`);
+      const items: InsertContent[] = newTweets.map(t => ({
         folderId: source.folderId,
         sourceId: source.id,
         title: t.title,
@@ -1154,29 +1158,30 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
 }
 
 function extractImageUrl(item: Parser.Item): string | null {
-  // First check enclosure (common for podcasts and some RSS)
-  if (item.enclosure?.url) {
+  const itemRecord = item as Record<string, unknown>;
+
+  // 1. enclosure (common for podcasts and many RSS feeds)
+  if (item.enclosure?.url && /\.(jpg|jpeg|png|webp|gif)/i.test(item.enclosure.url)) {
     return item.enclosure.url;
   }
-  
-  // Check media:thumbnail or media:content
-  const itemRecord = item as Record<string, unknown>;
+
+  // 2. media:content
   const mediaContent = itemRecord["media:content"] as Record<string, any> | undefined;
-  if (mediaContent?.$.url) {
-    return mediaContent.$.url;
-  }
-  
+  if (mediaContent?.$.url) return mediaContent.$.url;
+
+  // 3. media:thumbnail
   const mediaThumbnail = itemRecord["media:thumbnail"] as Record<string, any> | undefined;
-  if (mediaThumbnail?.$.url) {
-    return mediaThumbnail.$.url;
-  }
-  
-  // Check for image in content
-  const content = item.content || (itemRecord["content:encoded"] as string) || "";
-  const imgMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
-  if (imgMatch) {
-    return imgMatch[1];
-  }
+  if (mediaThumbnail?.$.url) return mediaThumbnail.$.url;
+
+  // 4. img tag in content:encoded / content
+  const encodedContent = (itemRecord["content:encoded"] as string) || item.content || "";
+  const encImgMatch = encodedContent.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (encImgMatch?.[1] && encImgMatch[1].startsWith("http")) return encImgMatch[1];
+
+  // 5. img tag in description / summary (many RSS feeds put images here, e.g. CNET)
+  const description = item.summary || (itemRecord["description"] as string) || "";
+  const descImgMatch = description.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (descImgMatch?.[1] && descImgMatch[1].startsWith("http")) return descImgMatch[1];
 
   return null;
 }
