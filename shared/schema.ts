@@ -117,6 +117,9 @@ export const sourcesRelations = relations(sources, ({ one, many }) => ({
 export const sentimentTypes = ["positive", "negative", "neutral"] as const;
 export type SentimentType = typeof sentimentTypes[number];
 
+export const processingStatuses = ["processing", "ready", "failed"] as const;
+export type ProcessingStatus = typeof processingStatuses[number];
+
 export const content = pgTable("content", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   folderId: varchar("folder_id").notNull().references(() => folders.id, { onDelete: "cascade" }),
@@ -138,6 +141,7 @@ export const content = pgTable("content", {
   usedForIdeas: boolean("used_for_ideas").default(false).notNull(),
   readAt: timestamp("read_at"),
   displayedToUser: boolean("displayed_to_user").default(true).notNull(),
+  processingStatus: text("processing_status").$type<ProcessingStatus>().default("ready").notNull(),
 });
 
 export const contentRelations = relations(content, ({ one }) => ({

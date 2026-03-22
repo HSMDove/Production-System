@@ -100,12 +100,15 @@ Users can submit support tickets ("عندي مشكلة") from the Settings → A
 ### Smart View & Red Dot System
 
 The Smart View is an instant toggle that switches between original content (English title/summary) and AI-processed content (arabicTitle/arabicFullSummary). Key design:
-- **Background pre-processing**: When new content is fetched, `folder-fetcher.ts` immediately generates `arabicTitle` and `arabicFullSummary` via AI in a background async task
+- **Sequential Pipeline (Extract → Transform → Load)**: Content goes through a mandatory 3-stage pipeline in `folder-fetcher.ts`:
+  1. **Extract**: Content fetched and saved with `processingStatus: 'processing'` — invisible to frontend
+  2. **Transform**: AI (فكري) generates `arabicTitle` + `arabicFullSummary` sequentially (awaited, not fire-and-forget). Retry up to 2 attempts; if all fail, content publishes with original text as fallback
+  3. **Load**: Content marked `processingStatus: 'ready'` — now visible to users
+- **Schema field**: `content.processing_status` text ('processing' | 'ready' | 'failed'), default 'ready'
+- **Frontend filter**: All content queries (`getContentByFolderId`, `getAllContent`, `getUndisplayedContentCount`, `markContentDisplayed`) filter by `processingStatus = 'ready'`
 - **Instant toggle**: No API call needed — Smart View just reads pre-computed fields from content data. Toggle state persisted in localStorage per folder
-- **Red dot indicator**: New content inserted with `displayedToUser: false`. A polling query (`/api/folders/:id/new-content-count`) checks every 60s. Red dot appears on refresh button with count. Clicking marks all as displayed (`/api/folders/:id/mark-displayed`) and refreshes the feed
-- **Twitter freshness**: Tweets older than 48h are filtered out (both Nitter RSS and browser fallback paths)
+- **Red dot indicator**: New content inserted with `displayedToUser: false`. A polling query (`/api/folders/:id/new-content-count`) checks every 60s. Only counts `ready` content. Red dot appears on refresh button with count. Clicking marks all as displayed (`/api/folders/:id/mark-displayed`) and refreshes the feed
 - **Removed UI**: translate button, summarize popover, explain dialog — all replaced by the single Smart View toggle
-- **Schema field**: `content.displayed_to_user` boolean (default true for existing, false for new items)
 
 ### Notification Pipeline
 

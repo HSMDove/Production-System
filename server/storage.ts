@@ -193,6 +193,9 @@ export interface IStorage {
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
   getUndisplayedContentCount(folderId: string): Promise<number>;
   markContentDisplayed(folderId: string): Promise<void>;
+  markContentReady(id: string): Promise<Content | undefined>;
+  markContentFailed(id: string): Promise<Content | undefined>;
+  getOrphanedProcessingContent(olderThanMinutes?: number): Promise<Content[]>;
 
   getAllSources(): Promise<Source[]>;
 
@@ -421,11 +424,11 @@ export class DatabaseStorage implements IStorage {
     const folderIds = userFolders.map((f) => f.id);
     if (folderIds.length === 0) return [];
     const { inArray } = await import("drizzle-orm");
-    return db.select().from(content).where(inArray(content.folderId, folderIds)).orderBy(content.fetchedAt);
+    return db.select().from(content).where(and(inArray(content.folderId, folderIds), eq(content.processingStatus, "ready"))).orderBy(content.fetchedAt);
   }
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
-    return db.select().from(content).where(eq(content.folderId, folderId)).orderBy(desc(content.publishedAt), desc(content.fetchedAt));
+    return db.select().from(content).where(and(eq(content.folderId, folderId), eq(content.processingStatus, "ready"))).orderBy(desc(content.publishedAt), desc(content.fetchedAt));
   }
 
   async getAllSources(): Promise<Source[]> {
@@ -449,7 +452,7 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (existing) return null;
-    const [created] = await db.insert(content).values({ ...contentItem, displayedToUser: false } as any).returning();
+    const [created] = await db.insert(content).values({ ...contentItem, displayedToUser: false, processingStatus: "processing" } as any).returning();
     return created;
   }
 
@@ -502,14 +505,31 @@ export class DatabaseStorage implements IStorage {
   async getUndisplayedContentCount(folderId: string): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)::int` })
       .from(content)
-      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false)));
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), eq(content.processingStatus, "ready")));
     return result[0]?.count ?? 0;
   }
 
   async markContentDisplayed(folderId: string): Promise<void> {
     await db.update(content)
       .set({ displayedToUser: true })
-      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false)));
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), eq(content.processingStatus, "ready")));
+  }
+
+  async markContentReady(id: string): Promise<Content | undefined> {
+    const [updated] = await db.update(content).set({ processingStatus: "ready" }).where(eq(content.id, id)).returning();
+    return updated;
+  }
+
+  async markContentFailed(id: string): Promise<Content | undefined> {
+    const [updated] = await db.update(content).set({ processingStatus: "failed" }).where(eq(content.id, id)).returning();
+    return updated;
+  }
+
+  async getOrphanedProcessingContent(olderThanMinutes: number = 10): Promise<Content[]> {
+    const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+    return db.select().from(content)
+      .where(and(eq(content.processingStatus, "processing"), gt(cutoff, content.fetchedAt)))
+      .orderBy(content.fetchedAt);
   }
 
   // ─── Ideas ────────────────────────────────────────────────────────────────
