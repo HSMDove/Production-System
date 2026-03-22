@@ -510,6 +510,9 @@ export async function registerRoutes(
       const otp = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
       await storage.createOTP(normalizedEmail, otp, expiresAt);
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[DEV-OTP] ${normalizedEmail} => ${otp}`);
+      }
       await sendOTPEmail(normalizedEmail, otp);
 
       res.json({ success: true, message: "تم إرسال رمز التحقق إلى بريدك الإلكتروني" });
@@ -1070,18 +1073,228 @@ export async function registerRoutes(
     return source;
   }
 
-  app.post("/api/sources", async (req, res) => {
+  // ─── Smart Source Analysis ──────────────────────────────────────────
+  app.post("/api/sources/analyze", requireAuth, async (req, res) => {
     try {
-      const parsed = insertSourceSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.errors });
+      let { url } = req.body;
+      if (!url || typeof url !== "string") return res.status(400).json({ error: "الرابط مطلوب" });
+      url = url.trim();
+      if (!url.startsWith("http")) url = `https://${url}`;
+
+      const { resolveYouTubeRSSUrl, discoverWebsiteRSS, extractTwitterUsername, extractTikTokUsername } = await import("./fetcher");
+
+      // ── 1. Detect type from URL ──
+      let detectedType: "youtube" | "twitter" | "tiktok" | "rss" | "website" = "website";
+      let name = "";
+      let verified = false;
+      let feedUrl: string | null = null;
+      let error: string | null = null;
+
+      const isYT = /youtube\.com|youtu\.be/i.test(url);
+      const isX = /(?:twitter|x)\.com/i.test(url) || /^@[\w]+$/.test(url.replace(/^https?:\/\//, ""));
+      const isTikTok = /tiktok\.com/i.test(url);
+      const isRSS = /\.(xml|rss|atom)(\?|$)/i.test(url) || /\/feed\/?(\?|$)/i.test(url) || /\/rss\/?(\?|$)/i.test(url);
+
+      if (isYT) {
+        detectedType = "youtube";
+      } else if (isX) {
+        detectedType = "twitter";
+      } else if (isTikTok) {
+        detectedType = "tiktok";
+      } else if (isRSS) {
+        detectedType = "rss";
       }
-      // Verify the target folder belongs to the current user
-      const folder = await requireFolderOwner(parsed.data.folderId, req.session.userId!, res);
+
+      // ── 2. Pre-fetch name and verify ──
+      const browserHeaders = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ar,en;q=0.9",
+      };
+
+      if (detectedType === "youtube") {
+        try {
+          const ytHeaders = {
+            ...browserHeaders,
+            "Cookie": "CONSENT=YES+cb.20210328-17-p0.en+FX+634; SOCS=CAI",
+          };
+          // Strategy 1: oEmbed (works for video URLs)
+          const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+          const oRes = await fetch(oembedUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+          if (oRes?.ok) {
+            const oembed = await oRes.json() as any;
+            name = oembed.author_name || "";
+          }
+          // Strategy 2: scrape the page for og:title/title + channelId
+          if (!name || !feedUrl) {
+            const pageRes = await fetch(url, { headers: ytHeaders, signal: AbortSignal.timeout(12000), redirect: "follow" }).catch(() => null);
+            if (pageRes?.ok) {
+              const html = await pageRes.text();
+              if (!name) {
+                const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+                if (ogTitle) name = ogTitle[1].trim();
+              }
+              if (!name) {
+                const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+                if (titleMatch) name = titleMatch[1].replace(/\s*-\s*YouTube\s*$/i, "").trim();
+              }
+              const channelIdMatch = html.match(/"channelId":"(UC[\w-]+)"/);
+              if (channelIdMatch) {
+                feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelIdMatch[1]}`;
+              }
+            }
+          }
+          // Verify the RSS feed if we have one
+          if (feedUrl) {
+            const testFeed = await fetch(feedUrl, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+            verified = !!(testFeed?.ok);
+          }
+          // If feed verification failed but we got a name from the page,
+          // the URL is valid YouTube content — mark as verified
+          if (!verified && name) {
+            verified = true;
+          }
+          if (!verified) error = "لم يتم العثور على قناة يوتيوب صالحة لهذا الرابط";
+        } catch (e) {
+          error = "فشل في التحقق من رابط يوتيوب";
+        }
+
+      } else if (detectedType === "twitter") {
+        const username = extractTwitterUsername(url);
+        if (username) {
+          name = `@${username}`;
+          // Try nitter instances to verify
+          const nitterInstances = ["https://xcancel.com", "https://nitter.poast.org", "https://nitter.privacyredirect.com"];
+          for (const instance of nitterInstances) {
+            try {
+              const testRes = await fetch(`${instance}/${username}/rss`, { signal: AbortSignal.timeout(8000) });
+              if (testRes.ok) {
+                const testText = await testRes.text();
+                if (testText.includes("<item>") || testText.includes("<entry>")) {
+                  verified = true;
+                  feedUrl = `${instance}/${username}/rss`;
+                  break;
+                }
+              }
+            } catch {}
+          }
+          if (!verified) error = "لم يتم العثور على تغريدات لهذا الحساب عبر الخدمات المتاحة";
+        } else {
+          error = "رابط X/Twitter غير صالح";
+        }
+
+      } else if (detectedType === "tiktok") {
+        const username = extractTikTokUsername(url);
+        if (username) {
+          name = `@${username} (TikTok)`;
+          // TikTok is very hard to scrape; mark as partially verified
+          verified = true;
+        } else {
+          error = "رابط TikTok غير صالح";
+        }
+
+      } else {
+        // Website or RSS
+        try {
+          const pageRes = await fetch(url, { headers: browserHeaders, signal: AbortSignal.timeout(10000), redirect: "follow" });
+          if (!pageRes.ok) {
+            error = `الموقع غير متاح (${pageRes.status})`;
+          } else {
+            const html = await pageRes.text();
+            const contentType = pageRes.headers.get("content-type") || "";
+
+            // Check if it's already an RSS/Atom feed
+            if (contentType.includes("xml") || contentType.includes("rss") || contentType.includes("atom") || html.trimStart().startsWith("<?xml") || html.includes("<rss") || html.includes("<feed")) {
+              detectedType = "rss";
+              feedUrl = url;
+              // Extract feed title
+              const feedTitleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+              name = feedTitleMatch ? feedTitleMatch[1].trim() : "";
+              verified = true;
+            } else {
+              // It's a website — extract title
+              const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+              name = titleMatch ? titleMatch[1].trim() : "";
+              // Try to discover RSS
+              feedUrl = await discoverWebsiteRSS(url);
+              if (feedUrl) {
+                // Verify RSS actually works
+                try {
+                  const rssRes = await fetch(feedUrl, { headers: browserHeaders, signal: AbortSignal.timeout(8000) });
+                  if (rssRes.ok) {
+                    const rssText = await rssRes.text();
+                    if (rssText.includes("<item>") || rssText.includes("<entry>") || rssText.includes("<rss") || rssText.includes("<feed")) {
+                      verified = true;
+                      detectedType = "rss";
+                    }
+                  }
+                } catch {}
+              }
+              if (!verified) {
+                // Fallback: treat as website even without RSS
+                detectedType = "website";
+                verified = true; // we could at least fetch OG data
+              }
+            }
+          }
+        } catch (e) {
+          error = "فشل في الوصول للموقع — تأكد من صحة الرابط";
+        }
+      }
+
+      // Clean up name
+      if (name) {
+        name = name.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+      }
+
+      res.json({
+        type: detectedType,
+        name: name || null,
+        verified,
+        feedUrl,
+        error,
+      });
+    } catch (err) {
+      console.error("[Source Analyze] Error:", err);
+      res.status(500).json({ error: "فشل تحليل الرابط" });
+    }
+  });
+
+  app.post("/api/sources", requireAuth, async (req, res) => {
+    try {
+      const { name, url, type, folderId } = req.body;
+      if (!url || !folderId || typeof url !== "string") return res.status(400).json({ error: "الرابط والمجلد مطلوبان" });
+
+      let normalizedUrl = url.trim();
+      if (!normalizedUrl.startsWith("http")) normalizedUrl = `https://${normalizedUrl}`;
+      try { new URL(normalizedUrl); } catch { return res.status(400).json({ error: "الرابط غير صالح" }); }
+
+      const folder = await requireFolderOwner(folderId, req.session.userId!, res);
       if (!folder) return;
-      const source = await storage.createSource(parsed.data);
+
+      const validTypes = ["youtube", "twitter", "tiktok", "rss", "website"];
+      let sourceType = validTypes.includes(type) ? type : null;
+      if (!sourceType) {
+        const isYT = /youtube\.com|youtu\.be/i.test(normalizedUrl);
+        const isX = /(?:twitter|x)\.com/i.test(normalizedUrl);
+        const isTikTok = /tiktok\.com/i.test(normalizedUrl);
+        const isRSS = /\.(xml|rss|atom)(\?|$)/i.test(normalizedUrl) || /\/feed\/?(\?|$)/i.test(normalizedUrl) || /\/rss\/?(\?|$)/i.test(normalizedUrl);
+        if (isYT) sourceType = "youtube";
+        else if (isX) sourceType = "twitter";
+        else if (isTikTok) sourceType = "tiktok";
+        else if (isRSS) sourceType = "rss";
+        else sourceType = "website";
+      }
+
+      const source = await storage.createSource({
+        name: (typeof name === "string" && name.trim()) ? name.trim() : normalizedUrl,
+        url: normalizedUrl,
+        type: sourceType,
+        folderId,
+      });
       res.status(201).json(source);
     } catch (error) {
+      console.error("[Source Create] Error:", error);
       res.status(500).json({ error: "Failed to create source" });
     }
   });

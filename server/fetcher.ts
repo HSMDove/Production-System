@@ -215,71 +215,68 @@ function extractTwitterUsername(url: string): string | null {
 
 // Discover RSS feed from a website
 async function discoverWebsiteRSS(url: string): Promise<string | null> {
+  const browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const baseUrl = new URL(url.startsWith("http") ? url : `https://${url}`);
+
+  function resolveUrl(feedUrl: string): string {
+    if (feedUrl.startsWith('//')) return `${baseUrl.protocol}${feedUrl}`;
+    if (feedUrl.startsWith('/')) return `${baseUrl.protocol}//${baseUrl.host}${feedUrl}`;
+    if (!feedUrl.startsWith('http')) return `${baseUrl.protocol}//${baseUrl.host}/${feedUrl}`;
+    return feedUrl;
+  }
+
+  // Try fetching the page to look for <link> RSS tags
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": browserUA,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
       },
+      signal: AbortSignal.timeout(12000),
+      redirect: "follow",
     });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch website: ${response.status} ${response.statusText}`);
-    }
-    
-    const html = await response.text();
-    
-    // Look for RSS auto-discovery link tags
-    const linkPatterns = [
-      /<link[^>]+rel=["']alternate["'][^>]+type=["']application\/rss\+xml["'][^>]+href=["']([^"']+)["']/i,
-      /<link[^>]+type=["']application\/rss\+xml["'][^>]+rel=["']alternate["'][^>]+href=["']([^"']+)["']/i,
-      /<link[^>]+href=["']([^"']+)["'][^>]+type=["']application\/rss\+xml["'][^>]+rel=["']alternate["']/i,
-      /<link[^>]+rel=["']alternate["'][^>]+type=["']application\/atom\+xml["'][^>]+href=["']([^"']+)["']/i,
-    ];
 
-    for (const pattern of linkPatterns) {
-      const match = html.match(pattern);
-      if (match) {
-        let feedUrl = match[1];
-        
-        // Convert scheme-relative URLs (//example.com/feed) to absolute
-        if (feedUrl.startsWith('//')) {
-          const baseUrl = new URL(url);
-          feedUrl = `${baseUrl.protocol}${feedUrl}`;
-        }
-        // Convert relative URLs to absolute
-        else if (feedUrl.startsWith('/')) {
-          const baseUrl = new URL(url);
-          feedUrl = `${baseUrl.protocol}//${baseUrl.host}${feedUrl}`;
-        } else if (!feedUrl.startsWith('http')) {
-          const baseUrl = new URL(url);
-          feedUrl = `${baseUrl.protocol}//${baseUrl.host}/${feedUrl}`;
-        }
-        
-        return feedUrl;
+    if (response.ok) {
+      const html = await response.text();
+      const linkPatterns = [
+        /<link[^>]+rel=["']alternate["'][^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]+href=["']([^"']+)["']/i,
+        /<link[^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]+href=["']([^"']+)["']/i,
+        /<link[^>]+href=["']([^"']+)["'][^>]+type=["']application\/(?:rss|atom)\+xml["']/i,
+      ];
+      for (const pattern of linkPatterns) {
+        const match = html.match(pattern);
+        if (match) return resolveUrl(match[1]);
       }
     }
-    
-    // Common RSS feed locations
-    const commonPaths = ['/feed', '/rss', '/feed.xml', '/rss.xml', '/atom.xml'];
-    const baseUrl = new URL(url);
-    
-    for (const path of commonPaths) {
-      const testUrl = `${baseUrl.protocol}//${baseUrl.host}${path}`;
-      try {
-        const testResponse = await fetch(testUrl, { method: 'HEAD' });
-        if (testResponse.ok) {
-          return testUrl;
-        }
-      } catch {
-        // Continue to next path
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.error("Error discovering website RSS:", error);
-    return null;
+  } catch {}
+
+  // Probe common RSS paths directly (works even if main page returns 403)
+  const commonPaths = ['/feed', '/rss', '/feed.xml', '/rss.xml', '/atom.xml', '/feed/rss', '/feeds/posts/default', '/.rss', '/rss/current'];
+  // Special handling for Reddit
+  if (baseUrl.hostname.includes("reddit.com")) {
+    commonPaths.unshift('/.rss');
   }
+
+  for (const path of commonPaths) {
+    const testUrl = `${baseUrl.protocol}//${baseUrl.host}${path}`;
+    try {
+      const testRes = await fetch(testUrl, {
+        headers: { "User-Agent": browserUA, "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml" },
+        signal: AbortSignal.timeout(8000),
+        redirect: "follow",
+      });
+      if (testRes.ok) {
+        const ct = testRes.headers.get("content-type") || "";
+        if (ct.includes("xml") || ct.includes("rss") || ct.includes("atom")) return testUrl;
+        // Check content for RSS markers
+        const body = await testRes.text();
+        if (body.includes("<rss") || body.includes("<feed") || body.includes("<channel>")) return testUrl;
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 // Freshness threshold: 14 days in milliseconds (for single source view)
@@ -859,4 +856,4 @@ export async function fetchMultipleSources(sources: Source[]): Promise<FetchResu
 }
 
 // helpers exported for testing and future reuse
-export { extractYouTubeChannelId, extractYouTubeVideoId, getYouTubeRSSUrl };
+export { extractYouTubeChannelId, extractYouTubeVideoId, getYouTubeRSSUrl, resolveYouTubeRSSUrl, discoverWebsiteRSS, extractTwitterUsername, extractTikTokUsername };
