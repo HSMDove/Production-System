@@ -1215,26 +1215,23 @@ export async function registerRoutes(
               // It's a website — extract title
               const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
               name = titleMatch ? titleMatch[1].trim() : "";
-              // Try to discover RSS
+              // Try to discover RSS (for internal use, but keep type as "website")
               feedUrl = await discoverWebsiteRSS(url);
               if (feedUrl) {
-                // Verify RSS actually works
                 try {
                   const rssRes = await fetch(feedUrl, { headers: browserHeaders, signal: AbortSignal.timeout(8000) });
                   if (rssRes.ok) {
                     const rssText = await rssRes.text();
                     if (rssText.includes("<item>") || rssText.includes("<entry>") || rssText.includes("<rss") || rssText.includes("<feed")) {
                       verified = true;
-                      detectedType = "rss";
                     }
                   }
                 } catch {}
               }
               if (!verified) {
-                // Fallback: treat as website even without RSS
-                detectedType = "website";
-                verified = true; // we could at least fetch OG data
+                verified = true;
               }
+              detectedType = "website";
             }
           }
         } catch (e) {
@@ -1242,9 +1239,25 @@ export async function registerRoutes(
         }
       }
 
-      // Clean up name
+      // Clean up name — keep it short (2-3 words max)
       if (name) {
         name = name.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        // Remove common suffixes
+        name = name.replace(/\s*[-–—|:]\s*(الصفحة الرئيسية|الرئيسية|Home|Official|الموقع الرسمي|RSS|Feed|YouTube|Channel).*$/i, "").trim();
+        // Split by separators and take first meaningful part
+        const parts = name.split(/\s*[-–—|•·]\s*/);
+        if (parts.length > 1) {
+          name = parts[0].trim();
+        }
+        // Limit to max 4 words
+        const words = name.split(/\s+/);
+        if (words.length > 4) {
+          name = words.slice(0, 3).join(" ");
+        }
+        // Trim to max 40 chars
+        if (name.length > 40) {
+          name = name.substring(0, 40).trim();
+        }
       }
 
       res.json({
@@ -3008,9 +3021,14 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         if (!src.name || !src.url) continue;
         try {
           const sourceType = validTypes.includes(src.type) ? src.type : "website";
+          // Shorten name to max 3-4 words
+          let shortName = src.name.split(/\s*[-–—|•·]\s*/)[0].trim();
+          const nameWords = shortName.split(/\s+/);
+          if (nameWords.length > 4) shortName = nameWords.slice(0, 3).join(" ");
+          if (shortName.length > 40) shortName = shortName.substring(0, 40).trim();
           const created = await storage.createSource({
             folderId,
-            name: src.name,
+            name: shortName,
             url: src.url,
             type: sourceType as any,
             isActive: true,

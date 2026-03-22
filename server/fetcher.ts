@@ -12,8 +12,9 @@ const youTubeChannelCache = new Map<string, string>();
 const parser = new Parser({
   timeout: 10000,
   headers: {
-    // YouTube occasionally rejects very custom UA values; mimic a browser.
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/rss+xml, application/xml, text/xml, application/atom+xml, */*;q=0.1",
+    "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
   },
 });
 
@@ -777,10 +778,27 @@ async function fetchOGImage(url: string): Promise<string | null> {
 }
 
 // ─── Website HTML Scraper (fallback when no RSS) ─────────────────────────────
+const USER_AGENTS = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+];
+
+function getRandomUA() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 const SCRAPE_BROWSER_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+  "Accept-Encoding": "gzip, deflate, br",
+  "Cache-Control": "no-cache",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
 };
 
 interface ScrapedArticle {
@@ -945,11 +963,24 @@ async function scrapeWebsiteContent(source: Source): Promise<FetchResult> {
   const items: InsertContent[] = [];
 
   try {
-    const res = await fetch(source.url, {
-      headers: SCRAPE_BROWSER_HEADERS,
+    let res = await fetch(source.url, {
+      headers: { ...SCRAPE_BROWSER_HEADERS, "User-Agent": getRandomUA() },
       signal: AbortSignal.timeout(15000),
       redirect: "follow",
     });
+    // Retry with different UA on 403
+    if (res.status === 403) {
+      console.log(`[Scraper] Got 403, retrying with different User-Agent...`);
+      res = await fetch(source.url, {
+        headers: {
+          ...SCRAPE_BROWSER_HEADERS,
+          "User-Agent": USER_AGENTS[1],
+          "Referer": `https://www.google.com/search?q=${encodeURIComponent(new URL(source.url).hostname)}`,
+        },
+        signal: AbortSignal.timeout(15000),
+        redirect: "follow",
+      });
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const html = await res.text();
 
