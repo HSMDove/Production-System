@@ -97,6 +97,16 @@ Users can submit support tickets ("عندي مشكلة") from the Settings → A
 - **Admin dashboard**: "الشكاوى والتذاكر" panel with ticket list, status management dropdown, and reply textarea
 - **User UI**: "عندي مشكلة" card in Settings → Account tab with new ticket form (title, description, image upload), ticket list, and conversation view
 
+### Smart View & Red Dot System
+
+The Smart View is an instant toggle that switches between original content (English title/summary) and AI-processed content (arabicTitle/arabicFullSummary). Key design:
+- **Background pre-processing**: When new content is fetched, `folder-fetcher.ts` immediately generates `arabicTitle` and `arabicFullSummary` via AI in a background async task
+- **Instant toggle**: No API call needed — Smart View just reads pre-computed fields from content data. Toggle state persisted in localStorage per folder
+- **Red dot indicator**: New content inserted with `displayedToUser: false`. A polling query (`/api/folders/:id/new-content-count`) checks every 60s. Red dot appears on refresh button with count. Clicking marks all as displayed (`/api/folders/:id/mark-displayed`) and refreshes the feed
+- **Twitter freshness**: Tweets older than 48h are filtered out (both Nitter RSS and browser fallback paths)
+- **Removed UI**: translate button, summarize popover, explain dialog — all replaced by the single Smart View toggle
+- **Schema field**: `content.displayed_to_user` boolean (default true for existing, false for new items)
+
 ### Notification Pipeline
 
 - **Telegram Bot API**: For automated content notifications with HTML formatting.

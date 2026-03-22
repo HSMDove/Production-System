@@ -788,6 +788,28 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/folders/:id/new-content-count", async (req, res) => {
+    try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
+      const count = await storage.getUndisplayedContentCount(req.params.id);
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get new content count" });
+    }
+  });
+
+  app.post("/api/folders/:id/mark-displayed", async (req, res) => {
+    try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
+      await storage.markContentDisplayed(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark content as displayed" });
+    }
+  });
+
   app.post("/api/folders/:id/smart-view", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);

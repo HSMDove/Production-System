@@ -137,6 +137,7 @@ export const content = pgTable("content", {
   rewrittenContent: text("rewritten_content"),
   usedForIdeas: boolean("used_for_ideas").default(false).notNull(),
   readAt: timestamp("read_at"),
+  displayedToUser: boolean("displayed_to_user").default(true).notNull(),
 });
 
 export const contentRelations = relations(content, ({ one }) => ({

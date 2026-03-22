@@ -393,16 +393,23 @@ async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
 
   const errors: string[] = [];
   
+  const TWITTER_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
   for (const instance of NITTER_INSTANCES) {
     const rssUrl = `${instance}/${username}/rss`;
     try {
       console.log(`[Twitter] Trying ${instance} for @${username}...`);
       const result = await fetchFromRSSUrl(rssUrl, source, 15);
+      const now = Date.now();
+      result.items = result.items.filter(item => {
+        if (!item.publishedAt) return true;
+        return (now - new Date(item.publishedAt).getTime()) <= TWITTER_MAX_AGE_MS;
+      });
       if (result.items.length > 0) {
-        console.log(`[Twitter] Success: ${result.items.length} tweets from ${instance}`);
+        console.log(`[Twitter] Success: ${result.items.length} recent tweets from ${instance}`);
         return result;
       }
-      console.log(`[Twitter] ${instance} returned 0 items, trying next...`);
+      console.log(`[Twitter] ${instance} returned 0 recent items (within 48h), trying next...`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.log(`[Twitter] ${instance} failed: ${msg}`);
@@ -415,9 +422,14 @@ async function fetchTwitterFeed(source: Source): Promise<FetchResult> {
   try {
     const { scrapeTwitterWithBrowser } = await import("./browser-scraper");
     const tweets = await scrapeTwitterWithBrowser(source.url);
-    if (tweets.length > 0) {
-      console.log(`[Twitter] Browser scraped ${tweets.length} tweets from @${username}`);
-      const items: InsertContent[] = tweets.map(t => ({
+    const now = Date.now();
+    const recentTweets = tweets.filter(t => {
+      if (!t.publishedAt) return true;
+      return (now - new Date(t.publishedAt).getTime()) <= TWITTER_MAX_AGE_MS;
+    });
+    if (recentTweets.length > 0) {
+      console.log(`[Twitter] Browser scraped ${recentTweets.length} recent tweets from @${username}`);
+      const items: InsertContent[] = recentTweets.map(t => ({
         folderId: source.folderId,
         sourceId: source.id,
         title: t.title,

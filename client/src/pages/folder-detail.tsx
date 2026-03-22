@@ -1,10 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ChevronLeft, RefreshCw, Languages, Power, Clock, Sparkles, Loader2, Layers } from "lucide-react";
+import { ChevronLeft, RefreshCw, Power, Clock, Sparkles, Loader2, Layers } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Rss, Globe } from "lucide-react";
-import { SmartViewFeed } from "@/components/content/smart-view-feed";
 import { MainLayout } from "@/components/layout/main-layout";
 import { SourceList } from "@/components/sources/source-list";
 import { SourceDialog } from "@/components/sources/source-dialog";
@@ -45,26 +44,20 @@ export default function FolderDetail() {
   const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [selectedFilterSourceId, setSelectedFilterSourceId] = useState<string | null>(null);
-  const [smartViewActive, setSmartViewActive] = useState(() => {
+  const [showSmartView, setShowSmartView] = useState(() => {
     const saved = localStorage.getItem(`techvoice-smart-view-${id}`);
     return saved === 'true';
   });
 
   useEffect(() => {
     const saved = localStorage.getItem(`techvoice-smart-view-${id}`);
-    setSmartViewActive(saved === 'true');
+    setShowSmartView(saved === 'true');
   }, [id]);
-  
-  // Translation toggle - persist in localStorage
-  const [showTranslation, setShowTranslation] = useState(() => {
-    const saved = localStorage.getItem('techvoice-show-translation');
-    return saved === 'true';
-  });
-  
-  const handleTranslationToggle = () => {
-    const newValue = !showTranslation;
-    setShowTranslation(newValue);
-    localStorage.setItem('techvoice-show-translation', String(newValue));
+
+  const handleSmartViewToggle = () => {
+    const newValue = !showSmartView;
+    setShowSmartView(newValue);
+    localStorage.setItem(`techvoice-smart-view-${id}`, String(newValue));
   };
 
   const { data: folder, isLoading: folderLoading } = useQuery<Folder>({
@@ -174,34 +167,13 @@ export default function FolderDetail() {
     },
   });
 
-  const smartViewMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/folders/${id}/smart-view`, { days: 7 });
-      return response as { cards: Array<{ contentId: string; catchyTitle: string; story: string; thumbnailSuggestion: string; originalUrl: string; imageUrl?: string | null }> };
-    },
-    onSuccess: () => {
-      setSmartViewActive(true);
-      localStorage.setItem(`techvoice-smart-view-${id}`, 'true');
-    },
-    onError: () => {
-      toast({ title: "خطأ", description: "فشل في تحويل الأخبار للعرض الذكي", variant: "destructive" });
-    },
+  const newContentQuery = useQuery<{ count: number }>({
+    queryKey: ["/api/folders", id, "new-content-count"],
+    refetchInterval: 60000,
+    enabled: !!id,
   });
 
-  const handleSmartView = () => {
-    if (smartViewActive) {
-      setSmartViewActive(false);
-      localStorage.setItem(`techvoice-smart-view-${id}`, 'false');
-    } else {
-      smartViewMutation.mutate();
-    }
-  };
-
-  useEffect(() => {
-    if (smartViewActive && !smartViewMutation.data && !smartViewMutation.isPending) {
-      smartViewMutation.mutate();
-    }
-  }, [smartViewActive, id]);
+  const newContentCount = newContentQuery.data?.count ?? 0;
 
   const updateFolderMutation = useMutation({
     mutationFn: async (data: Partial<Folder>) => {
@@ -336,40 +308,36 @@ export default function FolderDetail() {
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <Button
-              variant={showTranslation ? "default" : "outline"}
-              onClick={handleTranslationToggle}
-              data-testid="button-toggle-translation"
+              variant={showSmartView ? "default" : "outline"}
               size="sm"
-              className="gap-1.5"
-            >
-              <Languages className="h-4 w-4" />
-              <span className="hidden xs:inline">{showTranslation ? "عربي" : "إنجليزي"}</span>
-            </Button>
-            <Button
-              variant={smartViewActive ? "default" : "outline"}
-              size="sm"
-              onClick={handleSmartView}
-              disabled={smartViewMutation.isPending}
+              onClick={handleSmartViewToggle}
               data-testid="button-smart-view"
               className="gap-1.5"
             >
-              {smartViewMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              <span className="mr-2">{smartViewActive ? "العرض العادي" : "العرض الذكي"}</span>
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden xs:inline">{showSmartView ? "العرض العادي" : "العرض الذكي"}</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => fetchAllSourcesMutation.mutate()}
+              onClick={async () => {
+                if (newContentCount > 0) {
+                  await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
+                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
+                } else {
+                  fetchAllSourcesMutation.mutate();
+                }
+              }}
               disabled={fetchAllSourcesMutation.isPending}
               data-testid="button-refresh-all"
-              className="gap-1.5"
+              className="gap-1.5 relative"
             >
               <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">تحديث</span>
+              <span className="hidden sm:inline">{newContentCount > 0 ? `${newContentCount} جديد` : "تحديث"}</span>
+              {newContentCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />
+              )}
             </Button>
           </div>
         </div>
@@ -438,20 +406,13 @@ export default function FolderDetail() {
                   onSortOrderChange={setSortOrder}
                 />
                 
-                {smartViewActive ? (
-                  <SmartViewFeed 
-                    cards={smartViewMutation.data?.cards || []} 
-                    isLoading={smartViewMutation.isPending} 
-                  />
-                ) : (
-                  <ContentFeed 
-                    content={filteredContent} 
-                    isLoading={contentLoading} 
-                    showTranslation={showTranslation} 
-                    folderId={id}
-                    unifiedTimeline={selectedFilterSourceId === null}
-                  />
-                )}
+                <ContentFeed 
+                  content={filteredContent} 
+                  isLoading={contentLoading} 
+                  showSmartView={showSmartView} 
+                  folderId={id}
+                  unifiedTimeline={selectedFilterSourceId === null}
+                />
               </div>
             </div>
           </TabsContent>

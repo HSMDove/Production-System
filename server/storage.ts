@@ -191,6 +191,8 @@ export interface IStorage {
   updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
   updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
+  getUndisplayedContentCount(folderId: string): Promise<number>;
+  markContentDisplayed(folderId: string): Promise<void>;
 
   getAllSources(): Promise<Source[]>;
 
@@ -447,7 +449,7 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (existing) return null;
-    const [created] = await db.insert(content).values(contentItem as any).returning();
+    const [created] = await db.insert(content).values({ ...contentItem, displayedToUser: false } as any).returning();
     return created;
   }
 
@@ -495,6 +497,19 @@ export class DatabaseStorage implements IStorage {
       .where(isNull(content.sentiment))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
+  }
+
+  async getUndisplayedContentCount(folderId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` })
+      .from(content)
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false)));
+    return result[0]?.count ?? 0;
+  }
+
+  async markContentDisplayed(folderId: string): Promise<void> {
+    await db.update(content)
+      .set({ displayedToUser: true })
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false)));
   }
 
   // ─── Ideas ────────────────────────────────────────────────────────────────

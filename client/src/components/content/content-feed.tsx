@@ -1,23 +1,12 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Sparkles, Loader2, FileText, ImageOff, Send, Check, Eye, Languages, RefreshCw } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, ImageOff, Send, Check, Eye } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -26,13 +15,12 @@ import {
 import { LiveTimeAgo } from "@/components/ui/live-time-ago";
 import { useToast } from "@/hooks/use-toast";
 import type { ContentWithSource } from "@/lib/types";
-import { sourceTypeLabels } from "@/lib/types";
 import { apiRequest } from "@/lib/queryClient";
 
 interface ContentFeedProps {
   content: ContentWithSource[];
   isLoading?: boolean;
-  showTranslation?: boolean;
+  showSmartView?: boolean;
   folderId?: string;
   unifiedTimeline?: boolean;
 }
@@ -126,15 +114,11 @@ function getSourceDisplayName(item: ContentWithSource): string {
   }
 }
 
-function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslating }: { 
+function ContentCard({ item, showSmartView }: { 
   item: ContentWithSource; 
-  onExplain?: (item: ContentWithSource) => void; 
-  onTranslate?: (item: ContentWithSource) => void;
-  showTranslation?: boolean;
-  isTranslating?: boolean;
+  showSmartView?: boolean;
 }) {
   const [imageError, setImageError] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(false);
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
   const { toast } = useToast();
 
@@ -155,17 +139,11 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
     },
   });
   const isVideo = item.source?.type === "youtube" || item.source?.type === "twitter";
-  const hasArabicSummary = !!item.arabicSummary;
-  const hasTranslation = !!item.arabicTitle && !!item.arabicFullSummary;
-  const needsTranslation = !hasArabicSummary || !hasTranslation;
+  const hasSmartContent = !!item.arabicTitle && !!item.arabicFullSummary;
   const isRead = !!item.readAt;
   
-  // Determine what to display based on translation mode
-  // When translation is ON: show Arabic content ONLY if available, else keep English
-  // When translation is OFF: always show English original
-  const displayTitle = showTranslation && hasTranslation ? item.arabicTitle! : item.title;
-  const displaySummary = showTranslation && hasTranslation ? item.arabicFullSummary! : item.summary;
-  const isArabicDisplay = showTranslation && hasTranslation;
+  const displayTitle = showSmartView && hasSmartContent ? item.arabicTitle! : item.title;
+  const displaySummary = showSmartView && hasSmartContent ? item.arabicFullSummary! : item.summary;
   
   const readMutation = useMutation({
     mutationFn: async () => {
@@ -185,7 +163,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
     if (!isRead) readMutation.mutate();
   };
 
-  // Check if we have a valid image
   const hasValidImage = item.imageUrl && !imageError;
   const ageBand = getContentAgeBand(item);
   const ageAccent = getAgeAccentStyles(ageBand);
@@ -196,7 +173,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
-        {/* Feedly-style horizontal layout */}
         <div className="flex flex-row gap-[calc(0.5rem*1.618)] p-[calc(0.75rem*1.618)]">
           <div className="flex flex-col gap-2 items-center self-stretch">
             <Tooltip>
@@ -215,7 +191,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
               <Check className="h-3 w-3 text-primary shrink-0" />
             )}
           </div>
-          {/* Thumbnail - Fixed size on the right (RTL) */}
           <div className="flex-shrink-0 relative">
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
               {hasValidImage ? (
@@ -244,11 +219,8 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
             </div>
           </div>
           
-          {/* Content - Flexible */}
           <div className="flex-1 min-w-0 flex flex-col justify-between">
-            {/* Top section */}
             <div className="space-y-1.5">
-              {/* Source & Date Row */}
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                   {getSourceIcon(item.source?.type || "rss")}
@@ -262,9 +234,13 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                     <LiveTimeAgo timestamp={item.publishedAt} />
                   </span>
                 )}
+                {showSmartView && hasSmartContent && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border-primary/20">
+                    ذكي
+                  </Badge>
+                )}
               </div>
               
-              {/* Title */}
               <h3 
                 className="text-sm sm:text-base font-semibold leading-tight line-clamp-2 text-foreground" 
                 dir="auto"
@@ -273,7 +249,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 {displayTitle}
               </h3>
               
-              {/* Summary - Only on larger screens */}
               {displaySummary && (
                 <p 
                   className="hidden sm:block text-xs text-muted-foreground line-clamp-2" 
@@ -284,79 +259,7 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
               )}
             </div>
             
-            {/* Actions Row */}
             <div className="flex items-center gap-1 mt-2 flex-wrap">
-              {/* Quick Summary Button - Shows popover with Arabic summary */}
-              {hasArabicSummary && (
-                <Popover open={summaryOpen} onOpenChange={setSummaryOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 gap-1 text-xs"
-                      data-testid={`button-summary-${item.id}`}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">ملخص</span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent 
-                    className="w-72 sm:w-80" 
-                    align="start"
-                    side="bottom"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-medium">ملخص سريع</span>
-                      </div>
-                      <p className="text-sm leading-relaxed" dir="auto">
-                        {item.arabicSummary}
-                      </p>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              
-              {/* Detailed Explanation Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 gap-1 text-xs"
-                onClick={() => {
-                  handleMarkRead();
-                  onExplain?.(item);
-                }}
-                data-testid={`button-explain-${item.id}`}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">شرح مفصل</span>
-              </Button>
-
-              {/* Translate Button */}
-              {needsTranslation && onTranslate && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 gap-1 text-xs"
-                  onClick={() => onTranslate(item)}
-                  disabled={isTranslating}
-                  data-testid={`button-translate-${item.id}`}
-                >
-                  {isTranslating ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Languages className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {isTranslating ? "جاري الترجمة..." : "ترجمة"}
-                  </span>
-                </Button>
-              )}
-              
-
-
-              {/* Mark as Read (Persistent) */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -376,7 +279,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 </TooltipContent>
               </Tooltip>
 
-              {/* External Link */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -395,8 +297,6 @@ function ContentCard({ item, onExplain, onTranslate, showTranslation, isTranslat
                 </a>
               </Button>
 
-
-              {/* Broadcast to Channels */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -452,63 +352,7 @@ function ContentSkeleton() {
   );
 }
 
-export function ContentFeed({ content, isLoading, showTranslation, folderId, unifiedTimeline }: ContentFeedProps) {
-  const [selectedItem, setSelectedItem] = useState<ContentWithSource | null>(null);
-  const [explanation, setExplanation] = useState<string>("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
-  
-  // Extract folderId from content if not provided
-  const effectiveFolderId = folderId || content[0]?.folderId;
-
-  const explainMutation = useMutation({
-    mutationFn: async (contentId: string) => {
-      const response = await apiRequest("POST", `/api/content/${contentId}/explain`);
-      return response as { explanation: string };
-    },
-    onSuccess: (data) => {
-      setExplanation(data.explanation);
-    },
-  });
-
-  const translateMutation = useMutation({
-    mutationFn: async (contentId: string) => {
-      const response = await apiRequest("POST", `/api/content/${contentId}/translate`);
-      return response as { success: boolean; arabicTitle?: string; arabicSummary?: string; arabicFullSummary?: string };
-    },
-    onMutate: (contentId) => {
-      setTranslatingIds(prev => new Set(prev).add(contentId));
-    },
-    onSettled: (_, __, contentId) => {
-      setTranslatingIds(prev => {
-        const next = new Set(prev);
-        next.delete(contentId);
-        return next;
-      });
-    },
-    onSuccess: () => {
-      // Invalidate to refresh the content list
-      import("@/lib/queryClient").then(({ queryClient }) => {
-        if (effectiveFolderId) {
-          queryClient.invalidateQueries({ queryKey: ["/api/folders", effectiveFolderId, "content"] });
-        } else {
-          queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-        }
-      });
-    },
-  });
-
-  const handleExplain = (item: ContentWithSource) => {
-    setSelectedItem(item);
-    setExplanation("");
-    setDialogOpen(true);
-    explainMutation.mutate(item.id);
-  };
-
-  const handleTranslate = (item: ContentWithSource) => {
-    translateMutation.mutate(item.id);
-  };
-
+export function ContentFeed({ content, isLoading, showSmartView, folderId, unifiedTimeline }: ContentFeedProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -533,7 +377,6 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId, uni
     );
   }
 
-  // Split content into news and videos (only used when unifiedTimeline is false)
   const newsContent = content.filter(item => 
     item.source?.type === "rss" || item.source?.type === "website"
   );
@@ -545,185 +388,74 @@ export function ContentFeed({ content, isLoading, showTranslation, folderId, uni
   const hasNews = newsContent.length > 0;
   const hasVideos = videoContent.length > 0;
 
-  const ExplanationDialog = (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="dialog-explanation">
-        <DialogHeader>
-          <DialogTitle className="text-right leading-relaxed">
-            {selectedItem?.title}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="mt-4">
-          {explainMutation.isPending ? (
-            <div className="flex flex-col items-center justify-center py-8 gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="text-muted-foreground">جاري توليد الشرح...</p>
-            </div>
-          ) : explainMutation.isError ? (
-            <div className="text-center py-8 text-destructive">
-              <p>حدث خطأ أثناء توليد الشرح</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => selectedItem && explainMutation.mutate(selectedItem.id)}
-              >
-                إعادة المحاولة
-              </Button>
-            </div>
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-right leading-relaxed whitespace-pre-wrap">
-              {explanation}
-            </div>
-          )}
-        </div>
-        {selectedItem && (
-          <div className="mt-4 pt-4 border-t">
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={selectedItem.originalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="gap-2"
-              >
-                <ExternalLink className="h-4 w-4" />
-                قراءة المصدر الأصلي
-              </a>
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+  const renderCards = (items: ContentWithSource[]) => (
+    <div className="space-y-4">
+      {items.map((item) => (
+        <ContentCard
+          key={item.id}
+          item={item}
+          showSmartView={showSmartView}
+        />
+      ))}
+    </div>
   );
 
-  // Unified timeline: all content merged in a single chronological list, no type-based split
   if (unifiedTimeline) {
-    return (
-      <>
-        {ExplanationDialog}
-        <div className="space-y-4" data-testid="unified-timeline">
-          {content.map((item) => (
-            <ContentCard
-              key={item.id}
-              item={item}
-              onExplain={handleExplain}
-              onTranslate={handleTranslate}
-              showTranslation={showTranslation}
-              isTranslating={translatingIds.has(item.id)}
-            />
-          ))}
-        </div>
-      </>
-    );
+    return renderCards(content);
   }
 
-  // If only one type exists, just show that content without tabs
   if (!hasNews && hasVideos) {
-    return (
-      <>
-        {ExplanationDialog}
-        <div className="space-y-4">
-          {videoContent.map((item) => (
-            <ContentCard 
-              key={item.id} 
-              item={item} 
-              onExplain={handleExplain} 
-              onTranslate={handleTranslate}
-              showTranslation={showTranslation} 
-              isTranslating={translatingIds.has(item.id)}
-            />
-          ))}
-        </div>
-      </>
-    );
+    return renderCards(videoContent);
   }
 
   if (hasNews && !hasVideos) {
-    return (
-      <>
-        {ExplanationDialog}
-        <div className="space-y-4">
-          {newsContent.map((item) => (
-            <ContentCard 
-              key={item.id} 
-              item={item} 
-              onExplain={handleExplain} 
-              onTranslate={handleTranslate}
-              showTranslation={showTranslation} 
-              isTranslating={translatingIds.has(item.id)}
-            />
-          ))}
-        </div>
-      </>
-    );
+    return renderCards(newsContent);
   }
 
-  // Show tabs when both types exist
   return (
-    <>
-      {ExplanationDialog}
-      <Tabs defaultValue="news" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="news" className="gap-2" data-testid="tab-content-news">
-            <Newspaper className="h-4 w-4" />
-            <span>أخبار</span>
-            <Badge variant="secondary" className="mr-1 text-xs">
-              {newsContent.length}
-            </Badge>
-          </TabsTrigger>
-          <TabsTrigger value="videos" className="gap-2" data-testid="tab-content-videos">
-            <Play className="h-4 w-4" />
-            <span>فيديوهات</span>
-            <Badge variant="secondary" className="mr-1 text-xs">
-              {videoContent.length}
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
+    <Tabs defaultValue="news" className="w-full">
+      <TabsList className="mb-4">
+        <TabsTrigger value="news" className="gap-2" data-testid="tab-content-news">
+          <Newspaper className="h-4 w-4" />
+          <span>أخبار</span>
+          <Badge variant="secondary" className="mr-1 text-xs">
+            {newsContent.length}
+          </Badge>
+        </TabsTrigger>
+        <TabsTrigger value="videos" className="gap-2" data-testid="tab-content-videos">
+          <Play className="h-4 w-4" />
+          <span>فيديوهات</span>
+          <Badge variant="secondary" className="mr-1 text-xs">
+            {videoContent.length}
+          </Badge>
+        </TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="news" className="space-y-4">
-          {newsContent.length > 0 ? (
-            newsContent.map((item) => (
-              <ContentCard 
-                key={item.id} 
-                item={item} 
-                onExplain={handleExplain} 
-                onTranslate={handleTranslate}
-                showTranslation={showTranslation} 
-                isTranslating={translatingIds.has(item.id)}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Newspaper className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">لا توجد أخبار</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+      <TabsContent value="news" className="space-y-4">
+        {newsContent.length > 0 ? (
+          renderCards(newsContent)
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <Newspaper className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground">لا توجد أخبار</p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
 
-        <TabsContent value="videos" className="space-y-4">
-          {videoContent.length > 0 ? (
-            videoContent.map((item) => (
-              <ContentCard 
-                key={item.id} 
-                item={item} 
-                onExplain={handleExplain} 
-                onTranslate={handleTranslate}
-                showTranslation={showTranslation} 
-                isTranslating={translatingIds.has(item.id)}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Play className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">لا توجد فيديوهات</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
-    </>
+      <TabsContent value="videos" className="space-y-4">
+        {videoContent.length > 0 ? (
+          renderCards(videoContent)
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <Play className="mx-auto mb-3 h-10 w-10 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground">لا توجد فيديوهات</p>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }
