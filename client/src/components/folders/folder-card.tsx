@@ -102,6 +102,7 @@ export function FolderCountdown({ folderId, refreshInterval }: { folderId: strin
 }
 
 export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const sourceCount = folder._count?.sources ?? 0;
   const contentCount = folder._count?.content ?? 0;
   const folderColor = folder.color || "#6d8df7";
@@ -166,7 +167,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
               <span>{contentCount} خبر</span>
             </div>
           </div>
-          <DropdownMenu>
+          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
               <Button
                 variant="ghost"
@@ -177,16 +178,24 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="start" className="z-[100]">
               <DropdownMenuItem
-                onClick={(e) => { e.preventDefault(); onEdit(folder); }}
+                onClick={(e) => { 
+                  e.preventDefault(); 
+                  setDropdownOpen(false);
+                  onEdit(folder); 
+                }}
                 data-testid={`menu-item-edit-folder-${folder.id}`}
               >
                 <Pencil className="ml-2 h-4 w-4" />
                 تعديل
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={(e) => { e.preventDefault(); onDelete(folder); }}
+                onClick={(e) => { 
+                  e.preventDefault(); 
+                  setDropdownOpen(false);
+                  onDelete(folder); 
+                }}
                 className="text-destructive focus:text-destructive"
                 data-testid={`menu-item-delete-folder-${folder.id}`}
               >
