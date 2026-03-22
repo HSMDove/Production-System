@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, gt } from "drizzle-orm";
+import { eq, and, desc, isNull, gt, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "./db";
 import {
@@ -338,8 +338,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ─── Folders ─────────────────────────────────────────────────────────────
-  async getAllFolders(userId: string): Promise<Folder[]> {
-    return db.select().from(folders).where(eq(folders.userId, userId)).orderBy(folders.createdAt);
+  async getAllFolders(userId: string): Promise<(Folder & { _count?: { sources: number; content: number } })[]> {
+    const foldersData = await db.select().from(folders).where(eq(folders.userId, userId)).orderBy(folders.createdAt);
+    
+    // Add counts for each folder
+    const withCounts = await Promise.all(foldersData.map(async (folder) => {
+      const [sourcesCount] = await db.select({ count: sql<number>`count(*)` }).from(sources).where(eq(sources.folderId, folder.id));
+      const [contentCount] = await db.select({ count: sql<number>`count(*)` }).from(content).where(eq(content.folderId, folder.id));
+      return {
+        ...folder,
+        _count: {
+          sources: parseInt(sourcesCount?.count || '0'),
+          content: parseInt(contentCount?.count || '0'),
+        },
+      };
+    }));
+    
+    return withCounts;
   }
 
   // Used by scheduler only — fetches all folders across all users
