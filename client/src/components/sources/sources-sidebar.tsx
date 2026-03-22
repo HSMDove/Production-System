@@ -12,16 +12,16 @@ interface SourcesSidebarProps {
 function getSourceIcon(type: string) {
   switch (type) {
     case "youtube":
-      return <SiYoutube className="h-4 w-4 text-red-500 flex-shrink-0" />;
+      return <SiYoutube className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
     case "twitter":
-      return <SiX className="h-4 w-4 flex-shrink-0" />;
+      return <SiX className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
     case "tiktok":
-      return <SiTiktok className="h-4 w-4 flex-shrink-0" />;
+      return <SiTiktok className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
     case "website":
-      return <Globe className="h-4 w-4 text-blue-500 flex-shrink-0" />;
+      return <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
     case "rss":
     default:
-      return <Rss className="h-4 w-4 text-orange-500 flex-shrink-0" />;
+      return <Rss className="h-4 w-4 text-muted-foreground flex-shrink-0" />;
   }
 }
 
@@ -31,7 +31,7 @@ export function SourcesSidebar({ sources, selectedSourceId, onSourceSelect }: So
       <div className="p-2 space-y-1 w-full">
         <Button
           variant={selectedSourceId === null ? "default" : "ghost"}
-          className="w-full justify-start gap-2"
+          className="w-full justify-start gap-2 mb-3"
           size="sm"
           onClick={() => onSourceSelect(null)}
           data-testid="button-view-all"
@@ -40,7 +40,7 @@ export function SourcesSidebar({ sources, selectedSourceId, onSourceSelect }: So
           <span className="truncate">عرض الكل</span>
         </Button>
         
-        <div className="h-px bg-border my-2" />
+        <div className="h-px bg-border/50 mb-3" />
         
         {sources.map((source) => (
           <Button

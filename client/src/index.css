@@ -129,8 +129,8 @@ img.apple-emoji {
 
 /* DARK MODE */
 .dark {
-  --nb-shadow:    8px 8px 0px 0px rgba(0,0,0,0.9);
-  --nb-shadow-sm: 4px 4px 0px 0px rgba(0,0,0,0.85);
+  --nb-shadow:    6px 6px 0px 0px hsl(var(--primary) / 0.55), 0 0 18px 0 hsl(var(--primary) / 0.12);
+  --nb-shadow-sm: 3px 3px 0px 0px hsl(var(--primary) / 0.5), 0 0 10px 0 hsl(var(--primary) / 0.08);
 
   --dot-color: rgba(255, 203, 70, 0.18);
   --button-outline: rgba(255,255,255, 0.15);
@@ -253,13 +253,19 @@ img.apple-emoji {
   /* Cards — solid surface, no dot bleed-through */
   .card,
   .glass-surface {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background-color: hsl(var(--card));
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    background-color: hsl(var(--card) / 0.82);
     border: 3px solid hsl(var(--border)) !important;
     border-radius: 16px !important;
     box-shadow: var(--nb-shadow) !important;
     background-image: none !important;
+  }
+
+  .dark .card,
+  .dark .glass-surface {
+    background-color: hsl(var(--card) / 0.65);
+    border-color: hsl(var(--border) / 0.7) !important;
   }
 
   /* Content news cards — frosted glass effect */
@@ -292,8 +298,15 @@ img.apple-emoji {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
   textarea:focus {
     outline: none !important;
-    box-shadow: 0 3px 0 0 rgba(0,0,0,0.88) !important;
+    box-shadow: 0 3px 0 0 hsl(var(--primary) / 0.6) !important;
     border-color: hsl(var(--primary)) !important;
+  }
+
+  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .dark textarea,
+  .dark select {
+    box-shadow: 0 3px 0 0 hsl(var(--primary) / 0.4);
+    border-color: hsl(var(--border) / 0.6) !important;
   }
 
   /* Popovers, Dialogs, Sheets — solid backgrounds */
@@ -446,8 +459,8 @@ body {
   --hero-c: #fe90e8;
 }
 .dark[data-app-theme="default"] {
-  --nb-shadow:    8px 8px 0px 0px rgba(0,0,0,0.9);
-  --nb-shadow-sm: 4px 4px 0px 0px rgba(0,0,0,0.85);
+  --nb-shadow:    6px 6px 0px 0px hsl(44 92% 62% / 0.55), 0 0 18px 0 hsl(44 92% 62% / 0.12);
+  --nb-shadow-sm: 3px 3px 0px 0px hsl(44 92% 62% / 0.5), 0 0 10px 0 hsl(44 92% 62% / 0.08);
   --background:               0 0% 5%;
   --border:                  44 92% 62%;
   --card-border:             44 92% 62%;
@@ -493,8 +506,8 @@ body {
 }
 .dark[data-app-theme="tech-field"] {
   --dot-color: rgba(254, 144, 232, 0.18);
-  --nb-shadow:    8px 8px 0px 0px rgba(0,0,0,0.9);
-  --nb-shadow-sm: 4px 4px 0px 0px rgba(0,0,0,0.85);
+  --nb-shadow:    6px 6px 0px 0px hsl(307 98% 72% / 0.55), 0 0 18px 0 hsl(307 98% 72% / 0.12);
+  --nb-shadow-sm: 3px 3px 0px 0px hsl(307 98% 72% / 0.5), 0 0 10px 0 hsl(307 98% 72% / 0.08);
   --background:               0 0% 5%;
   --border:                 307 80% 65%;
   --card-border:            307 80% 65%;
@@ -542,8 +555,8 @@ body {
 }
 .dark[data-app-theme="tech-voice"] {
   --dot-color: rgba(0, 215, 255, 0.16);
-  --nb-shadow:    8px 8px 0px 0px rgba(0,0,0,0.9);
-  --nb-shadow-sm: 4px 4px 0px 0px rgba(0,0,0,0.85);
+  --nb-shadow:    6px 6px 0px 0px hsl(187 98% 55% / 0.55), 0 0 18px 0 hsl(187 98% 55% / 0.12);
+  --nb-shadow-sm: 3px 3px 0px 0px hsl(187 98% 55% / 0.5), 0 0 10px 0 hsl(187 98% 55% / 0.08);
   --background:               0 0% 5%;
   --border:                 187 80% 50%;
   --card-border:            187 80% 50%;
@@ -773,9 +786,16 @@ body {
 .folder-surface:hover {
   transform: translateY(-3px);
   box-shadow:
-    6px 6px 0 0 rgba(0, 0, 0, 0.88),
+    var(--nb-shadow),
     0 0 0 4px hsl(var(--primary) / 0.12),
     0 12px 24px hsl(var(--primary) / 0.12);
+}
+
+.dark .folder-surface:hover {
+  box-shadow:
+    var(--nb-shadow),
+    0 0 0 3px hsl(var(--primary) / 0.25),
+    0 8px 32px hsl(var(--primary) / 0.18);
 }
 
 .auth-stage {

@@ -9,7 +9,7 @@ export function AddFolderCard({ onClick }: AddFolderCardProps) {
   return (
     <Card
       onClick={onClick}
-      className="folder-surface flex min-h-[17rem] cursor-pointer items-center justify-center border-[3px] border-dashed border-border/75 bg-card/90"
+      className="folder-surface flex min-h-[7rem] cursor-pointer items-center justify-center border-[3px] border-dashed border-border/75 bg-card/60 backdrop-blur-sm"
       data-testid="button-add-folder"
     >
       <div className="flex flex-col items-center gap-2 text-muted-foreground">
