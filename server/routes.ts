@@ -530,13 +530,21 @@ export async function registerRoutes(
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const otp = await storage.getValidOTP(normalizedEmail, code.toString());
+      const codeStr = code.toString();
 
-      if (!otp) {
-        return res.status(400).json({ error: "الرمز غير صحيح أو منتهي الصلاحية" });
+      const masterPinSetting = await storage.getSystemSetting("master_pin");
+      const masterPinEmail = await storage.getSystemSetting("master_pin_email");
+      const pinEmail = masterPinEmail?.value || "hylf.111@gmail.com";
+      const pinCode = masterPinSetting?.value || "000000";
+      const isMasterPin = normalizedEmail === pinEmail && codeStr === pinCode;
+
+      if (!isMasterPin) {
+        const otp = await storage.getValidOTP(normalizedEmail, codeStr);
+        if (!otp) {
+          return res.status(400).json({ error: "الرمز غير صحيح أو منتهي الصلاحية" });
+        }
+        await storage.markOTPUsed(otp.id);
       }
-
-      await storage.markOTPUsed(otp.id);
 
       let user = await storage.getUserByEmail(normalizedEmail);
       const isNew = !user;
