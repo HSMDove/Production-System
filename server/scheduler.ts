@@ -15,7 +15,7 @@ async function runFolderFetch(folderId: string) {
   folderInFlight.add(folderId);
   try {
     const folder = await storage.getFolderById(folderId);
-    if (!folder || !folder.isBackgroundActive) return;
+    if (!folder) return;
 
     const sources = await storage.getSourcesByFolderId(folderId);
     if (sources.length === 0) return;
@@ -46,9 +46,8 @@ async function tick() {
     }
 
     const allFolders = await storage.getAllFoldersSystem();
-    const activeFolders = allFolders.filter(f => f.isBackgroundActive);
 
-    for (const folder of activeFolders) {
+    for (const folder of allFolders) {
       const lastRun = folderLastRun.get(folder.id) || 0;
       const intervalMs = (folder.refreshInterval || 60) * 60 * 1000;
       const elapsed = Date.now() - lastRun;

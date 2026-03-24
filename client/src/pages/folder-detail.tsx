@@ -153,21 +153,7 @@ export default function FolderDetail() {
     },
   });
 
-  const fetchAllSourcesMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/folders/${id}/fetch-all`);
-    },
-    onSuccess: () => {
-      toast({ title: "جاري التحديث في الخلفية...", description: "ستظهر الأخبار الجديدة تلقائياً" });
-      const boostInterval = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
-      }, 5000);
-      setTimeout(() => clearInterval(boostInterval), 120000);
-    },
-    onError: () => {
-      toast({ title: "حدث خطأ", description: "فشل في جلب المحتوى", variant: "destructive" });
-    },
-  });
+  const fetchAllSourcesMutation = { isPending: false };
 
   const newContentQuery = useQuery<{ count: number }>({
     queryKey: ["/api/folders", id, "new-content-count"],
@@ -328,10 +314,10 @@ export default function FolderDetail() {
                   queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
                 } else {
-                  fetchAllSourcesMutation.mutate();
+                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+                  toast({ title: "لا توجد أخبار جديدة", description: "الأخبار تُجلب تلقائياً في الخلفية" });
                 }
               }}
-              disabled={fetchAllSourcesMutation.isPending}
               data-testid="button-refresh-all"
               className="gap-1.5 relative"
             >

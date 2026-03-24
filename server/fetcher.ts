@@ -783,58 +783,92 @@ function getYouTubeThumbnail(videoId: string): string {
 }
 
 // Fetch OG image from a webpage
+function resolveImageUrl(imageUrl: string, basePageUrl: string): string | null {
+  if (!imageUrl || imageUrl.length < 10) return null;
+  if (imageUrl.startsWith('data:')) return null;
+  if (imageUrl.startsWith('//')) imageUrl = 'https:' + imageUrl;
+  if (imageUrl.startsWith('/')) {
+    try {
+      const baseUrl = new URL(basePageUrl);
+      imageUrl = `${baseUrl.protocol}//${baseUrl.host}${imageUrl}`;
+    } catch { return null; }
+  }
+  if (!imageUrl.startsWith('http')) return null;
+  const lower = imageUrl.toLowerCase();
+  if (lower.includes('logo') || lower.includes('icon') || lower.includes('favicon') || lower.includes('avatar') || lower.includes('sprite') || lower.includes('placeholder') || lower.includes('1x1') || lower.includes('pixel') || lower.includes('tracking') || lower.includes('badge') || lower.includes('button')) return null;
+  return imageUrl;
+}
+
 function extractOGImageFromHtml(html: string, url: string): string | null {
-  const patterns = [
+  const metaPatterns = [
     /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
     /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
     /<meta[^>]+name=["']thumbnail["'][^>]+content=["']([^"']+)["']/i,
+    /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i,
   ];
 
-  for (const pattern of patterns) {
+  for (const pattern of metaPatterns) {
     const match = html.match(pattern);
     if (match && match[1]) {
-      let imageUrl = match[1];
-      if (imageUrl.startsWith('/')) {
-        try {
-          const baseUrl = new URL(url);
-          imageUrl = `${baseUrl.protocol}//${baseUrl.host}${imageUrl}`;
-        } catch {}
-      }
-      return imageUrl;
+      const resolved = resolveImageUrl(match[1], url);
+      if (resolved) return resolved;
     }
   }
+
+  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+  const searchArea = articleMatch ? articleMatch[1] : html;
+  const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  let imgMatch;
+  while ((imgMatch = imgRegex.exec(searchArea)) !== null) {
+    const src = imgMatch[0];
+    const srcUrl = imgMatch[1];
+    const widthMatch = src.match(/width=["']?(\d+)/i);
+    const heightMatch = src.match(/height=["']?(\d+)/i);
+    if (widthMatch && parseInt(widthMatch[1]) < 100) continue;
+    if (heightMatch && parseInt(heightMatch[1]) < 100) continue;
+    const resolved = resolveImageUrl(srcUrl, url);
+    if (resolved) return resolved;
+  }
+
   return null;
 }
 
 async function fetchOGImage(url: string): Promise<string | null> {
+  let httpResult: string | null = null;
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
       },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(8000),
+      redirect: "follow",
     });
 
     if (response.ok) {
       const html = await response.text();
-      const result = extractOGImageFromHtml(html, url);
-      if (result) return result;
+      httpResult = extractOGImageFromHtml(html, url);
+      if (httpResult) {
+        console.log(`[Thumbnail] HTTP extracted image for ${url}`);
+        return httpResult;
+      }
     }
   } catch {}
 
   try {
     const { scrapePageWithBrowser } = await import("./browser-scraper");
-    console.log(`[Thumbnail] HTTP failed for ${url}, trying headless browser...`);
+    console.log(`[Thumbnail] No image from HTTP for ${url}, trying headless browser...`);
     const html = await scrapePageWithBrowser(url);
     const result = extractOGImageFromHtml(html, url);
     if (result) {
-      console.log(`[Thumbnail] Browser extracted og:image for ${url}`);
+      console.log(`[Thumbnail] Browser extracted image for ${url}`);
       return result;
     }
+    console.log(`[Thumbnail] Browser also found no image for ${url}`);
   } catch (e) {
-    console.log(`[Thumbnail] Browser fallback also failed for ${url}`);
+    console.log(`[Thumbnail] Browser fallback failed for ${url}`);
   }
 
   return null;
