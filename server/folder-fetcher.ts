@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { fetchMultipleSources } from "./fetcher";
+import { fetchMultipleSources, fetchOGImage } from "./fetcher";
 import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, processNewContentNotificationsForFolder } from "./notifier";
 import { getUserComposedSystemPrompt } from "./ai-system-prompt";
@@ -22,6 +22,18 @@ async function processContentThroughPipeline(
   if (!contentItem || !contentItem.title) {
     await storage.markContentReady(contentId);
     return true;
+  }
+
+  if (!contentItem.imageUrl && contentItem.originalUrl) {
+    try {
+      const ogImage = await fetchOGImage(contentItem.originalUrl);
+      if (ogImage) {
+        await storage.updateContentImageUrl(contentId, ogImage);
+        console.log(`[Pipeline] Thumbnail extracted for: ${contentItem.title.substring(0, 50)}`);
+      }
+    } catch (e) {
+      console.log(`[Pipeline] Thumbnail extraction failed for content ${contentId}`);
+    }
   }
 
   let aiSuccess = false;

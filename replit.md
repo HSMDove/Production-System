@@ -102,8 +102,10 @@ Users can submit support tickets ("عندي مشكلة") from the Settings → A
 The Smart View is an instant toggle that switches between original content (English title/summary) and AI-processed content (arabicTitle/arabicFullSummary). Key design:
 - **Sequential Pipeline (Extract → Transform → Load)**: Content goes through a mandatory 3-stage pipeline in `folder-fetcher.ts`:
   1. **Extract**: Content fetched and saved with `processingStatus: 'processing'` — invisible to frontend
-  2. **Transform**: AI (فكري) generates `arabicTitle` + `arabicFullSummary` sequentially (awaited, not fire-and-forget). Retry up to 2 attempts; if all fail, content publishes with original text as fallback
+  2. **Transform**: Pipeline runs sequentially: (a) Thumbnail extraction with browser fallback if HTTP fails, (b) AI (فكري) generates `arabicTitle` + `arabicFullSummary` with 2 retry attempts; if all fail, publishes with original text
   3. **Load**: Content marked `processingStatus: 'ready'` — now visible to users
+- **Thumbnail extraction**: `fetchOGImage` tries HTTP first → if 403/fail, uses headless browser (`scrapePageWithBrowser`) to render page and extract og:image/twitter:image. Also runs in pipeline stage 2 for any content inserted without an image
+- **Instant refresh**: `POST /api/folders/:id/fetch-all` returns immediately with `{ started: true }` and runs pipeline in background. Frontend shows "جاري التحديث" toast and boosts new-content-count polling to 5s for 2 minutes
 - **Schema field**: `content.processing_status` text ('processing' | 'ready' | 'failed'), default 'ready'
 - **Frontend filter**: All content queries (`getContentByFolderId`, `getAllContent`, `getUndisplayedContentCount`, `markContentDisplayed`) filter by `processingStatus = 'ready'`
 - **Instant toggle**: No API call needed — Smart View just reads pre-computed fields from content data. Toggle state persisted in localStorage per folder

@@ -781,8 +781,10 @@ export async function registerRoutes(
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
-      const result = await fetchFolderContent(req.params.id);
-      res.json(result);
+      res.json({ started: true });
+      fetchFolderContent(req.params.id, folder).catch(e =>
+        console.error(`[Background] fetch-all error for folder ${req.params.id}:`, e)
+      );
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch content from sources" });
     }

@@ -783,6 +783,31 @@ function getYouTubeThumbnail(videoId: string): string {
 }
 
 // Fetch OG image from a webpage
+function extractOGImageFromHtml(html: string, url: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+    /<meta[^>]+name=["']thumbnail["'][^>]+content=["']([^"']+)["']/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      let imageUrl = match[1];
+      if (imageUrl.startsWith('/')) {
+        try {
+          const baseUrl = new URL(url);
+          imageUrl = `${baseUrl.protocol}//${baseUrl.host}${imageUrl}`;
+        } catch {}
+      }
+      return imageUrl;
+    }
+  }
+  return null;
+}
+
 async function fetchOGImage(url: string): Promise<string | null> {
   try {
     const response = await fetch(url, {
@@ -791,37 +816,28 @@ async function fetchOGImage(url: string): Promise<string | null> {
       },
       signal: AbortSignal.timeout(5000),
     });
-    
-    if (!response.ok) return null;
-    
-    const html = await response.text();
-    
-    // Try various meta image patterns
-    const patterns = [
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
-      /<meta[^>]+name=["']thumbnail["'][^>]+content=["']([^"']+)["']/i,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        let imageUrl = match[1];
-        // Handle relative URLs
-        if (imageUrl.startsWith('/')) {
-          const baseUrl = new URL(url);
-          imageUrl = `${baseUrl.protocol}//${baseUrl.host}${imageUrl}`;
-        }
-        return imageUrl;
-      }
+
+    if (response.ok) {
+      const html = await response.text();
+      const result = extractOGImageFromHtml(html, url);
+      if (result) return result;
     }
-    
-    return null;
-  } catch (error) {
-    return null;
+  } catch {}
+
+  try {
+    const { scrapePageWithBrowser } = await import("./browser-scraper");
+    console.log(`[Thumbnail] HTTP failed for ${url}, trying headless browser...`);
+    const html = await scrapePageWithBrowser(url);
+    const result = extractOGImageFromHtml(html, url);
+    if (result) {
+      console.log(`[Thumbnail] Browser extracted og:image for ${url}`);
+      return result;
+    }
+  } catch (e) {
+    console.log(`[Thumbnail] Browser fallback also failed for ${url}`);
   }
+
+  return null;
 }
 
 // ─── Website HTML Scraper (fallback when no RSS) ─────────────────────────────
@@ -1238,4 +1254,4 @@ export async function fetchMultipleSources(sources: Source[]): Promise<FetchResu
 }
 
 // helpers exported for testing and future reuse
-export { extractYouTubeChannelId, extractYouTubeVideoId, getYouTubeRSSUrl, resolveYouTubeRSSUrl, discoverWebsiteRSS, extractTwitterUsername, extractTikTokUsername };
+export { extractYouTubeChannelId, extractYouTubeVideoId, getYouTubeRSSUrl, resolveYouTubeRSSUrl, discoverWebsiteRSS, extractTwitterUsername, extractTikTokUsername, fetchOGImage };

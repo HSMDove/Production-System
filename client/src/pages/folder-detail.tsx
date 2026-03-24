@@ -158,9 +158,11 @@ export default function FolderDetail() {
       return apiRequest("POST", `/api/folders/${id}/fetch-all`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "sources"] });
-      toast({ title: "تم تحديث جميع المصادر بنجاح" });
+      toast({ title: "جاري التحديث في الخلفية...", description: "ستظهر الأخبار الجديدة تلقائياً" });
+      const boostInterval = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+      }, 5000);
+      setTimeout(() => clearInterval(boostInterval), 120000);
     },
     onError: () => {
       toast({ title: "حدث خطأ", description: "فشل في جلب المحتوى", variant: "destructive" });

@@ -190,6 +190,7 @@ export interface IStorage {
   updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined>;
   updateContentArabicSummary(id: string, arabicSummary: string): Promise<Content | undefined>;
   updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined>;
+  updateContentImageUrl(id: string, imageUrl: string): Promise<Content | undefined>;
   getUnanalyzedContent(limit?: number): Promise<Content[]>;
   getUndisplayedContentCount(folderId: string): Promise<number>;
   markContentDisplayed(folderId: string): Promise<void>;
@@ -488,6 +489,15 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(content)
       .set({ arabicTitle, arabicFullSummary })
+      .where(eq(content.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateContentImageUrl(id: string, imageUrl: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ imageUrl })
       .where(eq(content.id, id))
       .returning();
     return updated;
