@@ -34,8 +34,18 @@ export function WelcomeCards() {
   const [phase, setPhase] = useState<Phase>("stable");
   const [direction, setDirection] = useState<Direction>("next");
   const busy = useRef(false);
+  const timeoutRefs = useRef<number[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined);
+
+  const scheduleTimeout = useCallback((fn: () => void, delay: number) => {
+    const id = window.setTimeout(() => {
+      timeoutRefs.current = timeoutRefs.current.filter((value) => value !== id);
+      fn();
+    }, delay);
+    timeoutRefs.current.push(id);
+    return id;
+  }, []);
 
   const { data } = useQuery<WelcomeResponse>({
     queryKey: ["/api/welcome-cards"],
@@ -53,10 +63,17 @@ export function WelcomeCards() {
   useEffect(() => {
     if (data?.show && data.cards.length > 0) {
       setCurrentIndex(0);
-      const timer = setTimeout(() => setVisible(true), 400);
-      return () => clearTimeout(timer);
+      const timer = scheduleTimeout(() => setVisible(true), 400);
+      return () => window.clearTimeout(timer);
     }
-  }, [data]);
+  }, [data, scheduleTimeout]);
+
+  useEffect(() => {
+    return () => {
+      timeoutRefs.current.forEach((id) => window.clearTimeout(id));
+      timeoutRefs.current = [];
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (phase === "stable" && contentRef.current) {
@@ -71,21 +88,21 @@ export function WelcomeCards() {
     setDirection(dir);
     setPhase("fade-out");
 
-    setTimeout(() => {
+    scheduleTimeout(() => {
       setCurrentIndex(newIndex);
       setPhase("repositioned");
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setPhase("fade-in");
-          setTimeout(() => {
+          scheduleTimeout(() => {
             setPhase("stable");
             busy.current = false;
           }, DURATION);
         });
       });
     }, DURATION);
-  }, []);
+  }, [scheduleTimeout]);
 
   const goNext = useCallback(() => {
     if (busy.current || !data) return;
@@ -94,11 +111,11 @@ export function WelcomeCards() {
     if (isLast) {
       markSeenMutation.mutate();
       setClosing(true);
-      setTimeout(() => setVisible(false), 350);
+      scheduleTimeout(() => setVisible(false), 350);
       return;
     }
     slideTo(currentIndex + 1, "next");
-  }, [currentIndex, data, slideTo, markSeenMutation]);
+  }, [currentIndex, data, slideTo, markSeenMutation, scheduleTimeout]);
 
   const goPrev = useCallback(() => {
     if (busy.current || currentIndex <= 0) return;

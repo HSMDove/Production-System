@@ -9,6 +9,7 @@ import { pool, ensureIntegrationTables } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
+const APP_VERSION = "2.3.3";
 
 declare module "http" {
   interface IncomingMessage {
@@ -97,6 +98,19 @@ app.use((req, res, next) => {
 
 (async () => {
   await ensureIntegrationTables();
+  await pool.query(
+    `
+      insert into system_settings (key, value, description, updated_at)
+      values ($1, $2, $3, now())
+      on conflict (key) do update
+      set value = excluded.value,
+          description = excluded.description,
+          updated_at = now()
+    `,
+    ["app_version", APP_VERSION, "رقم إصدار التطبيق"],
+  ).catch((error) => {
+    log(`failed to sync app version setting: ${error instanceof Error ? error.message : String(error)}`, "startup");
+  });
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

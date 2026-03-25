@@ -825,7 +825,7 @@ export async function registerRoutes(
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
 
-      const allContent = await storage.getContentByFolderId(req.params.id);
+      const allContent = await storage.getVisibleContentByFolderId(req.params.id);
       
       const days = req.body.days || 7;
       const cutoffDate = new Date();
@@ -3934,9 +3934,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "1.0.0" });
+      res.json({ version: setting?.value || "2.3.3" });
     } catch {
-      res.json({ version: "1.0.0" });
+      res.json({ version: "2.3.3" });
     }
   });
 

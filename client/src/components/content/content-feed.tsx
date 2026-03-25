@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, Send, Check, Eye } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
@@ -15,7 +15,7 @@ import {
 import { LiveTimeAgo } from "@/components/ui/live-time-ago";
 import { useToast } from "@/hooks/use-toast";
 import type { ContentWithSource } from "@/lib/types";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface ContentFeedProps {
   content: ContentWithSource[];
@@ -137,6 +137,15 @@ function ContentCard({ item, showSmartView }: {
   const [imageError, setImageError] = useState(false);
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
   const { toast } = useToast();
+  const broadcastResetRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (broadcastResetRef.current !== null) {
+        window.clearTimeout(broadcastResetRef.current);
+      }
+    };
+  }, []);
 
   const broadcastMutation = useMutation({
     mutationFn: async () => {
@@ -147,7 +156,13 @@ function ContentCard({ item, showSmartView }: {
       setBroadcastSuccess(true);
       const channelNames = data.channels.map((c: string) => c === "telegram" ? "تيليجرام" : "سلاك").join(" و ");
       toast({ title: "تم البث بنجاح", description: `تم الإرسال إلى ${channelNames}` });
-      setTimeout(() => setBroadcastSuccess(false), 3000);
+      if (broadcastResetRef.current !== null) {
+        window.clearTimeout(broadcastResetRef.current);
+      }
+      broadcastResetRef.current = window.setTimeout(() => {
+        setBroadcastSuccess(false);
+        broadcastResetRef.current = null;
+      }, 3000);
     },
     onError: (error: any) => {
       const message = error?.error || error?.message || "فشل البث - تحقق من إعدادات القنوات";
@@ -166,12 +181,10 @@ function ContentCard({ item, showSmartView }: {
       return apiRequest("POST", `/api/content/${item.id}/read`);
     },
     onSuccess: () => {
-      import("@/lib/queryClient").then(({ queryClient }) => {
-        queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
-        if (item.folderId) {
-          queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
-        }
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      if (item.folderId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
+      }
     },
   });
 

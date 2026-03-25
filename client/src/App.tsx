@@ -59,24 +59,32 @@ function App() {
   }, []);
 
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider defaultTheme="default" defaultColorMode="dark" storageKey="nasaq-accent">
-          <TooltipProvider>
-            <FikriOverlayProvider>
-              <AuthGuard>
-                <Toaster />
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="default" defaultColorMode="dark" storageKey="nasaq-accent">
+        <TooltipProvider>
+          <FikriOverlayProvider>
+            <AuthGuard>
+              <Toaster />
+              <ErrorBoundary fullScreen={false}>
                 <TopBannerDisplay />
+              </ErrorBoundary>
+              <ErrorBoundary>
                 <Router />
+              </ErrorBoundary>
+              <ErrorBoundary fullScreen={false}>
                 <FikriOverlay />
+              </ErrorBoundary>
+              <ErrorBoundary fullScreen={false}>
                 <WelcomeCards />
+              </ErrorBoundary>
+              <ErrorBoundary fullScreen={false}>
                 <AnnouncementModal />
-              </AuthGuard>
-            </FikriOverlayProvider>
-          </TooltipProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+              </ErrorBoundary>
+            </AuthGuard>
+          </FikriOverlayProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

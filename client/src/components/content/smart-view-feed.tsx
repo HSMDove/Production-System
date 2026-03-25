@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Image, Sparkles } from "lucide-react";
 
-interface SmartViewCard {
+export interface SmartViewCard {
   contentId: string;
   catchyTitle: string;
   story: string;

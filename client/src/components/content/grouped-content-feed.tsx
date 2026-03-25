@@ -7,7 +7,7 @@ import { ar } from "date-fns/locale";
 interface GroupedContentFeedProps {
   content: ContentWithSource[];
   isLoading?: boolean;
-  showTranslation?: boolean;
+  showSmartView?: boolean;
   folderId?: string;
   sortOrder?: "newest" | "oldest";
 }
@@ -35,7 +35,7 @@ interface DateGroupWithDate extends DateGroup {
   maxDate: number;
 }
 
-export function GroupedContentFeed({ content, isLoading, showTranslation, folderId, sortOrder = "newest" }: GroupedContentFeedProps) {
+export function GroupedContentFeed({ content, isLoading, showSmartView, folderId, sortOrder = "newest" }: GroupedContentFeedProps) {
   const groupedContent = useMemo(() => {
     if (!content?.length) return [];
     
@@ -68,7 +68,7 @@ export function GroupedContentFeed({ content, isLoading, showTranslation, folder
   }, [content, sortOrder]);
 
   if (isLoading) {
-    return <ContentFeed content={[]} isLoading={true} showTranslation={showTranslation} folderId={folderId} />;
+    return <ContentFeed content={[]} isLoading={true} showSmartView={showSmartView} folderId={folderId} />;
   }
 
   if (groupedContent.length === 0) {
@@ -89,7 +89,7 @@ export function GroupedContentFeed({ content, isLoading, showTranslation, folder
           <ContentFeed 
             content={group.items} 
             isLoading={false} 
-            showTranslation={showTranslation} 
+            showSmartView={showSmartView} 
             folderId={folderId} 
           />
         </div>

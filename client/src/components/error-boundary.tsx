@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  fullScreen?: boolean;
 }
 
 interface State {
@@ -21,19 +22,25 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const { fullScreen = true } = this.props;
+
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-6 text-center" dir="rtl">
+        <div
+          className={fullScreen
+            ? "min-h-screen flex flex-col items-center justify-center bg-background gap-4 p-6 text-center"
+            : "flex flex-col items-center justify-center gap-4 rounded-[24px] border-[3px] border-border bg-card p-6 text-center shadow-[6px_6px_0_0_rgba(0,0,0,0.88)]"}
+          dir="rtl"
+        >
           <p className="text-lg font-semibold">حصل خطأ غير متوقع</p>
-          <p className="text-sm text-muted-foreground">حاول تحديث الصفحة مرة ثانية</p>
+          <p className="text-sm text-muted-foreground">تم إيقاف هذا الجزء مؤقتاً لحماية تجربة الاستخدام</p>
           <button
             className="px-6 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-sm"
             onClick={() => {
               this.setState({ hasError: false });
-              window.location.reload();
             }}
             data-testid="button-error-reload"
           >
-            تحديث الصفحة
+            إعادة المحاولة
           </button>
         </div>
       );

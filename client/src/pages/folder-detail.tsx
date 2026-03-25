@@ -10,9 +10,11 @@ import { SourceDialog } from "@/components/sources/source-dialog";
 import { FikriKashshafDialog } from "@/components/sources/fikri-kashshaf-dialog";
 import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
+import { SmartViewFeed, type SmartViewCard } from "@/components/content/smart-view-feed";
 import { ContentFilters } from "@/components/content/content-filters";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { FolderCountdown, INTERVAL_OPTIONS } from "@/components/folders/folder-card";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,6 +95,11 @@ export default function FolderDetail() {
     
     return filtered;
   }, [content, sourceTypeFilter, sortOrder, selectedFilterSourceId]);
+
+  const visibleContentSignature = useMemo(
+    () => (content || []).map((item) => item.id).join("|"),
+    [content],
+  );
 
   const createSourceMutation = useMutation({
     mutationFn: async (data: { name: string; url: string; type: string; folderId: string }) => {
@@ -191,6 +198,22 @@ export default function FolderDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
     },
   });
+
+  const smartViewQuery = useQuery<{ cards: SmartViewCard[] }>({
+    queryKey: ["/api/folders", id, "smart-view", visibleContentSignature],
+    queryFn: () => apiRequest("POST", `/api/folders/${id}/smart-view`, { days: 7 }),
+    enabled: !!id && showSmartView && selectedFilterSourceId === null && (content?.length ?? 0) > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!smartViewQuery.error) return;
+    toast({
+      title: "تعذر تحميل العرض الذكي",
+      description: "استمرينا على العرض العادي حتى لا تتأثر تجربة القراءة",
+      variant: "destructive",
+    });
+  }, [smartViewQuery.error, toast]);
 
   const handleAddSource = () => {
     setSelectedSource(null);
@@ -406,13 +429,22 @@ export default function FolderDetail() {
                   onSortOrderChange={setSortOrder}
                 />
                 
-                <ContentFeed 
-                  content={filteredContent} 
-                  isLoading={contentLoading} 
-                  showSmartView={showSmartView} 
-                  folderId={id}
-                  unifiedTimeline={selectedFilterSourceId === null}
-                />
+                <ErrorBoundary fullScreen={false}>
+                  {showSmartView && selectedFilterSourceId === null ? (
+                    <SmartViewFeed
+                      cards={smartViewQuery.data?.cards || []}
+                      isLoading={smartViewQuery.isLoading || smartViewQuery.isFetching}
+                    />
+                  ) : (
+                    <ContentFeed 
+                      content={filteredContent} 
+                      isLoading={contentLoading} 
+                      showSmartView={showSmartView} 
+                      folderId={id}
+                      unifiedTimeline={selectedFilterSourceId === null}
+                    />
+                  )}
+                </ErrorBoundary>
               </div>
             </div>
           </TabsContent>
