@@ -3,7 +3,7 @@ import { fetchMultipleSources, fetchOGImage } from "./fetcher";
 import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
 import { processNewContentNotifications, processNewContentNotificationsForFolder } from "./notifier";
 import { getUserComposedSystemPrompt } from "./ai-system-prompt";
-import type { Folder } from "@shared/schema";
+import type { Folder, InsertContent, Source } from "@shared/schema";
 
 export interface FetchFolderResult {
   success: boolean;
@@ -13,6 +13,7 @@ export interface FetchFolderResult {
 }
 
 const AI_RETRY_ATTEMPTS = 2;
+const SOCIAL_VIDEO_SOURCE_TYPES = new Set<Source["type"]>(["twitter", "youtube"]);
 
 function isMostlyArabicText(...values: Array<string | null | undefined>): boolean {
   const text = values.filter(Boolean).join(" ").trim();
@@ -20,6 +21,38 @@ function isMostlyArabicText(...values: Array<string | null | undefined>): boolea
   const arabicChars = text.match(/[\u0600-\u06FF]/g) || [];
   const totalChars = text.replace(/\s/g, "").length;
   return totalChars > 0 && arabicChars.length / totalChars > 0.5;
+}
+
+function buildPipelineSummary(sourceType: Source["type"] | undefined, title: string, summary: string | null): string {
+  const cleanedSummary = (summary || "").trim();
+  if (!cleanedSummary) {
+    return title;
+  }
+
+  if (sourceType && SOCIAL_VIDEO_SOURCE_TYPES.has(sourceType) && cleanedSummary.length < 40) {
+    return `${title}\n\n${cleanedSummary}`;
+  }
+
+  return cleanedSummary;
+}
+
+function shouldSkipImageBackfill(sourceType: Source["type"] | undefined, imageUrl: string | null): boolean {
+  if (imageUrl) return true;
+  return sourceType === "twitter" || sourceType === "youtube";
+}
+
+function getSourceLastFetchedAt(source: Source, items: InsertContent[]): Date | null {
+  if (source.type === "twitter") {
+    const latestPublishedAt = items.reduce<number | null>((latest, item) => {
+      const current = item.publishedAt ? new Date(item.publishedAt).getTime() : null;
+      if (!current || Number.isNaN(current)) return latest;
+      return latest === null ? current : Math.max(latest, current);
+    }, null);
+
+    return latestPublishedAt === null ? null : new Date(latestPublishedAt);
+  }
+
+  return new Date();
 }
 
 async function processContentThroughPipeline(
@@ -33,7 +66,11 @@ async function processContentThroughPipeline(
     return false;
   }
 
-  if (!contentItem.imageUrl && contentItem.originalUrl) {
+  const source = await storage.getSourceById(contentItem.sourceId);
+  const sourceType = source?.type;
+  const pipelineSummary = buildPipelineSummary(sourceType, contentItem.title, contentItem.summary || null);
+
+  if (!shouldSkipImageBackfill(sourceType, contentItem.imageUrl) && contentItem.originalUrl) {
     try {
       const ogImage = await fetchOGImage(contentItem.originalUrl);
       if (ogImage) {
@@ -55,7 +92,7 @@ async function processContentThroughPipeline(
       if (!arabicSummary) {
         const generatedSummary = await generateArabicSummary(
           contentItem.title,
-          contentItem.summary || "",
+          pipelineSummary,
           aiSystemPrompt,
           userId
         );
@@ -68,7 +105,7 @@ async function processContentThroughPipeline(
       if (!arabicTitle || !arabicFullSummary) {
         const translation = await generateProfessionalTranslation(
           contentItem.title,
-          contentItem.summary || "",
+          pipelineSummary,
           aiSystemPrompt,
           userId
         );
@@ -85,8 +122,8 @@ async function processContentThroughPipeline(
 
       if (sourceAlreadyArabic) {
         arabicTitle = arabicTitle || contentItem.title;
-        arabicFullSummary = arabicFullSummary || contentItem.summary || contentItem.title;
-        arabicSummary = arabicSummary || contentItem.summary || contentItem.title;
+        arabicFullSummary = arabicFullSummary || pipelineSummary || contentItem.title;
+        arabicSummary = arabicSummary || pipelineSummary || contentItem.title;
 
         if (contentItem.arabicTitle !== arabicTitle || contentItem.arabicFullSummary !== arabicFullSummary) {
           await storage.updateContentTranslation(contentId, arabicTitle, arabicFullSummary);
@@ -204,6 +241,7 @@ export async function recoverOrphanedContent(): Promise<void> {
 
 export async function fetchFolderContent(folderId: string, folder?: Folder): Promise<FetchFolderResult> {
   const sources = await storage.getSourcesByFolderId(folderId);
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
   const results = await fetchMultipleSources(sources);
 
   let totalAdded = 0;
@@ -232,7 +270,11 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
       }
     }
 
-    await storage.updateSource(result.sourceId, { lastFetched: new Date() } as any);
+    const source = sourceById.get(result.sourceId);
+    const nextLastFetchedAt = source ? getSourceLastFetchedAt(source, result.items) : new Date();
+    if (nextLastFetchedAt) {
+      await storage.updateSource(result.sourceId, { lastFetched: nextLastFetchedAt } as any);
+    }
   }
 
   if (newContentIds.length > 0) {

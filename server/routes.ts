@@ -49,6 +49,20 @@ function truncate(value: string | null | undefined, max = 220): string {
   return value.length > max ? `${value.slice(0, max)}...` : value;
 }
 
+function getSourceLastFetchedAt(source: Source, items: Array<{ publishedAt?: Date | null }>): Date | null {
+  if (source.type === "twitter") {
+    const latestPublishedAt = items.reduce<number | null>((latest, item) => {
+      const current = item.publishedAt ? new Date(item.publishedAt).getTime() : null;
+      if (!current || Number.isNaN(current)) return latest;
+      return latest === null ? current : Math.max(latest, current);
+    }, null);
+
+    return latestPublishedAt === null ? null : new Date(latestPublishedAt);
+  }
+
+  return new Date();
+}
+
 const managedPageKeys = {
   login: "page_content_login",
 } as const;
@@ -1425,7 +1439,10 @@ export async function registerRoutes(
         }
       }
       
-      await storage.updateSource(source.id, { lastFetched: new Date() } as any);
+      const nextLastFetchedAt = getSourceLastFetchedAt(source, result.items);
+      if (nextLastFetchedAt) {
+        await storage.updateSource(source.id, { lastFetched: nextLastFetchedAt } as any);
+      }
       
       if (newContentIds.length > 0) {
         const userId = req.session.userId!;
@@ -3916,9 +3933,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.6" });
+      res.json({ version: setting?.value || "2.3.7" });
     } catch {
-      res.json({ version: "2.3.6" });
+      res.json({ version: "2.3.7" });
     }
   });
 

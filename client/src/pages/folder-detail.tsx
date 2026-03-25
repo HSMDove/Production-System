@@ -10,7 +10,6 @@ import { SourceDialog } from "@/components/sources/source-dialog";
 import { FikriKashshafDialog } from "@/components/sources/fikri-kashshaf-dialog";
 import { SourcesSidebar } from "@/components/sources/sources-sidebar";
 import { ContentFeed } from "@/components/content/content-feed";
-import { SmartViewFeed, type SmartViewCard } from "@/components/content/smart-view-feed";
 import { ContentFilters } from "@/components/content/content-filters";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { FolderCountdown, INTERVAL_OPTIONS } from "@/components/folders/folder-card";
@@ -95,24 +94,6 @@ export default function FolderDetail() {
     
     return filtered;
   }, [content, sourceTypeFilter, sortOrder, selectedFilterSourceId]);
-
-  const visibleContentSignature = useMemo(
-    () => (content || []).map((item) => item.id).join("|"),
-    [content],
-  );
-
-  const fallbackSmartCards = useMemo<SmartViewCard[]>(
-    () =>
-      filteredContent.slice(0, 10).map((item) => ({
-        contentId: item.id,
-        catchyTitle: item.arabicTitle || item.title,
-        story: item.arabicFullSummary || item.arabicSummary || item.summary || "لا يوجد ملخص إضافي لهذا الخبر حالياً.",
-        thumbnailSuggestion: "",
-        originalUrl: item.originalUrl,
-        imageUrl: item.imageUrl || null,
-      })),
-    [filteredContent],
-  );
 
   const createSourceMutation = useMutation({
     mutationFn: async (data: { name: string; url: string; type: string; folderId: string }) => {
@@ -211,26 +192,6 @@ export default function FolderDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
     },
   });
-
-  const smartViewQuery = useQuery<{ cards: SmartViewCard[] }>({
-    queryKey: ["/api/folders", id, "smart-view", visibleContentSignature],
-    queryFn: () => apiRequest("POST", `/api/folders/${id}/smart-view`, { days: 7 }),
-    enabled: !!id && showSmartView && selectedFilterSourceId === null && (content?.length ?? 0) > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (!smartViewQuery.error) return;
-    toast({
-      title: "تعذر تحميل العرض الذكي",
-      description: "عرضنا النسخة الذكية الأساسية حتى لا تتعطل تجربة القراءة",
-      variant: "destructive",
-    });
-  }, [smartViewQuery.error, toast]);
-
-  const smartViewCards = smartViewQuery.data?.cards?.length
-    ? smartViewQuery.data.cards
-    : fallbackSmartCards;
 
   const handleAddSource = () => {
     setSelectedSource(null);
@@ -447,20 +408,13 @@ export default function FolderDetail() {
                 />
                 
                 <ErrorBoundary fullScreen={false}>
-                  {showSmartView && selectedFilterSourceId === null ? (
-                    <SmartViewFeed
-                      cards={smartViewCards}
-                      isLoading={smartViewQuery.isLoading || smartViewQuery.isFetching}
-                    />
-                  ) : (
-                    <ContentFeed 
-                      content={filteredContent} 
-                      isLoading={contentLoading} 
-                      showSmartView={showSmartView} 
-                      folderId={id}
-                      unifiedTimeline={selectedFilterSourceId === null}
-                    />
-                  )}
+                  <ContentFeed 
+                    content={filteredContent} 
+                    isLoading={contentLoading} 
+                    showSmartView={showSmartView} 
+                    folderId={id}
+                    unifiedTimeline={selectedFilterSourceId === null}
+                  />
                 </ErrorBoundary>
               </div>
             </div>
