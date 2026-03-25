@@ -9,7 +9,7 @@ const folderInFlight = new Set<string>();
 
 const SCHEDULER_TICK_MS = 5 * 1000;
 const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
-const READY_BACKFILL_INTERVAL_MS = 2 * 60 * 1000;
+const READY_BACKFILL_INTERVAL_MS = 30 * 1000;
 let lastOrphanReaperRun = 0;
 let lastReadyBackfillRun = 0;
 
@@ -50,7 +50,7 @@ async function tick() {
 
     if (Date.now() - lastReadyBackfillRun >= READY_BACKFILL_INTERVAL_MS) {
       lastReadyBackfillRun = Date.now();
-      backfillReadyContentMissingArabic(20)
+      backfillReadyContentMissingArabic(50)
         .then((count) => {
           if (count > 0) {
             log(`[Scheduler] Backfilled Arabic pipeline for ${count} ready items`, "scheduler");

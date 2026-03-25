@@ -85,6 +85,12 @@ import {
   type TicketReply,
 } from "@shared/schema";
 
+const FULLY_PROCESSED_CONTENT_CONDITION = and(
+  eq(content.processingStatus, "ready"),
+  sql`${content.arabicTitle} is not null`,
+  sql`${content.arabicFullSummary} is not null`,
+);
+
 const ENCRYPTED_PREFIX = "enc:v1:";
 const SENSITIVE_SETTING_KEYS = new Set([
   "ai_custom_api_key",
@@ -428,11 +434,19 @@ export class DatabaseStorage implements IStorage {
     const folderIds = userFolders.map((f) => f.id);
     if (folderIds.length === 0) return [];
     const { inArray } = await import("drizzle-orm");
-    return db.select().from(content).where(and(inArray(content.folderId, folderIds), eq(content.processingStatus, "ready"))).orderBy(content.fetchedAt);
+    return db
+      .select()
+      .from(content)
+      .where(and(inArray(content.folderId, folderIds), FULLY_PROCESSED_CONTENT_CONDITION))
+      .orderBy(content.fetchedAt);
   }
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
-    return db.select().from(content).where(and(eq(content.folderId, folderId), eq(content.processingStatus, "ready"))).orderBy(desc(content.publishedAt), desc(content.fetchedAt));
+    return db
+      .select()
+      .from(content)
+      .where(and(eq(content.folderId, folderId), FULLY_PROCESSED_CONTENT_CONDITION))
+      .orderBy(desc(content.publishedAt), desc(content.fetchedAt));
   }
 
   async getVisibleContentByFolderId(folderId: string): Promise<Content[]> {
@@ -442,7 +456,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(content.folderId, folderId),
-          eq(content.processingStatus, "ready"),
+          FULLY_PROCESSED_CONTENT_CONDITION,
           eq(content.displayedToUser, true),
         ),
       )
@@ -532,14 +546,14 @@ export class DatabaseStorage implements IStorage {
   async getUndisplayedContentCount(folderId: string): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)::int` })
       .from(content)
-      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), eq(content.processingStatus, "ready")));
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), FULLY_PROCESSED_CONTENT_CONDITION));
     return result[0]?.count ?? 0;
   }
 
   async markContentDisplayed(folderId: string): Promise<void> {
     await db.update(content)
       .set({ displayedToUser: true })
-      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), eq(content.processingStatus, "ready")));
+      .where(and(eq(content.folderId, folderId), eq(content.displayedToUser, false), FULLY_PROCESSED_CONTENT_CONDITION));
   }
 
   async markContentReady(id: string): Promise<Content | undefined> {

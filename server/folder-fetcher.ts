@@ -14,6 +14,14 @@ export interface FetchFolderResult {
 
 const AI_RETRY_ATTEMPTS = 2;
 
+function isMostlyArabicText(...values: Array<string | null | undefined>): boolean {
+  const text = values.filter(Boolean).join(" ").trim();
+  if (!text) return false;
+  const arabicChars = text.match(/[\u0600-\u06FF]/g) || [];
+  const totalChars = text.replace(/\s/g, "").length;
+  return totalChars > 0 && arabicChars.length / totalChars > 0.5;
+}
+
 async function processContentThroughPipeline(
   contentId: string,
   aiSystemPrompt: string | null,
@@ -21,8 +29,8 @@ async function processContentThroughPipeline(
 ): Promise<boolean> {
   const contentItem = await storage.getContentById(contentId);
   if (!contentItem || !contentItem.title) {
-    await storage.markContentReady(contentId);
-    return true;
+    await storage.markContentFailed(contentId);
+    return false;
   }
 
   if (!contentItem.imageUrl && contentItem.originalUrl) {
@@ -37,36 +45,65 @@ async function processContentThroughPipeline(
     }
   }
 
-  let aiSuccess = false;
+  let arabicSummary = contentItem.arabicSummary;
+  let arabicTitle = contentItem.arabicTitle;
+  let arabicFullSummary = contentItem.arabicFullSummary;
+  const sourceAlreadyArabic = isMostlyArabicText(contentItem.title, contentItem.summary);
 
   for (let attempt = 1; attempt <= AI_RETRY_ATTEMPTS; attempt++) {
     try {
-      const arabicSummary = await generateArabicSummary(
-        contentItem.title,
-        contentItem.summary || "",
-        aiSystemPrompt,
-        userId
-      );
-      if (arabicSummary) {
-        await storage.updateContentArabicSummary(contentId, arabicSummary);
-      }
-
-      const translation = await generateProfessionalTranslation(
-        contentItem.title,
-        contentItem.summary || "",
-        aiSystemPrompt,
-        userId
-      );
-      if (translation) {
-        await storage.updateContentTranslation(
-          contentId,
-          translation.arabicTitle,
-          translation.arabicFullSummary
+      if (!arabicSummary) {
+        const generatedSummary = await generateArabicSummary(
+          contentItem.title,
+          contentItem.summary || "",
+          aiSystemPrompt,
+          userId
         );
+        if (generatedSummary) {
+          arabicSummary = generatedSummary;
+          await storage.updateContentArabicSummary(contentId, generatedSummary);
+        }
       }
 
-      aiSuccess = true;
-      break;
+      if (!arabicTitle || !arabicFullSummary) {
+        const translation = await generateProfessionalTranslation(
+          contentItem.title,
+          contentItem.summary || "",
+          aiSystemPrompt,
+          userId
+        );
+        if (translation?.arabicTitle && translation.arabicFullSummary) {
+          arabicTitle = translation.arabicTitle;
+          arabicFullSummary = translation.arabicFullSummary;
+          await storage.updateContentTranslation(
+            contentId,
+            translation.arabicTitle,
+            translation.arabicFullSummary
+          );
+        }
+      }
+
+      if (sourceAlreadyArabic) {
+        arabicTitle = arabicTitle || contentItem.title;
+        arabicFullSummary = arabicFullSummary || contentItem.summary || contentItem.title;
+        arabicSummary = arabicSummary || contentItem.summary || contentItem.title;
+
+        if (contentItem.arabicTitle !== arabicTitle || contentItem.arabicFullSummary !== arabicFullSummary) {
+          await storage.updateContentTranslation(contentId, arabicTitle, arabicFullSummary);
+        }
+        if (contentItem.arabicSummary !== arabicSummary) {
+          await storage.updateContentArabicSummary(contentId, arabicSummary);
+        }
+      }
+
+      if (arabicTitle && arabicFullSummary) {
+        if (!arabicSummary) {
+          arabicSummary = arabicFullSummary;
+          await storage.updateContentArabicSummary(contentId, arabicSummary);
+        }
+        await storage.markContentReady(contentId);
+        return true;
+      }
     } catch (e) {
       console.error(`[Pipeline] AI attempt ${attempt}/${AI_RETRY_ATTEMPTS} failed for content ${contentId}:`, e);
       if (attempt < AI_RETRY_ATTEMPTS) {
@@ -75,12 +112,8 @@ async function processContentThroughPipeline(
     }
   }
 
-  if (!aiSuccess) {
-    console.warn(`[Pipeline] AI failed after ${AI_RETRY_ATTEMPTS} attempts for content ${contentId}. Publishing with original content as fallback.`);
-  }
-
-  await storage.markContentReady(contentId);
-  return true;
+  console.warn(`[Pipeline] Content ${contentId} stayed hidden because Arabic processing did not complete.`);
+  return false;
 }
 
 async function getPromptByUserId(userId: string | null, cache: Map<string, string | null>): Promise<string | null> {
@@ -98,12 +131,16 @@ function normalizeUserId(userId: string | null | undefined): string | undefined 
 export async function processContentIdsThroughPipeline(
   contentIds: string[],
   userId: string | null
-): Promise<void> {
-  if (contentIds.length === 0) return;
+): Promise<string[]> {
+  if (contentIds.length === 0) return [];
   const prompt = userId ? await getUserComposedSystemPrompt(userId) : null;
+  const processedContentIds: string[] = [];
   for (const contentId of contentIds) {
-    await processContentThroughPipeline(contentId, prompt, userId || undefined);
+    if (await processContentThroughPipeline(contentId, prompt, userId || undefined)) {
+      processedContentIds.push(contentId);
+    }
   }
+  return processedContentIds;
 }
 
 export async function backfillReadyContentMissingArabic(limit: number = 25): Promise<number> {
@@ -117,8 +154,9 @@ export async function backfillReadyContentMissingArabic(limit: number = 25): Pro
     try {
       const folder = await storage.getFolderById(item.folderId);
       const prompt = await getPromptByUserId(folder?.userId || null, promptCache);
-      await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId));
-      processed++;
+      if (await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId))) {
+        processed++;
+      }
     } catch (error) {
       console.error(`[Backfill] Failed processing content ${item.id}:`, error);
     }
@@ -133,11 +171,14 @@ export async function backfillFolderContentMissingArabic(folderId: string): Prom
 
   const folder = await storage.getFolderById(folderId);
   const prompt = folder?.userId ? await getUserComposedSystemPrompt(folder.userId) : null;
+  let processed = 0;
 
   for (const item of candidates) {
-    await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId));
+    if (await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId))) {
+      processed++;
+    }
   }
-  return candidates.length;
+  return processed;
 }
 
 export async function recoverOrphanedContent(): Promise<void> {
@@ -151,11 +192,12 @@ export async function recoverOrphanedContent(): Promise<void> {
     try {
       const folder = await storage.getFolderById(item.folderId);
       const prompt = await getPromptByUserId(folder?.userId || null, promptCache);
-      await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId));
-      console.log(`[Reaper] Reprocessed orphaned content ${item.id} (${item.title?.substring(0, 50)})`);
+      const processed = await processContentThroughPipeline(item.id, prompt, normalizeUserId(folder?.userId));
+      if (processed) {
+        console.log(`[Reaper] Reprocessed orphaned content ${item.id} (${item.title?.substring(0, 50)})`);
+      }
     } catch (e) {
       console.error(`[Reaper] Failed to recover content ${item.id}:`, e);
-      await storage.markContentReady(item.id);
     }
   }
 }
@@ -168,6 +210,7 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
   let skipped = 0;
   const errors: string[] = [];
   const newContentIds: string[] = [];
+  const processedContentIds: string[] = [];
 
   for (const result of results) {
     if (result.error) {
@@ -203,16 +246,18 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
     console.log(`[Pipeline] Processing ${newContentIds.length} new items through AI pipeline...`);
 
     for (const contentId of newContentIds) {
-      await processContentThroughPipeline(contentId, aiSystemPrompt, folderUserId || undefined);
+      if (await processContentThroughPipeline(contentId, aiSystemPrompt, folderUserId || undefined)) {
+        processedContentIds.push(contentId);
+      }
     }
 
-    console.log(`[Pipeline] All ${newContentIds.length} items processed and marked ready.`);
+    console.log(`[Pipeline] ${processedContentIds.length}/${newContentIds.length} items completed the Arabic pipeline and became visible.`);
 
     try {
-      if (folder && folderUserId) {
-        await processNewContentNotificationsForFolder(newContentIds, folder, folderUserId);
-      } else if (folderUserId) {
-        await processNewContentNotifications(newContentIds, folderUserId);
+      if (folder && folderUserId && processedContentIds.length > 0) {
+        await processNewContentNotificationsForFolder(processedContentIds, folder, folderUserId);
+      } else if (folderUserId && processedContentIds.length > 0) {
+        await processNewContentNotifications(processedContentIds, folderUserId);
       }
     } catch (e) {
       console.error("Error processing notifications:", e);

@@ -9,10 +9,10 @@ import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
+import { getAIClient, rewriteContent, logAIRequest } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
-import { backfillFolderContentMissingArabic, fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
+import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
 import { z } from "zod";
 import {
   insertFolderSchema,
@@ -845,15 +845,6 @@ export async function registerRoutes(
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
 
-      const aiGenerationEnabled = (await storage.getSystemSetting("ai_generation_enabled"))?.value !== "false";
-      if (aiGenerationEnabled) {
-        try {
-          await backfillFolderContentMissingArabic(req.params.id);
-        } catch (error) {
-          console.error("Error backfilling Arabic smart-view content:", error);
-        }
-      }
-
       const allContent = await storage.getVisibleContentByFolderId(req.params.id);
 
       const days = req.body.days || 7;
@@ -877,18 +868,7 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      if (!aiGenerationEnabled) {
-        return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
-      }
-
-      try {
-        const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
-        const cards = await generateSmartView(contentToUse, aiSystemPrompt, req.session.userId!);
-        return res.json({ cards: cards.length > 0 ? cards : buildFallbackSmartViewCards(contentToUse) });
-      } catch (error) {
-        console.error("Error generating smart view, falling back to local cards:", error);
-        return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
-      }
+      return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
     } catch (error: any) {
       console.error("Error generating smart view:", error);
       res.status(500).json({ error: error.message || "Failed to generate smart view" });
@@ -1451,8 +1431,10 @@ export async function registerRoutes(
         const userId = req.session.userId!;
         void (async () => {
           try {
-            await processContentIdsThroughPipeline(newContentIds, userId);
-            await processNewContentNotifications(newContentIds, userId);
+            const processedContentIds = await processContentIdsThroughPipeline(newContentIds, userId);
+            if (processedContentIds.length > 0) {
+              await processNewContentNotifications(processedContentIds, userId);
+            }
           } catch (e) {
             console.error("Error processing source fetch pipeline:", e);
           }
@@ -3934,9 +3916,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.5" });
+      res.json({ version: setting?.value || "2.3.6" });
     } catch {
-      res.json({ version: "2.3.5" });
+      res.json({ version: "2.3.6" });
     }
   });
 
