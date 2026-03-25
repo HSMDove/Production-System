@@ -74,7 +74,7 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.3.4";
+  const appVersion = versionData?.version || "2.3.5";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });

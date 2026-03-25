@@ -1,4 +1,4 @@
-import { eq, and, desc, isNull, gt, sql } from "drizzle-orm";
+import { eq, and, or, desc, isNull, gt, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "./db";
 import {
@@ -198,6 +198,8 @@ export interface IStorage {
   markContentReady(id: string): Promise<Content | undefined>;
   markContentFailed(id: string): Promise<Content | undefined>;
   getOrphanedProcessingContent(olderThanMinutes?: number): Promise<Content[]>;
+  getReadyContentMissingArabic(limit?: number): Promise<Content[]>;
+  getReadyContentMissingArabicByFolder(folderId: string, limit?: number): Promise<Content[]>;
 
   getAllSources(): Promise<Source[]>;
 
@@ -555,6 +557,27 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(content)
       .where(and(eq(content.processingStatus, "processing"), gt(cutoff, content.fetchedAt)))
       .orderBy(content.fetchedAt);
+  }
+
+  async getReadyContentMissingArabic(limit: number = 25): Promise<Content[]> {
+    return db.select().from(content)
+      .where(and(
+        eq(content.processingStatus, "ready"),
+        or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
+      ))
+      .orderBy(desc(content.fetchedAt))
+      .limit(limit);
+  }
+
+  async getReadyContentMissingArabicByFolder(folderId: string, limit: number = 20): Promise<Content[]> {
+    return db.select().from(content)
+      .where(and(
+        eq(content.folderId, folderId),
+        eq(content.processingStatus, "ready"),
+        or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
+      ))
+      .orderBy(desc(content.fetchedAt))
+      .limit(limit);
   }
 
   // ─── Ideas ────────────────────────────────────────────────────────────────

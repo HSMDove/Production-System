@@ -4,7 +4,7 @@ let browserInstance: Browser | null = null;
 let browserIdleTimer: ReturnType<typeof setTimeout> | null = null;
 let browserLaunchPromise: Promise<Browser> | null = null;
 const BROWSER_IDLE_TIMEOUT = 60000;
-const CHROMIUM_PATH = process.env.CHROMIUM_PATH || "/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium";
+const CHROMIUM_PATH = process.env.CHROMIUM_PATH?.trim();
 
 async function getBrowser(): Promise<Browser> {
   if (browserInstance && browserInstance.connected) {
@@ -19,6 +19,10 @@ async function getBrowser(): Promise<Browser> {
       const puppeteer = (await import("puppeteer-extra")).default;
       const StealthPlugin = (await import("puppeteer-extra-plugin-stealth")).default;
       puppeteer.use(StealthPlugin());
+
+      if (!CHROMIUM_PATH) {
+        throw new Error("CHROMIUM_PATH is not configured");
+      }
 
       console.log("[Browser] Launching headless Chromium...");
       browserInstance = await puppeteer.launch({

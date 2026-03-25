@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { fetchFolderContent } from "./folder-fetcher";
 import { recoverOrphanedContent } from "./folder-fetcher";
+import { backfillReadyContentMissingArabic } from "./folder-fetcher";
 import { log } from "./index";
 
 const folderLastRun = new Map<string, number>();
@@ -8,7 +9,9 @@ const folderInFlight = new Set<string>();
 
 const SCHEDULER_TICK_MS = 5 * 1000;
 const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
+const READY_BACKFILL_INTERVAL_MS = 2 * 60 * 1000;
 let lastOrphanReaperRun = 0;
+let lastReadyBackfillRun = 0;
 
 async function runFolderFetch(folderId: string) {
   if (folderInFlight.has(folderId)) return;
@@ -43,6 +46,17 @@ async function tick() {
     if (Date.now() - lastOrphanReaperRun >= ORPHAN_REAPER_INTERVAL_MS) {
       lastOrphanReaperRun = Date.now();
       recoverOrphanedContent().catch(e => console.error("[Reaper] Error:", e));
+    }
+
+    if (Date.now() - lastReadyBackfillRun >= READY_BACKFILL_INTERVAL_MS) {
+      lastReadyBackfillRun = Date.now();
+      backfillReadyContentMissingArabic(20)
+        .then((count) => {
+          if (count > 0) {
+            log(`[Scheduler] Backfilled Arabic pipeline for ${count} ready items`, "scheduler");
+          }
+        })
+        .catch((e) => console.error("[Backfill] Error:", e));
     }
 
     const allFolders = await storage.getAllFoldersSystem();

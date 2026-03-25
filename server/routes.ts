@@ -12,7 +12,7 @@ import { processNewContentNotifications, broadcastSingleContent, testTelegramCon
 import { getAIClient, rewriteContent, generateSmartView, logAIRequest } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
-import { fetchFolderContent } from "./folder-fetcher";
+import { backfillFolderContentMissingArabic, fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
 import { z } from "zod";
 import {
   insertFolderSchema,
@@ -845,17 +845,26 @@ export async function registerRoutes(
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
 
+      const aiGenerationEnabled = (await storage.getSystemSetting("ai_generation_enabled"))?.value !== "false";
+      if (aiGenerationEnabled) {
+        try {
+          await backfillFolderContentMissingArabic(req.params.id);
+        } catch (error) {
+          console.error("Error backfilling Arabic smart-view content:", error);
+        }
+      }
+
       const allContent = await storage.getVisibleContentByFolderId(req.params.id);
-      
+
       const days = req.body.days || 7;
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
-      
+
       let contentToUse = allContent.filter((item) => {
         const pubDate = item.publishedAt || item.fetchedAt;
         return pubDate >= cutoffDate;
       });
-      
+
       if (contentToUse.length === 0) {
         contentToUse = allContent.slice(0, 10);
       }
@@ -868,7 +877,6 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      const aiGenerationEnabled = (await storage.getSystemSetting("ai_generation_enabled"))?.value !== "false";
       if (!aiGenerationEnabled) {
         return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
       }
@@ -1439,50 +1447,14 @@ export async function registerRoutes(
       
       await storage.updateSource(source.id, { lastFetched: new Date() } as any);
       
-      // Generate Arabic translations for new content in the background
-      const _bgUserId = req.session.userId!;
       if (newContentIds.length > 0) {
-        (async () => {
-          const aiSystemPrompt = await getUserComposedSystemPrompt(_bgUserId);
-          if (aiSystemPrompt) {
-            console.log(`[Source Fetch] Custom AI system prompt loaded: "${aiSystemPrompt.substring(0, 50)}${aiSystemPrompt.length > 50 ? '...' : ''}"`);
-          }
-          for (const contentId of newContentIds) {
-            try {
-              const contentItem = await storage.getContentById(contentId);
-              if (contentItem && contentItem.title) {
-                const arabicSummary = await generateArabicSummary(
-                  contentItem.title,
-                  contentItem.summary || "",
-                  aiSystemPrompt,
-                  req.session.userId!
-                );
-                if (arabicSummary) {
-                  await storage.updateContentArabicSummary(contentId, arabicSummary);
-                }
-                
-                const translation = await generateProfessionalTranslation(
-                  contentItem.title,
-                  contentItem.summary || "",
-                  aiSystemPrompt,
-                  req.session.userId!
-                );
-                if (translation) {
-                  await storage.updateContentTranslation(
-                    contentId,
-                    translation.arabicTitle,
-                    translation.arabicFullSummary
-                  );
-                }
-              }
-            } catch (e) {
-              console.error("Error generating Arabic translations:", e);
-            }
-          }
+        const userId = req.session.userId!;
+        void (async () => {
           try {
-            await processNewContentNotifications(newContentIds, _bgUserId);
+            await processContentIdsThroughPipeline(newContentIds, userId);
+            await processNewContentNotifications(newContentIds, userId);
           } catch (e) {
-            console.error("Error processing notifications:", e);
+            console.error("Error processing source fetch pipeline:", e);
           }
         })();
       }
@@ -3962,9 +3934,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.4" });
+      res.json({ version: setting?.value || "2.3.5" });
     } catch {
-      res.json({ version: "2.3.4" });
+      res.json({ version: "2.3.5" });
     }
   });
 
