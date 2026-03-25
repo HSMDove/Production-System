@@ -182,6 +182,7 @@ export interface IStorage {
 
   getAllContent(userId: string): Promise<Content[]>;
   getContentByFolderId(folderId: string): Promise<Content[]>;
+  getVisibleContentByFolderId(folderId: string): Promise<Content[]>;
   getContentBySourceId(sourceId: string): Promise<Content[]>;
   getContentById(id: string): Promise<Content | undefined>;
   createContent(contentItem: InsertContent): Promise<Content>;
@@ -430,6 +431,20 @@ export class DatabaseStorage implements IStorage {
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
     return db.select().from(content).where(and(eq(content.folderId, folderId), eq(content.processingStatus, "ready"))).orderBy(desc(content.publishedAt), desc(content.fetchedAt));
+  }
+
+  async getVisibleContentByFolderId(folderId: string): Promise<Content[]> {
+    return db
+      .select()
+      .from(content)
+      .where(
+        and(
+          eq(content.folderId, folderId),
+          eq(content.processingStatus, "ready"),
+          eq(content.displayedToUser, true),
+        ),
+      )
+      .orderBy(desc(content.publishedAt), desc(content.fetchedAt));
   }
 
   async getAllSources(): Promise<Source[]> {

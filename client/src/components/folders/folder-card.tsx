@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { MoreVertical, Pencil, Trash2, Rss, Power, Clock, MessageSquare, Timer, Loader2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, Rss, Power, Clock, Timer, Loader2 } from "lucide-react";
 import { SiTelegram, SiSlack } from "react-icons/si";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -106,7 +107,6 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   const sourceCount = folder._count?.sources ?? 0;
   const contentCount = folder._count?.content ?? 0;
   const folderColor = folder.color || "#6d8df7";
-  const folderEmoji = folder.emoji || "📁";
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<FolderType>) => {
@@ -140,154 +140,180 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   };
 
   return (
-    <div
-      className="folder-surface group glass-surface flex flex-col rounded-[1.25rem] border-[3px] border-border overflow-hidden"
+    <Card
+      className="folder-surface group glass-surface flex h-full min-h-[14rem] flex-col rounded-[1.618rem]"
       data-testid={`card-folder-${folder.id}`}
     >
-      <Link href={`/folder/${folder.id}`} className="flex-1 cursor-pointer">
-        <div className="flex items-start gap-3 px-4 pt-4 pb-2">
-          <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-[2px] border-white/40 text-xl"
-            style={{
-              backgroundColor: folderColor,
-              backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0))",
-            }}
-          >
-            {folderEmoji}
+      <CardHeader className="px-4 pb-3 pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <Link href={`/folder/${folder.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-[2px] border-white/40 text-xl"
+              style={{
+                backgroundColor: folderColor,
+                backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0))",
+              }}
+            >
+              {folder.emoji || "📁"}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold leading-tight" data-testid={`text-folder-name-${folder.id}`}>
+                {folder.name}
+              </h3>
+              {folder.description && (
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-1">
+                  {folder.description}
+                </p>
+              )}
+            </div>
+          </Link>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full border-[2px] border-border bg-background/85 px-2 py-1"
+                  onClick={handleToggleBackground}
+                  data-testid={`toggle-background-${folder.id}`}
+                >
+                  <Power className={`h-3.5 w-3.5 ${folder.isBackgroundActive ? "text-primary" : "text-muted-foreground"}`} />
+                  <Switch
+                    checked={folder.isBackgroundActive}
+                    className="pointer-events-none scale-75 origin-right"
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{folder.isBackgroundActive ? "إيقاف التحديث التلقائي" : "تفعيل التحديث التلقائي"}</p>
+              </TooltipContent>
+            </Tooltip>
+
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+              <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  data-testid={`button-folder-menu-${folder.id}`}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="z-[100]">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setDropdownOpen(false);
+                    onEdit(folder);
+                  }}
+                  data-testid={`menu-item-edit-folder-${folder.id}`}
+                >
+                  <Pencil className="ml-2 h-4 w-4" />
+                  تعديل
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setDropdownOpen(false);
+                    onDelete(folder);
+                  }}
+                  className="text-destructive focus:text-destructive"
+                  data-testid={`menu-item-delete-folder-${folder.id}`}
+                >
+                  <Trash2 className="ml-2 h-4 w-4" />
+                  حذف
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-bold leading-tight truncate" data-testid={`text-folder-name-${folder.id}`}>
-              {folder.name}
-            </h3>
-            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Rss className="h-3 w-3" />
-                {sourceCount} مصدر
-              </span>
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex flex-1 flex-col gap-3 px-4 pb-4 pt-0">
+        <Link href={`/folder/${folder.id}`} className="grid grid-cols-2 gap-2">
+          <div className="rounded-[16px] border-[2px] border-border/70 bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <Rss className="h-4 w-4" />
+              <span>{sourceCount} مصدر</span>
+            </div>
+          </div>
+          <div className="rounded-[16px] border-[2px] border-border/70 bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1.5">
               <span>{contentCount} خبر</span>
             </div>
           </div>
-          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                data-testid={`button-folder-menu-${folder.id}`}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="z-[100]">
-              <DropdownMenuItem
-                onClick={(e) => { 
-                  e.preventDefault(); 
-                  setDropdownOpen(false);
-                  onEdit(folder); 
-                }}
-                data-testid={`menu-item-edit-folder-${folder.id}`}
-              >
-                <Pencil className="ml-2 h-4 w-4" />
-                تعديل
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => { 
-                  e.preventDefault(); 
-                  setDropdownOpen(false);
-                  onDelete(folder); 
-                }}
-                className="text-destructive focus:text-destructive"
-                data-testid={`menu-item-delete-folder-${folder.id}`}
-              >
-                <Trash2 className="ml-2 h-4 w-4" />
-                حذف
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        </Link>
 
-        {folder.description && (
-          <p className="px-4 text-xs text-muted-foreground line-clamp-1">{folder.description}</p>
-        )}
-      </Link>
-
-      <div className="border-t border-border/50 mt-2 px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div
-                className="flex items-center gap-1.5 cursor-pointer"
-                onClick={handleToggleBackground}
-                data-testid={`toggle-background-${folder.id}`}
-              >
-                <Power className={`h-3.5 w-3.5 ${folder.isBackgroundActive ? "text-primary" : "text-muted-foreground"}`} />
-                <Switch
-                  checked={folder.isBackgroundActive}
-                  className="scale-75 origin-right pointer-events-none"
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{folder.isBackgroundActive ? "إيقاف التحديث التلقائي" : "تفعيل التحديث التلقائي"}</p>
-            </TooltipContent>
-          </Tooltip>
-
+        <div className="mt-auto space-y-3 border-t border-border/70 pt-3">
           {folder.isBackgroundActive && (
-            <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-              <Select value={String(folder.refreshInterval)} onValueChange={handleIntervalChange}>
-                <SelectTrigger className="h-6 text-[11px] w-auto gap-1 min-w-0 px-2" data-testid={`select-interval-${folder.id}`}>
-                  <Clock className="h-3 w-3 flex-shrink-0" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INTERVAL_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                <Select
+                  value={String(folder.refreshInterval)}
+                  onValueChange={handleIntervalChange}
+                >
+                  <SelectTrigger
+                    className="h-8 w-auto min-w-0 gap-1 text-xs"
+                    data-testid={`select-interval-${folder.id}`}
+                  >
+                    <Clock className="h-3 w-3 flex-shrink-0" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTERVAL_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <FolderCountdown folderId={folder.id} refreshInterval={folder.refreshInterval} />
             </div>
           )}
 
-          {folder.isBackgroundActive && (
-            <FolderCountdown folderId={folder.id} refreshInterval={folder.refreshInterval} />
-          )}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-muted-foreground">الإشعارات</span>
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 ${folder.notifyTelegram ? "text-primary" : "text-muted-foreground opacity-60"} toggle-elevate ${folder.notifyTelegram ? "toggle-elevated" : ""}`}
+                    onClick={handleToggleTelegram}
+                    data-testid={`toggle-telegram-${folder.id}`}
+                  >
+                    <SiTelegram className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{folder.notifyTelegram ? "كتم تيليجرام" : "تفعيل تيليجرام"}</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 ${folder.notifySlack ? "text-primary" : "text-muted-foreground opacity-60"} toggle-elevate ${folder.notifySlack ? "toggle-elevated" : ""}`}
+                    onClick={handleToggleSlack}
+                    data-testid={`toggle-slack-${folder.id}`}
+                  >
+                    <SiSlack className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{folder.notifySlack ? "كتم سلاك" : "تفعيل سلاك"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-0.5">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-6 w-6 ${folder.notifyTelegram ? "text-foreground" : "text-muted-foreground/40"}`}
-                onClick={handleToggleTelegram}
-                data-testid={`toggle-telegram-${folder.id}`}
-              >
-                <SiTelegram className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{folder.notifyTelegram ? "كتم تيليجرام" : "تفعيل تيليجرام"}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-6 w-6 ${folder.notifySlack ? "text-foreground" : "text-muted-foreground/40"}`}
-                onClick={handleToggleSlack}
-                data-testid={`toggle-slack-${folder.id}`}
-              >
-                <SiSlack className="h-3 w-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{folder.notifySlack ? "كتم سلاك" : "تفعيل سلاك"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-    </div>
+        <p className="mt-auto text-xs text-muted-foreground">
+          أُنشئ {formatDistanceToNow(new Date(folder.createdAt), { addSuffix: true, locale: ar })}
+        </p>
+      </CardContent>
+    </Card>
   );
 }

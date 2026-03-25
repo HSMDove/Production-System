@@ -17,8 +17,8 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="nb-orb nb-orb-primary" aria-hidden="true" />
       <div className="nb-orb nb-orb-secondary" aria-hidden="true" />
       <Header />
-      <main className="relative z-[1] flex-1 overflow-visible">
-        <div className={`page-frame py-4 sm:py-6 md:py-8 ${showFikriLauncher ? "pb-28 sm:pb-32" : ""}`}>
+      <main className="relative z-[1] flex-1 overflow-visible bg-transparent">
+        <div className={`page-frame bg-transparent py-4 sm:py-6 md:py-8 ${showFikriLauncher ? "pb-28 sm:pb-32" : ""}`}>
           {children}
         </div>
       </main>

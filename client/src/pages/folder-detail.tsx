@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ChevronLeft, RefreshCw, Power, Clock, Sparkles, Loader2, Layers } from "lucide-react";
@@ -153,7 +153,26 @@ export default function FolderDetail() {
     },
   });
 
-  const fetchAllSourcesMutation = { isPending: false };
+  const fetchAllSourcesMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Missing folder id");
+      return apiRequest("POST", `/api/folders/${id}/fetch-all`);
+    },
+  });
+
+  const revealNewContentMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Missing folder id");
+      return apiRequest("POST", `/api/folders/${id}/mark-displayed`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
+    },
+    onError: () => {
+      toast({ title: "حدث خطأ", description: "فشل في إظهار الأخبار الجديدة", variant: "destructive" });
+    },
+  });
 
   const newContentQuery = useQuery<{ count: number }>({
     queryKey: ["/api/folders", id, "new-content-count"],
@@ -172,17 +191,6 @@ export default function FolderDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
     },
   });
-
-  // Auto-refresh content when entering the folder
-  const previousFolderId = useRef<string | null>(null);
-  
-  useEffect(() => {
-    // Only auto-refresh once per folder visit and when sources are loaded
-    if (id && id !== previousFolderId.current && sources && sources.length > 0) {
-      previousFolderId.current = id;
-      fetchAllSourcesMutation.mutate();
-    }
-  }, [id, sources]);
 
   const handleAddSource = () => {
     setSelectedSource(null);
@@ -205,6 +213,18 @@ export default function FolderDetail() {
     } else {
       createSourceMutation.mutate(values);
     }
+  };
+
+  const handleRefreshClick = async () => {
+    if (!id) return;
+
+    if (newContentCount > 0) {
+      await revealNewContentMutation.mutateAsync();
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+    toast({ title: "لا توجد أخبار جديدة", description: "الأخبار تُجلب تلقائياً في الخلفية" });
   };
 
   if (folderLoading) {
@@ -308,20 +328,12 @@ export default function FolderDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
-                if (newContentCount > 0) {
-                  await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
-                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
-                } else {
-                  queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
-                  toast({ title: "لا توجد أخبار جديدة", description: "الأخبار تُجلب تلقائياً في الخلفية" });
-                }
-              }}
+              onClick={handleRefreshClick}
+              disabled={revealNewContentMutation.isPending || fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
               data-testid="button-refresh-all"
               className="gap-1.5 relative"
             >
-              <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${(revealNewContentMutation.isPending || fetchAllSourcesMutation.isPending) ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{newContentCount > 0 ? `${newContentCount} جديد` : "تحديث"}</span>
               {newContentCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />

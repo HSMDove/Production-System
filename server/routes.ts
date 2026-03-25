@@ -772,7 +772,7 @@ export async function registerRoutes(
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
-      const contentItems = await storage.getContentByFolderId(req.params.id);
+      const contentItems = await storage.getVisibleContentByFolderId(req.params.id);
       const allSources = await storage.getSourcesByFolderId(req.params.id);
       const sourcesMap = new Map(allSources.map(s => [s.id, s]));
       const contentWithSources = contentItems.map(item => ({

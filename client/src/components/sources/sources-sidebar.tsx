@@ -27,11 +27,11 @@ function getSourceIcon(type: string) {
 
 export function SourcesSidebar({ sources, selectedSourceId, onSourceSelect }: SourcesSidebarProps) {
   return (
-    <div className="hidden md:flex w-52 lg:w-56 flex-shrink-0 border-l bg-muted/20 rounded-lg overflow-y-auto">
-      <div className="p-2 space-y-1 w-full">
+    <div className="hidden md:flex w-52 lg:w-56 flex-shrink-0 rounded-[20px] border-l border-border/70 bg-transparent overflow-y-auto">
+      <div className="w-full px-3 py-3 space-y-2">
         <Button
           variant={selectedSourceId === null ? "default" : "ghost"}
-          className="w-full justify-start gap-2 mb-3"
+          className="relative z-[1] mt-2 mb-3 w-full justify-start gap-2"
           size="sm"
           onClick={() => onSourceSelect(null)}
           data-testid="button-view-all"
@@ -40,7 +40,8 @@ export function SourcesSidebar({ sources, selectedSourceId, onSourceSelect }: So
           <span className="truncate">عرض الكل</span>
         </Button>
         
-        <div className="h-px bg-border/50 mb-3" />
+        <div className="my-3 h-px bg-border/70" />
+        
         
         {sources.map((source) => (
           <Button
