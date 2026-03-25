@@ -101,6 +101,19 @@ export default function FolderDetail() {
     [content],
   );
 
+  const fallbackSmartCards = useMemo<SmartViewCard[]>(
+    () =>
+      filteredContent.slice(0, 10).map((item) => ({
+        contentId: item.id,
+        catchyTitle: item.arabicTitle || item.title,
+        story: item.arabicFullSummary || item.arabicSummary || item.summary || "لا يوجد ملخص إضافي لهذا الخبر حالياً.",
+        thumbnailSuggestion: "",
+        originalUrl: item.originalUrl,
+        imageUrl: item.imageUrl || null,
+      })),
+    [filteredContent],
+  );
+
   const createSourceMutation = useMutation({
     mutationFn: async (data: { name: string; url: string; type: string; folderId: string }) => {
       return apiRequest("POST", "/api/sources", data);
@@ -210,10 +223,14 @@ export default function FolderDetail() {
     if (!smartViewQuery.error) return;
     toast({
       title: "تعذر تحميل العرض الذكي",
-      description: "استمرينا على العرض العادي حتى لا تتأثر تجربة القراءة",
+      description: "عرضنا النسخة الذكية الأساسية حتى لا تتعطل تجربة القراءة",
       variant: "destructive",
     });
   }, [smartViewQuery.error, toast]);
+
+  const smartViewCards = smartViewQuery.data?.cards?.length
+    ? smartViewQuery.data.cards
+    : fallbackSmartCards;
 
   const handleAddSource = () => {
     setSelectedSource(null);
@@ -432,7 +449,7 @@ export default function FolderDetail() {
                 <ErrorBoundary fullScreen={false}>
                   {showSmartView && selectedFilterSourceId === null ? (
                     <SmartViewFeed
-                      cards={smartViewQuery.data?.cards || []}
+                      cards={smartViewCards}
                       isLoading={smartViewQuery.isLoading || smartViewQuery.isFetching}
                     />
                   ) : (

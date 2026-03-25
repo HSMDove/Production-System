@@ -449,6 +449,26 @@ function checkFeatureFlag(flagName: string) {
   };
 }
 
+function buildFallbackSmartViewCards(contentItems: Array<{
+  id: string;
+  title: string;
+  arabicTitle: string | null;
+  summary: string | null;
+  arabicSummary: string | null;
+  arabicFullSummary: string | null;
+  originalUrl: string;
+  imageUrl: string | null;
+}>) {
+  return contentItems.map((item) => ({
+    contentId: item.id,
+    catchyTitle: item.arabicTitle || item.title,
+    story: item.arabicFullSummary || item.arabicSummary || item.summary || "لا يوجد ملخص إضافي لهذا الخبر حالياً.",
+    thumbnailSuggestion: "",
+    originalUrl: item.originalUrl,
+    imageUrl: item.imageUrl || null,
+  }));
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -820,7 +840,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/folders/:id/smart-view", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
+  app.post("/api/folders/:id/smart-view", async (req, res) => {
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
@@ -848,11 +868,19 @@ export async function registerRoutes(
 
       contentToUse = contentToUse.slice(0, 10);
 
-      const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
-      
-      const cards = await generateSmartView(contentToUse, aiSystemPrompt, req.session.userId!);
-      
-      res.json({ cards });
+      const aiGenerationEnabled = (await storage.getSystemSetting("ai_generation_enabled"))?.value !== "false";
+      if (!aiGenerationEnabled) {
+        return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
+      }
+
+      try {
+        const aiSystemPrompt = await getUserComposedSystemPrompt(req.session.userId!);
+        const cards = await generateSmartView(contentToUse, aiSystemPrompt, req.session.userId!);
+        return res.json({ cards: cards.length > 0 ? cards : buildFallbackSmartViewCards(contentToUse) });
+      } catch (error) {
+        console.error("Error generating smart view, falling back to local cards:", error);
+        return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
+      }
     } catch (error: any) {
       console.error("Error generating smart view:", error);
       res.status(500).json({ error: error.message || "Failed to generate smart view" });
@@ -3934,9 +3962,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.3" });
+      res.json({ version: setting?.value || "2.3.4" });
     } catch {
-      res.json({ version: "2.3.3" });
+      res.json({ version: "2.3.4" });
     }
   });
 
