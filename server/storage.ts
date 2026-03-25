@@ -1,4 +1,4 @@
-import { eq, and, or, desc, isNull, gt, sql } from "drizzle-orm";
+import { eq, and, or, desc, isNull, gt, lt, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { db } from "./db";
 import {
@@ -363,8 +363,8 @@ export class DatabaseStorage implements IStorage {
       return {
         ...folder,
         _count: {
-          sources: parseInt(sourcesCount?.count || '0'),
-          content: parseInt(contentCount?.count || '0'),
+          sources: Number(sourcesCount?.count ?? 0),
+          content: Number(contentCount?.count ?? 0),
         },
       };
     }));
@@ -569,7 +569,7 @@ export class DatabaseStorage implements IStorage {
   async getOrphanedProcessingContent(olderThanMinutes: number = 10): Promise<Content[]> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
     return db.select().from(content)
-      .where(and(eq(content.processingStatus, "processing"), gt(cutoff, content.fetchedAt)))
+      .where(and(eq(content.processingStatus, "processing"), lt(content.fetchedAt, cutoff)))
       .orderBy(content.fetchedAt);
   }
 

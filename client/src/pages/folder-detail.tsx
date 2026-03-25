@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ChevronLeft, RefreshCw, Power, Clock, Sparkles, Loader2, Layers } from "lucide-react";
@@ -34,9 +34,23 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Folder, Source, ContentWithSource } from "@/lib/types";
 
+type FetchAllResponse = {
+  started: boolean;
+  blocking: boolean;
+  completed?: boolean;
+  timedOut?: boolean;
+  itemsAdded?: number;
+  skipped?: number;
+  revealedCount?: number;
+  remainingNewContentCount?: number;
+  errors?: string[];
+};
+
 export default function FolderDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+  const initialSilentFetchFolderRef = useRef<string | null>(null);
+  const silentFetchInFlightRef = useRef(false);
   
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -65,7 +79,7 @@ export default function FolderDetail() {
     queryKey: ["/api/folders", id],
   });
 
-  const { data: sources, isLoading: sourcesLoading } = useQuery<Source[]>({
+  const { data: sources } = useQuery<Source[]>({
     queryKey: ["/api/folders", id, "sources"],
   });
 
@@ -155,29 +169,29 @@ export default function FolderDetail() {
   });
 
   const fetchAllSourcesMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (payload: { blocking: boolean; revealWhenDone?: boolean; timeoutMs?: number }) => {
       if (!id) throw new Error("Missing folder id");
-      return apiRequest("POST", `/api/folders/${id}/fetch-all`);
-    },
-  });
-
-  const revealNewContentMutation = useMutation({
-    mutationFn: async () => {
-      if (!id) throw new Error("Missing folder id");
-      return apiRequest("POST", `/api/folders/${id}/mark-displayed`);
+      return apiRequest<FetchAllResponse>("POST", `/api/folders/${id}/fetch-all`, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "sources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
     },
     onError: () => {
-      toast({ title: "حدث خطأ", description: "فشل في إظهار الأخبار الجديدة", variant: "destructive" });
+      toast({
+        title: "حدث خطأ",
+        description: "فشل في تحديث المجلد الآن",
+        variant: "destructive",
+      });
     },
   });
 
   const newContentQuery = useQuery<{ count: number }>({
     queryKey: ["/api/folders", id, "new-content-count"],
-    refetchInterval: 60000,
+    refetchInterval: 15000,
     enabled: !!id,
   });
 
@@ -216,16 +230,78 @@ export default function FolderDetail() {
     }
   };
 
-  const handleRefreshClick = async () => {
-    if (!id) return;
-
-    if (newContentCount > 0) {
-      await revealNewContentMutation.mutateAsync();
+  const runSilentFolderFetch = async () => {
+    if (!id || !folder?.isBackgroundActive || (sources?.length ?? 0) === 0 || silentFetchInFlightRef.current) {
       return;
     }
 
-    queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
-    toast({ title: "لا توجد أخبار جديدة", description: "الأخبار تُجلب تلقائياً في الخلفية" });
+    silentFetchInFlightRef.current = true;
+    try {
+      await apiRequest<FetchAllResponse>("POST", `/api/folders/${id}/fetch-all`, {
+        blocking: false,
+      });
+    } catch (error) {
+      console.error("Silent folder fetch failed:", error);
+    } finally {
+      silentFetchInFlightRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (!id) return;
+
+    if (!folder?.isBackgroundActive || (sources?.length ?? 0) === 0) {
+      initialSilentFetchFolderRef.current = null;
+      return;
+    }
+
+    if (initialSilentFetchFolderRef.current === id) {
+      return;
+    }
+
+    initialSilentFetchFolderRef.current = id;
+    void runSilentFolderFetch();
+  }, [id, folder?.isBackgroundActive, sources?.length]);
+
+  useEffect(() => {
+    if (!id || !folder?.isBackgroundActive || (sources?.length ?? 0) === 0) {
+      return;
+    }
+
+    const intervalMs = Math.max(Math.round((folder.refreshInterval || 0) * 60 * 1000), 15000);
+    const intervalId = window.setInterval(() => {
+      void runSilentFolderFetch();
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [id, folder?.isBackgroundActive, folder?.refreshInterval, sources?.length]);
+
+  const handleRefreshClick = async () => {
+    if (!id || (sources?.length ?? 0) === 0) return;
+
+    const result = await fetchAllSourcesMutation.mutateAsync({
+      blocking: true,
+      revealWhenDone: true,
+      timeoutMs: 20000,
+    });
+
+    if (result.timedOut) {
+      toast({
+        title: "استغرق التحديث وقتاً أطول من المتوقع",
+        description: "استمرينا في المعالجة بالخلفية. جرّب التحديث مرة أخرى بعد قليل.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if ((result.revealedCount ?? 0) === 0 && (result.itemsAdded ?? 0) === 0) {
+      toast({
+        title: "لا توجد أخبار جديدة",
+        description: "المجلد محدث حالياً",
+      });
+    }
   };
 
   if (folderLoading) {
@@ -330,11 +406,11 @@ export default function FolderDetail() {
               variant="outline"
               size="sm"
               onClick={handleRefreshClick}
-              disabled={revealNewContentMutation.isPending || fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
+              disabled={fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
               data-testid="button-refresh-all"
               className="gap-1.5 relative"
             >
-              <RefreshCw className={`h-4 w-4 ${(revealNewContentMutation.isPending || fetchAllSourcesMutation.isPending) ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{newContentCount > 0 ? `${newContentCount} جديد` : "تحديث"}</span>
               {newContentCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />

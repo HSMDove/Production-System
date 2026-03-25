@@ -483,6 +483,12 @@ function buildFallbackSmartViewCards(contentItems: Array<{
   }));
 }
 
+const fetchAllFolderSchema = z.object({
+  blocking: z.boolean().optional(),
+  revealWhenDone: z.boolean().optional(),
+  timeoutMs: z.number().int().positive().max(20000).optional(),
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -823,10 +829,66 @@ export async function registerRoutes(
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
-      res.json({ started: true });
-      fetchFolderContent(req.params.id, folder).catch(e =>
-        console.error(`[Background] fetch-all error for folder ${req.params.id}:`, e)
-      );
+
+      const parsed = fetchAllFolderSchema.safeParse(req.body ?? {});
+      const blocking = parsed.success ? parsed.data.blocking === true : false;
+      const revealWhenDone = parsed.success ? parsed.data.revealWhenDone === true : false;
+      const timeoutMs = parsed.success ? parsed.data.timeoutMs ?? 20000 : 20000;
+
+      if (!blocking) {
+        res.json({ started: true, blocking: false, completed: false, timedOut: false });
+        fetchFolderContent(req.params.id, folder).catch((e) =>
+          console.error(`[Background] fetch-all error for folder ${req.params.id}:`, e)
+        );
+        return;
+      }
+
+      const fetchPromise = fetchFolderContent(req.params.id, folder);
+      const timedResult = await Promise.race([
+        fetchPromise.then((result) => ({ timedOut: false as const, result })),
+        new Promise<{ timedOut: true }>((resolve) => {
+          setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+        }),
+      ]);
+
+      if (timedResult.timedOut) {
+        fetchPromise.catch((e) =>
+          console.error(`[Blocking] fetch-all error for folder ${req.params.id}:`, e)
+        );
+
+        return res.json({
+          started: true,
+          blocking: true,
+          completed: false,
+          timedOut: true,
+          itemsAdded: 0,
+          skipped: 0,
+          revealedCount: 0,
+          remainingNewContentCount: await storage.getUndisplayedContentCount(req.params.id),
+          errors: [],
+        });
+      }
+
+      let revealedCount = 0;
+      if (revealWhenDone) {
+        revealedCount = await storage.getUndisplayedContentCount(req.params.id);
+        if (revealedCount > 0) {
+          await storage.markContentDisplayed(req.params.id);
+        }
+      }
+
+      const remainingNewContentCount = await storage.getUndisplayedContentCount(req.params.id);
+      res.json({
+        started: true,
+        blocking: true,
+        completed: true,
+        timedOut: false,
+        itemsAdded: timedResult.result.itemsAdded,
+        skipped: timedResult.result.skipped,
+        revealedCount,
+        remainingNewContentCount,
+        errors: timedResult.result.errors || [],
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch content from sources" });
     }
@@ -3933,9 +3995,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.7" });
+      res.json({ version: setting?.value || "2.3.8" });
     } catch {
-      res.json({ version: "2.3.7" });
+      res.json({ version: "2.3.8" });
     }
   });
 

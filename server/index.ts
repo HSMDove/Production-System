@@ -9,7 +9,7 @@ import { pool, ensureIntegrationTables } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
-const APP_VERSION = "2.3.7";
+const APP_VERSION = "2.3.8";
 
 declare module "http" {
   interface IncomingMessage {
