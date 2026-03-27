@@ -483,7 +483,7 @@ function SystemSettingsPanel() {
   const { toast } = useToast();
   const { data: settings, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/system-settings"] });
   const { data: fikriConfig, isLoading: fikriLoading } = useQuery<{
-    aiProvider: "openai" | "gemini" | "openrouter";
+    aiProvider: AdminAIProvider;
     aiApiKey: string;
     aiModel: string;
     searchProvider: "brave" | "perplexity";
@@ -495,7 +495,7 @@ function SystemSettingsPanel() {
   const [showAiKey, setShowAiKey] = useState(false);
   const [showSearchKey, setShowSearchKey] = useState(false);
   const [localFikriConfig, setLocalFikriConfig] = useState({
-    aiProvider: "openai" as "openai" | "gemini" | "openrouter",
+    aiProvider: "openai" as AdminAIProvider,
     aiApiKey: "",
     aiModel: "gpt-4o-mini",
     searchProvider: "brave" as "brave" | "perplexity",
@@ -601,6 +601,7 @@ function SystemSettingsPanel() {
                 <SelectTrigger data-testid="select-fikri-ai-provider"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
                   <SelectItem value="gemini">Gemini (Google)</SelectItem>
                   <SelectItem value="openrouter">OpenRouter</SelectItem>
                 </SelectContent>

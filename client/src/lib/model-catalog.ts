@@ -1,7 +1,7 @@
 /**
  * model-catalog.ts
  * ----------------
- * Centralised list of AI providers and their top current models.
+ * Centralised list of AI providers and their top current models (2026).
  * Used by both the Admin Dashboard (Fikri Gateway config) and the
  * User Settings (Custom API section) to render smart <Select> dropdowns
  * instead of asking users to type raw model IDs.
@@ -10,8 +10,8 @@
  * The first entry in each array is treated as the default for that provider.
  */
 
-export type AdminAIProvider = "openai" | "gemini" | "openrouter";
-export type UserAIProvider  = "openai" | "gemini" | "openrouter";
+export type AdminAIProvider = "openai" | "gemini" | "openrouter" | "anthropic";
+export type UserAIProvider  = "openai" | "gemini" | "openrouter" | "anthropic";
 
 export interface ModelOption {
   /** The exact model ID sent to the API */
@@ -21,38 +21,42 @@ export interface ModelOption {
 }
 
 // ---------------------------------------------------------------------------
-// Admin / Fikri Gateway catalog
-// These models map 1-to-1 to the Admin's aiProvider selection.
+// Admin / Fikri Gateway catalog — 2026 model lineup
 // ---------------------------------------------------------------------------
 export const ADMIN_MODEL_CATALOG: Record<AdminAIProvider, ModelOption[]> = {
   openai: [
-    { id: "gpt-4o",          label: "GPT-4o" },
-    { id: "gpt-4o-mini",     label: "GPT-4o Mini" },
-    { id: "o3-mini",         label: "o3 Mini" },
-    { id: "o1",              label: "o1" },
+    { id: "gpt-5.4",      label: "GPT-5.4" },
+    { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+    { id: "gpt-5.4-nano", label: "GPT-5.4 Nano" },
+    { id: "gpt-4.1",      label: "GPT-4.1" },
+    { id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+  ],
+  anthropic: [
+    { id: "claude-opus-4-6",    label: "Claude Opus 4.6" },
+    { id: "claude-sonnet-4-6",  label: "Claude Sonnet 4.6" },
+    { id: "claude-haiku-4-5",   label: "Claude Haiku 4.5" },
+    { id: "claude-opus-4-5",    label: "Claude Opus 4.5" },
+    { id: "claude-sonnet-4-5",  label: "Claude Sonnet 4.5" },
   ],
   gemini: [
-    { id: "gemini-2.5-pro-preview-03-25",   label: "Gemini 2.5 Pro" },
-    { id: "gemini-2.5-flash-preview-04-17", label: "Gemini 2.5 Flash" },
-    { id: "gemini-2.0-flash",               label: "Gemini 2.0 Flash" },
-    { id: "gemini-1.5-pro",                 label: "Gemini 1.5 Pro" },
+    { id: "gemini-3.1-pro-preview",        label: "Gemini 3.1 Pro (Preview)" },
+    { id: "gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite (Preview)" },
+    { id: "gemini-2.5-pro",                label: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash",              label: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-flash-lite",         label: "Gemini 2.5 Flash Lite" },
   ],
   openrouter: [
-    { id: "google/gemini-2.5-pro-preview",         label: "Gemini 2.5 Pro" },
-    { id: "google/gemini-2.5-flash-preview",       label: "Gemini 2.5 Flash" },
-    { id: "anthropic/claude-3-7-sonnet",           label: "Claude 3.7 Sonnet" },
-    { id: "anthropic/claude-3-5-sonnet",           label: "Claude 3.5 Sonnet" },
-    { id: "openai/gpt-4o",                         label: "GPT-4o" },
-    { id: "openai/gpt-4o-mini",                    label: "GPT-4o Mini" },
-    { id: "meta-llama/llama-3.3-70b-instruct",     label: "Llama 3.3 70B" },
-    { id: "deepseek/deepseek-r1",                  label: "DeepSeek R1" },
-    { id: "mistralai/mistral-large",               label: "Mistral Large" },
+    { id: "openai/gpt-5.4",                       label: "GPT-5.4" },
+    { id: "openai/gpt-5.4-mini",                  label: "GPT-5.4 Mini" },
+    { id: "anthropic/claude-opus-4-6",            label: "Claude Opus 4.6" },
+    { id: "google/gemini-3.1-pro-preview",        label: "Gemini 3.1 Pro (Preview)" },
+    { id: "google/gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite (Preview)" },
+    { id: "openrouter/auto",                      label: "نماذج مجانية (متغيرة) - Free" },
   ],
 };
 
 // ---------------------------------------------------------------------------
-// User / Custom API catalog
-// Same structure — users see the same quality models.
+// User / Custom API catalog — mirrors admin catalog
 // ---------------------------------------------------------------------------
 export const USER_MODEL_CATALOG: Record<UserAIProvider, ModelOption[]> = ADMIN_MODEL_CATALOG;
 

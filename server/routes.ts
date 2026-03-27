@@ -9,7 +9,7 @@ import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection } from "./openai";
+import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
@@ -105,6 +105,18 @@ type AssistantEngineResult = {
 type AgentToolResult = {
   type: "internal_search" | "external_search" | "create_idea";
   payload: any;
+};
+
+type AssistantToolPhaseResult = {
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  tools: OpenAI.Chat.Completions.ChatCompletionTool[];
+  client: { chat: { completions: { create: (r: any) => Promise<any> } } };
+  model: string;
+  immediateAnswer: string | null;
+  action: AssistantEngineResult["action"];
+  statusLabel: AssistantEngineResult["statusLabel"];
+  matchedContent: AssistantEngineResult["matchedContent"];
+  createdIdea?: { id: string; title: string };
 };
 
 async function runExternalWebSearch(query: string, userId: string): Promise<any[]> {
@@ -227,7 +239,14 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
   }
 }
 
-async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string, senderDisplayName?: string): Promise<AssistantEngineResult> {
+// Runs the tool-calling phase (up to 3 iterations). Returns the prepared message
+// array plus metadata. If the LLM answered directly (no tools), immediateAnswer is set.
+async function runAssistantToolPhase(
+  userMessage: string,
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+  userId: string,
+  senderDisplayName?: string,
+): Promise<AssistantToolPhaseResult> {
   const [folders, allContent, allIdeas, baseAiPrompt, fikriPersonaStyle] = await Promise.all([
     storage.getAllFolders(userId),
     storage.getAllContent(userId),
@@ -343,8 +362,13 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
 
   const executedTools: AgentToolResult[] = [];
   let createdIdea: { id: string; title: string } | undefined;
+  let immediateAnswer: string | null = null;
+  let action: AssistantEngineResult["action"] = "chat";
+  let statusLabel: AssistantEngineResult["statusLabel"] = "thinking";
+  let matchedContent: AssistantEngineResult["matchedContent"] = [];
 
-  for (let i = 0; i < 4; i++) {
+  // Run at most 3 tool-call iterations; the 4th slot is reserved for the final answer.
+  for (let i = 0; i < 3; i++) {
     const completion = await client.chat.completions.create({
       model,
       messages,
@@ -360,7 +384,8 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
 
     const toolCalls = message.tool_calls || [];
     if (toolCalls.length === 0) {
-      const matchedContent = executedTools
+      // LLM returned a text answer directly — capture it and stop.
+      matchedContent = executedTools
         .filter((t) => t.type === "internal_search")
         .flatMap((t) => t.payload?.items || [])
         .slice(0, 8)
@@ -372,13 +397,10 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
           folderName: item.folderName,
         }));
 
-      return {
-        action: createdIdea ? "save_idea" : matchedContent.length > 0 ? "search_news" : "chat",
-        statusLabel: createdIdea ? "saving_idea" : matchedContent.length > 0 ? "searching_news" : "thinking",
-        answer: message.content || "تمت المعالجة.",
-        matchedContent,
-        createdIdea,
-      };
+      action = createdIdea ? "save_idea" : matchedContent.length > 0 ? "search_news" : "chat";
+      statusLabel = createdIdea ? "saving_idea" : matchedContent.length > 0 ? "searching_news" : "thinking";
+      immediateAnswer = message.content || "تمت المعالجة.";
+      break;
     }
 
     for (const call of toolCalls) {
@@ -456,12 +478,41 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     }
   }
 
+  // If createdIdea and no immediate answer yet, set action metadata.
+  if (immediateAnswer === null && createdIdea) {
+    action = "save_idea";
+    statusLabel = "saving_idea";
+  }
+
+  return { messages, tools, client, model, immediateAnswer, action, statusLabel, matchedContent, createdIdea };
+}
+
+async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string, senderDisplayName?: string): Promise<AssistantEngineResult> {
+  const phase = await runAssistantToolPhase(userMessage, history, userId, senderDisplayName);
+
+  if (phase.immediateAnswer !== null) {
+    return {
+      action: phase.action,
+      statusLabel: phase.statusLabel,
+      answer: phase.immediateAnswer,
+      matchedContent: phase.matchedContent,
+      createdIdea: phase.createdIdea,
+    };
+  }
+
+  // All 3 tool iterations were consumed — make the final batch answer call.
+  const completion = await phase.client.chat.completions.create({
+    model: phase.model,
+    messages: phase.messages,
+    temperature: 0.2,
+  });
+
   return {
-    action: createdIdea ? "save_idea" : "chat",
-    statusLabel: createdIdea ? "saving_idea" : "thinking",
-    answer: createdIdea ? `تم حفظ الفكرة بعنوان: ${createdIdea.title}` : "تعذر إكمال المعالجة الآن.",
-    matchedContent: [],
-    createdIdea,
+    action: phase.action,
+    statusLabel: phase.statusLabel,
+    answer: completion.choices[0]?.message?.content || "تعذر إكمال المعالجة الآن.",
+    matchedContent: phase.matchedContent,
+    createdIdea: phase.createdIdea,
   };
 }
 
@@ -1721,6 +1772,88 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Assistant chat error:", error);
       res.status(500).json({ error: error?.message || "Failed to process assistant chat" });
+    }
+  });
+
+  // Streaming variant — returns Server-Sent Events so the AI response types out token-by-token.
+  app.post("/api/assistant/chat/stream", checkFeatureFlag("fikri_enabled"), async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const sendEvent = (type: string, data: object) => {
+      res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const body = req.body as AssistantChatRequest & { conversationId?: string };
+      const userMessage = body?.message?.trim();
+      const userId = req.session.userId!;
+
+      if (!userMessage) {
+        sendEvent("error", { message: "الرسالة مطلوبة" });
+        return res.end();
+      }
+
+      let conversationId = body.conversationId;
+      if (conversationId) {
+        const existing = await storage.getAssistantConversationById(conversationId);
+        if (!existing || existing.userId !== userId) conversationId = undefined;
+      }
+      if (!conversationId) {
+        const created = await storage.createAssistantConversation({
+          title: userMessage.slice(0, 60),
+          userId,
+        } as any);
+        conversationId = created.id;
+      }
+
+      // Immediately tell the client the conversationId so it can update its state.
+      sendEvent("meta", { conversationId });
+
+      // Persist the user turn before streaming the assistant reply.
+      await storage.createAssistantMessage({ conversationId, role: "user", content: userMessage });
+
+      const existingMessages = await storage.getAssistantMessagesByConversationId(conversationId);
+      // Exclude the user message we just saved (last item) from history.
+      const history = existingMessages
+        .slice(0, -1)
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      const mergedHistory = [...history, ...(body.history || [])].slice(-16);
+
+      const webUser = await storage.getUserById(userId);
+      const phase   = await runAssistantToolPhase(userMessage, mergedHistory, userId, webUser?.name || undefined);
+
+      let fullAnswer = "";
+
+      if (phase.immediateAnswer !== null) {
+        // LLM answered without calling any tools — emit the full answer as one chunk.
+        fullAnswer = phase.immediateAnswer;
+        sendEvent("token", { text: fullAnswer });
+      } else {
+        // Tools were used; now stream the final answer using the provider's native SSE.
+        const streamCtx = await getStreamCapableAIClient(userId);
+        for await (const token of streamAITokens(phase.messages as any, streamCtx)) {
+          fullAnswer += token;
+          sendEvent("token", { text: token });
+        }
+      }
+
+      await storage.createAssistantMessage({
+        conversationId,
+        role: "assistant",
+        content: fullAnswer || "تعذر إكمال المعالجة.",
+        action: phase.action,
+      });
+
+      sendEvent("done", { conversationId, action: phase.action });
+      res.end();
+    } catch (error: any) {
+      console.error("Assistant stream error:", error);
+      sendEvent("error", { message: error?.message || "حدث خطأ في معالجة الطلب" });
+      res.end();
     }
   });
 

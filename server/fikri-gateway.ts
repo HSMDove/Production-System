@@ -10,7 +10,7 @@ export const LEGACY_FIKRI_SYSTEM_SETTING_KEYS = [
   "default_search_api_key",
 ] as const;
 
-export const fikriAiProviderSchema = z.enum(["openai", "gemini", "openrouter"]);
+export const fikriAiProviderSchema = z.enum(["openai", "gemini", "openrouter", "anthropic"]);
 export const fikriSearchProviderSchema = z.enum(["brave", "perplexity"]);
 
 export const fikriGatewayConfigSchema = z.object({

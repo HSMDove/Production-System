@@ -123,6 +123,61 @@ function createGeminiChatClient(apiKey: string): AIChatClient {
   };
 }
 
+function createAnthropicChatClient(apiKey: string): AIChatClient {
+  return {
+    chat: {
+      completions: {
+        create: async (request: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+          const systemMessages = request.messages.filter((m) => m.role === "system");
+          const chatMessages = request.messages.filter((m) => m.role !== "system");
+          const systemContent = systemMessages
+            .map((m) => (typeof m.content === "string" ? m.content : ""))
+            .filter(Boolean)
+            .join("\n\n");
+
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: request.model,
+              ...(systemContent ? { system: systemContent } : {}),
+              messages: chatMessages.map((m) => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+              })),
+              max_tokens: request.max_tokens || 4096,
+              temperature: request.temperature,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorBody = await response.text().catch(() => "");
+            throw new Error(`Anthropic API error ${response.status}: ${errorBody.slice(0, 300)}`);
+          }
+
+          const data = await response.json() as any;
+          const text = (data?.content || [])
+            .filter((b: any) => b.type === "text")
+            .map((b: any) => b.text || "")
+            .join("")
+            .trim();
+
+          return {
+            choices: [{ message: { content: text || null } }],
+            usage: {
+              total_tokens: (data?.usage?.input_tokens || 0) + (data?.usage?.output_tokens || 0),
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
 function createSystemGatewayClient(config: FikriGatewayConfig): { client: AIChatClient; model: string; miniModel: string; providerUsed: ApiProviderType } {
   const apiKey = config.aiApiKey.trim();
   const model = config.aiModel.trim();
@@ -141,6 +196,15 @@ function createSystemGatewayClient(config: FikriGatewayConfig): { client: AIChat
       model,
       miniModel: model,
       providerUsed: "system_gemini",
+    };
+  }
+
+  if (config.aiProvider === "anthropic") {
+    return {
+      client: createAnthropicChatClient(apiKey),
+      model,
+      miniModel: model,
+      providerUsed: "system_openai",
     };
   }
 
@@ -199,8 +263,8 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
 
   if (provider === "custom") {
     const apiKey = userSettings.get("ai_custom_api_key");
-    // ai_custom_provider: "openai" | "openrouter" | "gemini" (defaults to "openai")
-    const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini";
+    // ai_custom_provider: "openai" | "openrouter" | "gemini" | "anthropic" (defaults to "openai")
+    const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini" | "anthropic";
     const model = userSettings.get("ai_custom_model") || "gpt-4o";
 
     if (!apiKey || !apiKey.trim()) {
@@ -211,6 +275,16 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     if (customProvider === "gemini") {
       return {
         client: createGeminiChatClient(apiKey.trim()),
+        model,
+        miniModel: model,
+        providerUsed: "user_custom_api",
+      };
+    }
+
+    // Anthropic uses its own Messages API
+    if (customProvider === "anthropic") {
+      return {
+        client: createAnthropicChatClient(apiKey.trim()),
         model,
         miniModel: model,
         providerUsed: "user_custom_api",
@@ -1262,4 +1336,174 @@ ${templatePrompt}
     console.error("Error generating smart ideas:", error);
     throw new Error("Failed to generate smart ideas from AI");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Streaming support — used by the /api/assistant/chat/stream endpoint
+// ---------------------------------------------------------------------------
+
+export type StreamCapableAIClient =
+  | { type: "openai";     client: OpenAI; model: string; providerUsed: ApiProviderType }
+  | { type: "gemini";     apiKey: string; model: string; providerUsed: ApiProviderType }
+  | { type: "anthropic";  apiKey: string; model: string; providerUsed: ApiProviderType };
+
+/** Returns a stream-capable AI client mirroring the same provider resolution as getAIClient. */
+export async function getStreamCapableAIClient(userId?: string): Promise<StreamCapableAIClient> {
+  const userSettings = await getSettingsMap(userId);
+  const provider = userSettings.get("ai_provider") || "default";
+
+  if (provider === "custom") {
+    const apiKey = (userSettings.get("ai_custom_api_key") || "").trim();
+    const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini" | "anthropic";
+    const model = userSettings.get("ai_custom_model") || "gpt-4o";
+    if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
+    if (customProvider === "gemini")    return { type: "gemini",    apiKey, model, providerUsed: "user_custom_api" };
+    if (customProvider === "anthropic") return { type: "anthropic", apiKey, model, providerUsed: "user_custom_api" };
+    const opts: ConstructorParameters<typeof OpenAI>[0] = { apiKey };
+    const storedBase = userSettings.get("ai_custom_base_url");
+    if (storedBase?.trim()) {
+      opts.baseURL = storedBase.trim();
+    } else if (customProvider === "openrouter") {
+      opts.baseURL = "https://openrouter.ai/api/v1";
+      opts.defaultHeaders = { "HTTP-Referer": process.env.APP_URL || "https://nasaq.app", "X-Title": "Nasaq" };
+    }
+    return { type: "openai", client: new OpenAI(opts), model, providerUsed: "user_custom_api" };
+  }
+
+  if (provider === "local") {
+    const apiKey = (userSettings.get("ai_custom_api_key") || "local").trim();
+    const model = userSettings.get("ai_custom_model") || "llama3";
+    const baseURL = (userSettings.get("ai_custom_base_url") || "").trim();
+    if (!baseURL) throw new Error("يرجى إدخال Base URL للنموذج المحلي");
+    return { type: "openai", client: new OpenAI({ apiKey, baseURL }), model, providerUsed: "user_local" };
+  }
+
+  // default → Admin Fikri Gateway
+  const config = await getFikriGatewayConfig();
+  const apiKey = config.aiApiKey.trim();
+  const model = config.aiModel.trim();
+  if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في محرك فكري داخل لوحة الإدارة");
+  if (!model)  throw new Error("يرجى إدخال اسم نموذج صحيح في محرك فكري داخل لوحة الإدارة");
+
+  if (config.aiProvider === "gemini")    return { type: "gemini",    apiKey, model, providerUsed: "system_gemini" };
+  if (config.aiProvider === "anthropic") return { type: "anthropic", apiKey, model, providerUsed: "system_openai" };
+
+  const opts: ConstructorParameters<typeof OpenAI>[0] = { apiKey };
+  if (config.aiProvider === "openrouter") {
+    opts.baseURL = "https://openrouter.ai/api/v1";
+    opts.defaultHeaders = { "HTTP-Referer": process.env.APP_URL || "https://nasaq.app", "X-Title": "Nasaq" };
+  }
+  return {
+    type: "openai",
+    client: new OpenAI(opts),
+    model,
+    providerUsed: config.aiProvider === "openrouter" ? "system_openrouter" : "system_openai",
+  };
+}
+
+/**
+ * Async generator that streams text tokens from the given provider.
+ * For OpenAI/OpenRouter: uses native SDK streaming (stream: true).
+ * For Anthropic: parses Anthropic SSE format.
+ * For Gemini: falls back to a single batch call (Gemini SSE is not yet wired).
+ */
+export async function* streamAITokens(
+  messages: Array<{ role: string; content: any }>,
+  streamCtx: StreamCapableAIClient,
+): AsyncGenerator<string> {
+  if (streamCtx.type === "openai") {
+    const stream = await streamCtx.client.chat.completions.create({
+      model: streamCtx.model,
+      messages: messages as any,
+      stream: true,
+      temperature: 0.2,
+    });
+    for await (const chunk of stream as any) {
+      const text: string = chunk.choices?.[0]?.delta?.content || "";
+      if (text) yield text;
+    }
+    return;
+  }
+
+  if (streamCtx.type === "anthropic") {
+    const systemMsgs = messages.filter((m) => m.role === "system");
+    const chatMsgs   = messages.filter((m) => m.role !== "system");
+    const systemContent = systemMsgs
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .filter(Boolean)
+      .join("\n\n");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": streamCtx.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: streamCtx.model,
+        ...(systemContent ? { system: systemContent } : {}),
+        messages: chatMsgs.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        })),
+        max_tokens: 4096,
+        temperature: 0.2,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(`Anthropic API error ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta.text) {
+            yield evt.delta.text as string;
+          }
+        } catch { /* ignore malformed SSE lines */ }
+      }
+    }
+    return;
+  }
+
+  // Gemini — batch, emit full response as one "token"
+  const geminiResponse = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${streamCtx.model}:generateContent?key=${encodeURIComponent(streamCtx.apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{ text: messages.filter((m) => m.role !== "system").map((m) => m.content).join("\n") }],
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+      }),
+    },
+  );
+  if (!geminiResponse.ok) {
+    const errText = await geminiResponse.text().catch(() => "");
+    throw new Error(`Gemini API error ${geminiResponse.status}: ${errText.slice(0, 300)}`);
+  }
+  const geminiData = await geminiResponse.json() as any;
+  const geminiText: string = (geminiData?.candidates?.[0]?.content?.parts || [])
+    .map((p: any) => p?.text || "")
+    .join("")
+    .trim();
+  if (geminiText) yield geminiText;
 }

@@ -23,24 +23,46 @@ interface ConversationItem { id: string; title: string; createdAt: string; updat
 interface MessageItem { id: string; role: ChatRole; content: string; action?: string | null; createdAt: string; }
 interface ConversationMessagesResponse { conversation: ConversationItem; messages: MessageItem[]; }
 
-const loadingLabels: Record<string, string> = {
-  searching_news: "يبحث في الأخبار...",
-  saving_idea: "يحفظ الفكرة...",
-  thinking: "يفكّر...",
-};
+// Reusable Markdown renderer for assistant messages
+const MarkdownMessage = ({ content }: { content: string }) => (
+  <ReactMarkdown
+    components={{
+      p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+      strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+      em:     ({ children }) => <em className="italic">{children}</em>,
+      ul:     ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+      ol:     ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+      li:     ({ children }) => <li className="ml-4">{children}</li>,
+      h1:     ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
+      h2:     ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
+      h3:     ({ children }) => <h3 className="font-bold text-sm mb-1">{children}</h3>,
+      code:   ({ children }) => <code className="bg-background/50 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
+      a:      ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
+    }}
+  >
+    {content}
+  </ReactMarkdown>
+);
 
 export function FikriOverlay() {
   const { open, setOpen } = useFikriOverlay();
 
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [isNewMode, setIsNewMode] = useState(false);
-  const [input, setInput] = useState("");
+  const [isNewMode, setIsNewMode]     = useState(false);
+  const [input, setInput]             = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
+  const [editingId, setEditingId]     = useState<string | null>(null);
+  const [editTitle, setEditTitle]     = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [chatError, setChatError]     = useState<string | null>(null);
+
+  // Streaming state
+  const [isStreaming, setIsStreaming]         = useState(false);
+  const [pendingUserMsg, setPendingUserMsg]   = useState<string | null>(null);
+  const [streamingText, setStreamingText]     = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const autoResize = useCallback(() => {
@@ -68,25 +90,7 @@ export function FikriOverlay() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversationData?.messages, chatError]);
-
-  const chatMutation = useMutation({
-    mutationFn: async ({ message, conversationId }: { message: string; conversationId: string }) => {
-      setChatError(null);
-      return apiRequest<{ answer: string; statusLabel?: string; conversationId: string }>("POST", "/api/assistant/chat", { message, conversationId });
-    },
-    onSuccess: (data) => {
-      const convId = data.conversationId || activeConversationId;
-      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations", convId, "messages"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
-    },
-    onError: (error: Error) => {
-      const errorText = error.message || "فشل إرسال الرسالة";
-      const match = errorText.match(/\d+:\s*\{?"?error"?:?\s*"?([^"}\n]+)"?\}?/);
-      const cleanMessage = match ? match[1] : errorText.replace(/^\d+:\s*/, "");
-      setChatError(cleanMessage);
-    },
-  });
+  }, [conversationData?.messages, streamingText, pendingUserMsg, chatError]);
 
   const deleteConversationMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/assistant/conversations/${id}`),
@@ -103,26 +107,96 @@ export function FikriOverlay() {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || chatMutation.isPending) return;
+    if (!text || isStreaming) return;
 
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "36px";
-    const convId = activeConversationId || "new";
-    chatMutation.mutate(
-      { message: text, conversationId: convId === "new" ? "" : convId },
-      {
-        onSuccess: (data) => {
-          if (data.conversationId && !activeConversationId) {
-            setActiveConversationId(data.conversationId);
-            setIsNewMode(false);
-          }
-        },
+    setChatError(null);
+
+    const convId = activeConversationId || "";
+
+    // Immediately show user message in UI (optimistic)
+    setPendingUserMsg(text);
+    setStreamingText("");
+    setIsStreaming(true);
+
+    try {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+
+      const response = await fetch("/api/assistant/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, conversationId: convId }),
+        signal: ctrl.signal,
+      });
+
+      if (!response.ok || !response.body) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(errText || `HTTP ${response.status}`);
       }
-    );
+
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = "";
+      let doneConvId: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double-newlines (SSE event boundaries)
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          let eventType = "message";
+          let dataStr   = "";
+
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: "))      eventType = line.slice(7).trim();
+            else if (line.startsWith("data: "))  dataStr   = line.slice(6).trim();
+          }
+
+          if (!dataStr) continue;
+
+          let data: any;
+          try { data = JSON.parse(dataStr); } catch { continue; }
+
+          if (eventType === "meta" && data.conversationId) {
+            doneConvId = data.conversationId;
+            if (!activeConversationId) {
+              setActiveConversationId(data.conversationId);
+              setIsNewMode(false);
+            }
+          } else if (eventType === "token" && typeof data.text === "string") {
+            setStreamingText((prev) => prev + data.text);
+          } else if (eventType === "done") {
+            const finalConvId = data.conversationId || doneConvId || activeConversationId;
+            queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations", finalConvId, "messages"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
+          } else if (eventType === "error") {
+            throw new Error(data.message || "فشل إرسال الرسالة");
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        const errorText = err.message || "فشل إرسال الرسالة";
+        const match = errorText.match(/\d+:\s*\{?"?error"?:?\s*"?([^"}\n]+)"?\}?/);
+        setChatError(match ? match[1] : errorText.replace(/^\d+:\s*/, ""));
+      }
+    } finally {
+      setPendingUserMsg(null);
+      setStreamingText("");
+      setIsStreaming(false);
+      abortRef.current = null;
+    }
   };
 
   const messages = conversationData?.messages || [];
-  const pendingLabel = chatMutation.isPending ? (loadingLabels[(chatMutation.variables as any)?.statusLabel || "thinking"] ?? "يفكّر...") : null;
 
   if (!open) return null;
 
@@ -195,7 +269,10 @@ export function FikriOverlay() {
                           value={editTitle}
                           onChange={(e) => setEditTitle(e.target.value)}
                           className="h-7 text-xs flex-1"
-                          onKeyDown={(e) => { if (e.key === "Enter") updateConversationMutation.mutate({ id: conv.id, title: editTitle }); if (e.key === "Escape") setEditingId(null); }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") updateConversationMutation.mutate({ id: conv.id, title: editTitle });
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
                           autoFocus
                         />
                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => updateConversationMutation.mutate({ id: conv.id, title: editTitle })}><Check className="h-3 w-3" /></Button>
@@ -219,7 +296,7 @@ export function FikriOverlay() {
           <>
             {/* Chat Messages */}
             <ScrollArea className="flex-1 p-4">
-              {!activeConversationId && isNewMode && (
+              {!activeConversationId && isNewMode && !pendingUserMsg && (
                 <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                   <Bot className="h-8 w-8 text-primary/50" />
                   <p className="text-sm text-muted-foreground">ابدأ محادثة جديدة مع فكري</p>
@@ -231,9 +308,11 @@ export function FikriOverlay() {
                 </div>
               )}
               <div className="space-y-3">
-                {messages.length === 0 && activeConversationId && !messagesLoading && (
+                {messages.length === 0 && activeConversationId && !messagesLoading && !pendingUserMsg && (
                   <p className="text-center text-muted-foreground text-sm py-4">ابدأ المحادثة بسؤال فكري</p>
                 )}
+
+                {/* Persisted messages */}
                 {messages.map((m) => (
                   <div
                     key={m.id}
@@ -244,36 +323,36 @@ export function FikriOverlay() {
                         : "bg-primary text-primary-foreground mr-6 text-left"
                     }`}
                   >
-                    {m.role === "assistant" ? (
-                      <ReactMarkdown
-                        components={{
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                          strong: ({ children }) => <strong className="font-bold">{children}</strong>,
-                          em: ({ children }) => <em className="italic">{children}</em>,
-                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
-                          li: ({ children }) => <li className="ml-4">{children}</li>,
-                          h1: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
-                          h2: ({ children }) => <h3 className="font-bold text-base mb-1">{children}</h3>,
-                          h3: ({ children }) => <h3 className="font-bold text-sm mb-1">{children}</h3>,
-                          code: ({ children }) => <code className="bg-background/50 rounded px-1 py-0.5 text-xs font-mono">{children}</code>,
-                          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline">{children}</a>,
-                        }}
-                      >
-                        {m.content}
-                      </ReactMarkdown>
-                    ) : (
-                      m.content
-                    )}
+                    {m.role === "assistant" ? <MarkdownMessage content={m.content} /> : m.content}
                   </div>
                 ))}
-                {chatMutation.isPending && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {pendingLabel ?? "يفكّر..."}
+
+                {/* Optimistic user message (shown immediately on send) */}
+                {pendingUserMsg && (
+                  <div className="rounded-2xl px-3 py-2 text-sm leading-relaxed text-left bg-primary text-primary-foreground mr-6">
+                    {pendingUserMsg}
                   </div>
                 )}
-                {chatError && !chatMutation.isPending && (
+
+                {/* Live streaming assistant response */}
+                {isStreaming && (
+                  <div dir="rtl" className="rounded-2xl px-3 py-2 text-sm leading-relaxed text-right bg-muted text-foreground">
+                    {streamingText ? (
+                      <>
+                        <MarkdownMessage content={streamingText} />
+                        <span className="inline-block w-0.5 h-4 bg-primary/70 animate-pulse ml-0.5 align-middle" />
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>يفكّر...</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Error message */}
+                {chatError && !isStreaming && (
                   <div className="rounded-2xl px-3 py-2 text-sm leading-relaxed bg-destructive/10 border border-destructive/30 text-destructive" data-testid="fikri-chat-error">
                     <div className="flex items-center justify-between gap-2">
                       <span>⚠️ {chatError}</span>
@@ -283,6 +362,7 @@ export function FikriOverlay() {
                     </div>
                   </div>
                 )}
+
                 <div ref={bottomRef} />
               </div>
             </ScrollArea>
@@ -291,12 +371,12 @@ export function FikriOverlay() {
             <div className="flex gap-2 border-t border-border p-3 shrink-0 items-end">
               <Button
                 onClick={handleSend}
-                disabled={chatMutation.isPending || !input.trim()}
+                disabled={isStreaming || !input.trim()}
                 size="icon"
                 className="shrink-0"
                 data-testid="button-send-fikri"
               >
-                {chatMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
               <textarea
                 ref={textareaRef}
