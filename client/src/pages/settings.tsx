@@ -21,6 +21,7 @@ import { PromptTemplatesList } from "@/components/templates/prompt-templates-lis
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { getThemeOption, themeOptions } from "@/lib/theme-options";
+import { USER_MODEL_CATALOG, getDefaultModel, type UserAIProvider } from "@/lib/model-catalog";
 
 type PlatformIdEntry = { id: string; platform: string; platformId: string; label: string | null; createdAt: string };
 type IntegrationChannelEntry = { id: string; platform: string; name: string; credentials: Record<string, string>; isActive: boolean; createdAt: string };
@@ -74,7 +75,7 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.4.0";
+  const appVersion = versionData?.version || "2.4.1";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
@@ -1249,7 +1250,7 @@ export default function Settings() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     {
-                      value: "replit",
+                      value: "default",
                       label: "الافتراضي",
                       desc: "يستخدم محرك فكري الذي يضبطه المدير",
                       icon: "⚡",
@@ -1257,7 +1258,7 @@ export default function Settings() {
                     {
                       value: "custom",
                       label: "API مخصص",
-                      desc: "مفتاحك الشخصي عبر واجهة OpenAI-compatible",
+                      desc: "مفتاحك الشخصي (OpenAI, Gemini, OpenRouter)",
                       icon: "🔑",
                     },
                     {
@@ -1267,7 +1268,9 @@ export default function Settings() {
                       icon: "💻",
                     },
                   ].map((opt) => {
-                    const selected = (localSettings.ai_provider || "replit") === opt.value;
+                    // Treat legacy "replit" value as "default" for display purposes
+                    const currentProvider = localSettings.ai_provider === "replit" ? "default" : (localSettings.ai_provider || "default");
+                    const selected = currentProvider === opt.value;
                     return (
                       <button
                         key={opt.value}
@@ -1288,28 +1291,82 @@ export default function Settings() {
                 </div>
 
                 {/* Fields for custom API */}
-                {localSettings.ai_provider === "custom" && (
-                  <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
-                    <p className="text-sm font-medium">إعدادات API المخصص</p>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                {localSettings.ai_provider === "custom" && (() => {
+                  const customProvider = (localSettings.ai_custom_provider || "openai") as UserAIProvider;
+                  const modelList = USER_MODEL_CATALOG[customProvider] ?? [];
+                  const currentModel = localSettings.ai_custom_model || "";
+                  const modelInList = modelList.some((m) => m.id === currentModel);
+                  const selectedModel = modelInList ? currentModel : getDefaultModel(USER_MODEL_CATALOG, customProvider);
+                  return (
+                    <div className="rounded-xl border p-4 space-y-3 bg-muted/30">
+                      <p className="text-sm font-medium">إعدادات API المخصص</p>
+
+                      {/* Provider selector */}
+                      <div className="space-y-1">
+                        <Label>مزود الذكاء الاصطناعي</Label>
+                        <Select
+                          value={customProvider}
+                          onValueChange={(value: UserAIProvider) => {
+                            updateSetting("ai_custom_provider", value);
+                            // Reset model to first of new provider
+                            updateSetting("ai_custom_model", getDefaultModel(USER_MODEL_CATALOG, value));
+                          }}
+                          data-testid="select-custom-provider"
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="openai">OpenAI</SelectItem>
+                            <SelectItem value="gemini">Gemini (Google)</SelectItem>
+                            <SelectItem value="openrouter">OpenRouter</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {customProvider === "openrouter" && "يتيح لك الوصول لنماذج OpenAI و Gemini و Claude بمفتاح واحد."}
+                          {customProvider === "gemini" && "استخدم مفتاح Google AI Studio مباشرةً."}
+                          {customProvider === "openai" && "مفتاح OpenAI الرسمي."}
+                        </p>
+                      </div>
+
+                      {/* API Key */}
                       <div className="space-y-1">
                         <Label>API Key</Label>
-                        <Input type="password" placeholder="sk-... أو key-..." value={localSettings.ai_custom_api_key || ""} onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)} dir="ltr" data-testid="input-llm-api-key" />
-                        <p className="text-xs text-muted-foreground">مفتاح الوصول للـ API</p>
+                        <Input
+                          type="password"
+                          placeholder={
+                            customProvider === "openai" ? "sk-..." :
+                            customProvider === "gemini" ? "AIza..." :
+                            "sk-or-..."
+                          }
+                          value={localSettings.ai_custom_api_key || ""}
+                          onChange={(e) => updateSetting("ai_custom_api_key", e.target.value)}
+                          dir="ltr"
+                          data-testid="input-llm-api-key"
+                        />
+                        <p className="text-xs text-muted-foreground">مفتاح الوصول للـ API — الـ Base URL يُضبط تلقائياً بناءً على المزود</p>
                       </div>
+
+                      {/* Smart model dropdown */}
                       <div className="space-y-1">
-                        <Label>اسم النموذج</Label>
-                        <Input placeholder="gpt-4o / claude-3-5-sonnet" value={localSettings.ai_custom_model || ""} onChange={(e) => updateSetting("ai_custom_model", e.target.value)} dir="ltr" data-testid="input-llm-model" />
-                        <p className="text-xs text-muted-foreground">اسم النموذج الذي تريد استخدامه</p>
+                        <Label>النموذج</Label>
+                        <Select
+                          value={selectedModel}
+                          onValueChange={(value) => updateSetting("ai_custom_model", value)}
+                          data-testid="select-custom-model"
+                        >
+                          <SelectTrigger><SelectValue placeholder="اختر نموذجاً…" /></SelectTrigger>
+                          <SelectContent>
+                            {modelList.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground" dir="ltr">{selectedModel}</p>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <Label>Base URL (اختياري)</Label>
-                      <Input placeholder="https://api.openai.com/v1" value={localSettings.ai_custom_base_url || ""} onChange={(e) => updateSetting("ai_custom_base_url", e.target.value)} dir="ltr" data-testid="input-llm-base-url" />
-                      <p className="text-xs text-muted-foreground">اتركه فارغاً لاستخدام OpenAI المباشر. غيّره للمزودين الآخرين مثل Anthropic أو Together.</p>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Fields for local model */}
                 {localSettings.ai_provider === "local" && (
@@ -1337,7 +1394,8 @@ export default function Settings() {
                   </div>
                 )}
 
-                {localSettings.ai_provider === "replit" && (
+                {/* Default / Fikri Gateway banner */}
+                {(localSettings.ai_provider === "default" || localSettings.ai_provider === "replit" || !localSettings.ai_provider) && (
                   <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
                     <Check className="h-4 w-4 text-green-500 shrink-0" />
                     <p className="text-sm text-muted-foreground">سيتم استخدام مزود الذكاء الافتراضي المضبوط من لوحة الإدارة داخل محرك فكري.</p>

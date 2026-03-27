@@ -146,7 +146,15 @@ function createSystemGatewayClient(config: FikriGatewayConfig): { client: AIChat
 
   const openAiClient = new OpenAI({
     apiKey,
-    ...(config.aiProvider === "openrouter" ? { baseURL: "https://openrouter.ai/api/v1" } : {}),
+    ...(config.aiProvider === "openrouter"
+      ? {
+          baseURL: "https://openrouter.ai/api/v1",
+          defaultHeaders: {
+            "HTTP-Referer": process.env.APP_URL || "https://nasaq.app",
+            "X-Title": "Nasaq",
+          },
+        }
+      : {}),
   });
 
   return {
@@ -186,20 +194,46 @@ export type AIClientResult = { client: AIChatClient; model: string; miniModel: s
 export async function getAIClient(userId?: string): Promise<AIClientResult> {
   const userSettings = await getSettingsMap(userId);
 
-  const provider = userSettings.get("ai_provider") || "replit";
+  // "default" is the new canonical value; "replit" is kept for backward compat
+  const provider = userSettings.get("ai_provider") || "default";
 
   if (provider === "custom") {
     const apiKey = userSettings.get("ai_custom_api_key");
-    const baseURL = userSettings.get("ai_custom_base_url");
+    // ai_custom_provider: "openai" | "openrouter" | "gemini" (defaults to "openai")
+    const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini";
     const model = userSettings.get("ai_custom_model") || "gpt-4o";
 
     if (!apiKey || !apiKey.trim()) {
       throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
     }
 
-    const clientOpts: { apiKey: string; baseURL?: string } = { apiKey: apiKey.trim() };
-    if (baseURL && baseURL.trim()) {
-      clientOpts.baseURL = baseURL.trim();
+    // Gemini uses its own native HTTP client — no OpenAI SDK needed
+    if (customProvider === "gemini") {
+      return {
+        client: createGeminiChatClient(apiKey.trim()),
+        model,
+        miniModel: model,
+        providerUsed: "user_custom_api",
+      };
+    }
+
+    // Auto-resolve baseURL from provider; user can override via ai_custom_base_url
+    const storedBaseURL = userSettings.get("ai_custom_base_url");
+    let resolvedBaseURL: string | undefined;
+    if (storedBaseURL && storedBaseURL.trim()) {
+      resolvedBaseURL = storedBaseURL.trim();
+    } else if (customProvider === "openrouter") {
+      resolvedBaseURL = "https://openrouter.ai/api/v1";
+    }
+    // for "openai" leave undefined → uses OpenAI's default endpoint
+
+    const clientOpts: ConstructorParameters<typeof OpenAI>[0] = { apiKey: apiKey.trim() };
+    if (resolvedBaseURL) clientOpts.baseURL = resolvedBaseURL;
+    if (customProvider === "openrouter") {
+      clientOpts.defaultHeaders = {
+        "HTTP-Referer": process.env.APP_URL || "https://nasaq.app",
+        "X-Title": "Nasaq",
+      };
     }
 
     return {
@@ -227,6 +261,7 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     };
   }
 
+  // "default", "replit", or any unrecognised value → Admin Fikri Gateway
   const defaults = await getFikriGatewayConfig();
   return createSystemGatewayClient(defaults);
 }

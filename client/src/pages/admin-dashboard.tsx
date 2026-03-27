@@ -18,6 +18,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
+import { ADMIN_MODEL_CATALOG, getDefaultModel, type AdminAIProvider } from "@/lib/model-catalog";
 
 type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit";
 
@@ -586,11 +587,21 @@ function SystemSettingsPanel() {
           <div className="space-y-4 rounded-2xl border p-4 bg-muted/20">
             <div className="space-y-1">
               <Label>مزود الذكاء الاصطناعي</Label>
-              <Select value={localFikriConfig.aiProvider} onValueChange={(value: "openai" | "gemini" | "openrouter") => setLocalFikriConfig((prev) => ({ ...prev, aiProvider: value }))}>
+              <Select
+                value={localFikriConfig.aiProvider}
+                onValueChange={(value: AdminAIProvider) =>
+                  setLocalFikriConfig((prev) => ({
+                    ...prev,
+                    aiProvider: value,
+                    // Reset model to the first model of the new provider
+                    aiModel: getDefaultModel(ADMIN_MODEL_CATALOG, value),
+                  }))
+                }
+              >
                 <SelectTrigger data-testid="select-fikri-ai-provider"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="gemini">Gemini</SelectItem>
+                  <SelectItem value="gemini">Gemini (Google)</SelectItem>
                   <SelectItem value="openrouter">OpenRouter</SelectItem>
                 </SelectContent>
               </Select>
@@ -616,14 +627,32 @@ function SystemSettingsPanel() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label>اسم النموذج</Label>
-              <Input
-                value={localFikriConfig.aiModel}
-                onChange={(e) => setLocalFikriConfig((prev) => ({ ...prev, aiModel: e.target.value }))}
-                dir="ltr"
-                placeholder="gpt-4o / gemini-2.5-flash / openai/gpt-4o-mini"
-                data-testid="input-fikri-ai-model"
-              />
+              <Label>النموذج</Label>
+              <Select
+                value={
+                  ADMIN_MODEL_CATALOG[localFikriConfig.aiProvider]?.some(
+                    (m) => m.id === localFikriConfig.aiModel
+                  )
+                    ? localFikriConfig.aiModel
+                    : getDefaultModel(ADMIN_MODEL_CATALOG, localFikriConfig.aiProvider)
+                }
+                onValueChange={(value) =>
+                  setLocalFikriConfig((prev) => ({ ...prev, aiModel: value }))
+                }
+                data-testid="select-fikri-ai-model"
+              >
+                <SelectTrigger><SelectValue placeholder="اختر نموذجاً…" /></SelectTrigger>
+                <SelectContent>
+                  {(ADMIN_MODEL_CATALOG[localFikriConfig.aiProvider] ?? []).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground" dir="ltr">
+                {localFikriConfig.aiModel}
+              </p>
             </div>
           </div>
 

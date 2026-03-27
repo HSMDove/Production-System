@@ -4157,9 +4157,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.4.0" });
+      res.json({ version: setting?.value || "2.4.1" });
     } catch {
-      res.json({ version: "2.4.0" });
+      res.json({ version: "2.4.1" });
     }
   });
 

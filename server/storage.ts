@@ -156,7 +156,15 @@ function decryptRawValue(value: string): string {
     const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, "base64")), decipher.final()]);
     return decrypted.toString("utf8");
   } catch {
-    return value;
+    // Decryption failure usually means the encryption key changed (e.g. after
+    // migrating from Replit to a new server with a different SESSION_SECRET).
+    // Return an empty string so callers treat the setting as unset and prompt
+    // the admin to re-enter their keys rather than crashing.
+    console.warn(
+      "[Nasaq] ⚠️  فشل فك تشفير إعداد حساس — يبدو أن SETTINGS_ENCRYPTION_KEY أو SESSION_SECRET " +
+      "تغيّر منذ آخر حفظ. سيُعامَل الإعداد كفارغ. أعِد إدخال المفاتيح في لوحة الإدارة."
+    );
+    return "";
   }
 }
 
