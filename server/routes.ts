@@ -9,10 +9,11 @@ import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, logAIRequest } from "./openai";
+import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
+import { FIKRI_GATEWAY_SETTING_KEY, defaultFikriGatewayConfig, fikriGatewayConfigSchema, getFikriGatewayConfig, saveFikriGatewayConfig } from "./fikri-gateway";
 import { z } from "zod";
 import {
   insertFolderSchema,
@@ -112,24 +113,27 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
   const userApiKey = (await storage.getSetting("web_search_api_key", userId))?.value || "";
 
   let apiKey = "";
-  let provider = "brave";
-  let providerUsed: "system_default" | "custom_api" = "system_default";
+  let provider: "brave" | "perplexity" = "brave";
+  let providerUsed: "system_brave" | "system_perplexity" | "user_custom_search" = "system_brave";
 
   if (webSearchProvider === "custom") {
     if (!userApiKey || !userApiKey.trim()) {
-      await logAIRequest(userId, "web_search", "custom_api", null, false, startTime, "مفتاح API مخصص فارغ");
+      await logAIRequest(userId, "web_search", "user_custom_search", null, false, startTime, "مفتاح بحث شخصي فارغ");
       throw new Error("يرجى إدخال مفتاح API صحيح لأداة البحث في الإعدادات");
     }
     apiKey = userApiKey.trim();
-    providerUsed = "custom_api";
+    provider = "brave";
+    providerUsed = "user_custom_search";
   } else {
-    const defaultSearchKey = await storage.getSystemSetting("default_search_api_key");
-    apiKey = defaultSearchKey?.value?.trim() || "";
+    const gatewayConfig = await getFikriGatewayConfig();
+    apiKey = gatewayConfig.searchApiKey.trim();
+    provider = gatewayConfig.searchProvider;
+    providerUsed = provider === "perplexity" ? "system_perplexity" : "system_brave";
+
     if (!apiKey) {
-      await logAIRequest(userId, "web_search", "system_default", null, false, startTime, "لا يوجد مفتاح بحث افتراضي");
-      return [{ title: "البحث غير مفعّل", snippet: "لم يتم تكوين مفتاح بحث افتراضي. تواصل مع المدير أو اختر 'مفتاح API مخصص' من الإعدادات.", url: "" }];
+      await logAIRequest(userId, "web_search", providerUsed, provider, false, startTime, "لا يوجد مفتاح بحث مهيأ في محرك فكري");
+      return [{ title: "البحث غير مفعّل", snippet: "لم يتم تكوين مزود البحث في لوحة الإدارة داخل محرك فكري.", url: "" }];
     }
-    providerUsed = "system_default";
   }
 
   if (provider === "brave") {
@@ -167,7 +171,60 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
     }
   }
 
-  return [{ title: "مزود بحث غير مدعوم", snippet: `المزود الحالي: ${provider}`, url: "" }];
+  try {
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "sonar",
+        temperature: 0.1,
+        messages: [
+          {
+            role: "system",
+            content: "You are a search assistant. Return a JSON object with a top-level results array. Each result must contain title, snippet, and url.",
+          },
+          {
+            role: "user",
+            content: `Search the web for: ${query}\nReturn exactly 5 concise results as JSON.`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      await logAIRequest(userId, "web_search", providerUsed, "perplexity", false, startTime, `HTTP ${response.status}: ${errorBody.slice(0, 200)}`);
+      return [{ title: "فشل البحث الخارجي", snippet: `Perplexity API error ${response.status}: ${errorBody.slice(0, 200)}`, url: "" }];
+    }
+
+    const data = await response.json() as any;
+    const content = data?.choices?.[0]?.message?.content || "";
+    const citations = Array.isArray(data?.citations) ? data.citations : [];
+
+    try {
+      const parsed = JSON.parse(content) as { results?: Array<{ title?: string; snippet?: string; url?: string }> };
+      const results = Array.isArray(parsed.results) ? parsed.results : [];
+      await logAIRequest(userId, "web_search", providerUsed, "perplexity", true, startTime);
+      return results.slice(0, 5).map((item) => ({
+        title: item.title || "نتيجة بحث",
+        snippet: item.snippet || "",
+        url: item.url || "",
+      }));
+    } catch {
+      await logAIRequest(userId, "web_search", providerUsed, "perplexity", true, startTime);
+      return citations.slice(0, 5).map((url: string, index: number) => ({
+        title: `نتيجة ${index + 1}`,
+        snippet: content.slice(0, 220),
+        url,
+      }));
+    }
+  } catch (err: any) {
+    await logAIRequest(userId, "web_search", providerUsed, "perplexity", false, startTime, err?.message);
+    return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
+  }
 }
 
 async function runAssistantEngine(userMessage: string, history: Array<{ role: "user" | "assistant"; content: string }>, userId: string, senderDisplayName?: string): Promise<AssistantEngineResult> {
@@ -3811,6 +3868,111 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     }
   });
 
+  app.get("/api/admin/fikri-config", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getFikriGatewayConfig());
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب إعدادات محرك فكري" });
+    }
+  });
+
+  app.put("/api/admin/fikri-config", requireAdmin, async (req, res) => {
+    try {
+      const parsed = fikriGatewayConfigSchema.safeParse({
+        ...defaultFikriGatewayConfig,
+        ...(req.body || {}),
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: "بيانات محرك فكري غير صالحة", details: parsed.error.flatten() });
+      }
+
+      await saveFikriGatewayConfig(parsed.data);
+      await storage.createAuditLog(req.session.userId!, "system_setting_updated", `تحديث ${FIKRI_GATEWAY_SETTING_KEY}`, req.ip || undefined);
+      res.json(parsed.data);
+    } catch (error) {
+      res.status(500).json({ error: "فشل حفظ إعدادات محرك فكري" });
+    }
+  });
+
+  app.post("/api/admin/fikri-config/test-ai", requireAdmin, async (req, res) => {
+    try {
+      const parsed = fikriGatewayConfigSchema.safeParse({
+        ...defaultFikriGatewayConfig,
+        ...(req.body || {}),
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: "بيانات محرك فكري غير صالحة" });
+      }
+
+      const result = await testSystemGatewayAiConnection(parsed.data);
+      res.json({
+        success: true,
+        provider: result.provider,
+        model: result.model,
+        message: `تم الاتصال بنجاح مع ${result.provider} باستخدام النموذج ${result.model}`,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error?.message || "فشل اختبار مزود الذكاء الاصطناعي" });
+    }
+  });
+
+  app.post("/api/admin/fikri-config/test-search", requireAdmin, async (req, res) => {
+    try {
+      const parsed = fikriGatewayConfigSchema.safeParse({
+        ...defaultFikriGatewayConfig,
+        ...(req.body || {}),
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: "بيانات محرك فكري غير صالحة" });
+      }
+
+      if (!parsed.data.searchApiKey.trim()) {
+        return res.status(400).json({ success: false, error: "مفتاح البحث مطلوب" });
+      }
+
+      if (parsed.data.searchProvider === "brave") {
+        const response = await fetch("https://api.search.brave.com/res/v1/web/search?q=OpenAI&count=1&text_decorations=0", {
+          headers: {
+            Accept: "application/json",
+            "X-Subscription-Token": parsed.data.searchApiKey.trim(),
+          },
+        });
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          return res.status(400).json({ success: false, error: `Brave API error ${response.status}: ${body.slice(0, 200)}` });
+        }
+
+        return res.json({ success: true, provider: "brave", message: "تم الاتصال بنجاح مع Brave Search" });
+      }
+
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${parsed.data.searchApiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: "sonar",
+          messages: [
+            { role: "system", content: "Reply with the single word OK." },
+            { role: "user", content: "Search connectivity test" },
+          ],
+          temperature: 0,
+          max_tokens: 20,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        return res.status(400).json({ success: false, error: `Perplexity API error ${response.status}: ${body.slice(0, 200)}` });
+      }
+
+      res.json({ success: true, provider: "perplexity", message: "تم الاتصال بنجاح مع Perplexity" });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error?.message || "فشل اختبار مزود البحث" });
+    }
+  });
+
   app.get("/api/admin/page-content/:pageKey", requireAdmin, async (req, res) => {
     try {
       const { pageKey } = req.params;
@@ -3995,9 +4157,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.3.8" });
+      res.json({ version: setting?.value || "2.4.0" });
     } catch {
-      res.json({ version: "2.3.8" });
+      res.json({ version: "2.4.0" });
     }
   });
 

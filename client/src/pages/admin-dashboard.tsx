@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -480,9 +481,31 @@ function BannersPanel() {
 function SystemSettingsPanel() {
   const { toast } = useToast();
   const { data: settings, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/system-settings"] });
+  const { data: fikriConfig, isLoading: fikriLoading } = useQuery<{
+    aiProvider: "openai" | "gemini" | "openrouter";
+    aiApiKey: string;
+    aiModel: string;
+    searchProvider: "brave" | "perplexity";
+    searchApiKey: string;
+  }>({ queryKey: ["/api/admin/fikri-config"] });
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [showAiKey, setShowAiKey] = useState(false);
+  const [showSearchKey, setShowSearchKey] = useState(false);
+  const [localFikriConfig, setLocalFikriConfig] = useState({
+    aiProvider: "openai" as "openai" | "gemini" | "openrouter",
+    aiApiKey: "",
+    aiModel: "gpt-4o-mini",
+    searchProvider: "brave" as "brave" | "perplexity",
+    searchApiKey: "",
+  });
+
+  useEffect(() => {
+    if (fikriConfig) {
+      setLocalFikriConfig(fikriConfig);
+    }
+  }, [fikriConfig]);
 
   const upsertMutation = useMutation({
     mutationFn: (data: { key: string; value: string; description?: string }) =>
@@ -496,20 +519,158 @@ function SystemSettingsPanel() {
     },
   });
 
-  if (isLoading) return <PanelLoader />;
+  const saveFikriMutation = useMutation({
+    mutationFn: (data: typeof localFikriConfig) => apiRequest("PUT", "/api/admin/fikri-config", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/fikri-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/system-settings"] });
+      toast({ title: "تم حفظ محرك فكري" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل حفظ إعدادات محرك فكري", variant: "destructive" });
+    },
+  });
+
+  const testFikriAiMutation = useMutation({
+    mutationFn: (data: typeof localFikriConfig) => apiRequest("POST", "/api/admin/fikri-config/test-ai", data),
+    onSuccess: (data: any) => {
+      toast({ title: "نجاح", description: data?.message || "تم اختبار مزود الذكاء الاصطناعي بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ title: "فشل الاتصال", description: error?.message || "فشل اختبار مزود الذكاء الاصطناعي", variant: "destructive" });
+    },
+  });
+
+  const testFikriSearchMutation = useMutation({
+    mutationFn: (data: typeof localFikriConfig) => apiRequest("POST", "/api/admin/fikri-config/test-search", data),
+    onSuccess: (data: any) => {
+      toast({ title: "نجاح", description: data?.message || "تم اختبار مزود البحث بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ title: "فشل الاتصال", description: error?.message || "فشل اختبار مزود البحث", variant: "destructive" });
+    },
+  });
+
+  if (isLoading || fikriLoading) return <PanelLoader />;
 
   const knownFlags = [
     { key: "fikri_enabled", desc: "تفعيل فكري" },
     { key: "registration_enabled", desc: "تفعيل التسجيل" },
     { key: "web_search_enabled", desc: "تفعيل البحث" },
     { key: "ai_generation_enabled", desc: "تفعيل توليد المحتوى" },
-    { key: "default_search_api_key", desc: "مفتاح البحث الافتراضي" },
     { key: "app_version", desc: "رقم إصدار التطبيق" },
   ];
+  const hiddenSystemKeys = new Set([
+    "default_ai_base_url",
+    "default_ai_api_key",
+    "default_ai_model",
+    "default_ai_mini_model",
+    "default_search_api_key",
+    "fikri_gateway_config",
+  ]);
 
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">إعدادات النظام</h2>
+
+      <div className="card bg-card p-5 mb-4 space-y-5" data-testid="panel-fikri-gateway">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold">محرك فكري</h3>
+            <p className="text-sm text-muted-foreground">المسار الافتراضي الذي يستخدمه أي مستخدم يختار "الافتراضي" في إعداداته الشخصية.</p>
+          </div>
+          <Badge variant="outline">بوابة النظام الافتراضية</Badge>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-4 rounded-2xl border p-4 bg-muted/20">
+            <div className="space-y-1">
+              <Label>مزود الذكاء الاصطناعي</Label>
+              <Select value={localFikriConfig.aiProvider} onValueChange={(value: "openai" | "gemini" | "openrouter") => setLocalFikriConfig((prev) => ({ ...prev, aiProvider: value }))}>
+                <SelectTrigger data-testid="select-fikri-ai-provider"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="gemini">Gemini</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>مفتاح AI API</Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showAiKey ? "text" : "password"}
+                  value={localFikriConfig.aiApiKey}
+                  onChange={(e) => setLocalFikriConfig((prev) => ({ ...prev, aiApiKey: e.target.value }))}
+                  dir="ltr"
+                  placeholder="sk-... / gemini-api-key / openrouter-api-key"
+                  data-testid="input-fikri-ai-key"
+                />
+                <Button type="button" variant="outline" size="icon" onClick={() => setShowAiKey((prev) => !prev)} data-testid="button-toggle-fikri-ai-key">
+                  {showAiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => testFikriAiMutation.mutate(localFikriConfig)} disabled={testFikriAiMutation.isPending} className="gap-2 shrink-0" data-testid="button-test-fikri-ai">
+                  {testFikriAiMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  فحص الاتصال
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>اسم النموذج</Label>
+              <Input
+                value={localFikriConfig.aiModel}
+                onChange={(e) => setLocalFikriConfig((prev) => ({ ...prev, aiModel: e.target.value }))}
+                dir="ltr"
+                placeholder="gpt-4o / gemini-2.5-flash / openai/gpt-4o-mini"
+                data-testid="input-fikri-ai-model"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border p-4 bg-muted/20">
+            <div className="space-y-1">
+              <Label>مزود البحث</Label>
+              <Select value={localFikriConfig.searchProvider} onValueChange={(value: "brave" | "perplexity") => setLocalFikriConfig((prev) => ({ ...prev, searchProvider: value }))}>
+                <SelectTrigger data-testid="select-fikri-search-provider"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="brave">Brave</SelectItem>
+                  <SelectItem value="perplexity">Perplexity</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>مفتاح Search API</Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showSearchKey ? "text" : "password"}
+                  value={localFikriConfig.searchApiKey}
+                  onChange={(e) => setLocalFikriConfig((prev) => ({ ...prev, searchApiKey: e.target.value }))}
+                  dir="ltr"
+                  placeholder="Brave أو Perplexity API key"
+                  data-testid="input-fikri-search-key"
+                />
+                <Button type="button" variant="outline" size="icon" onClick={() => setShowSearchKey((prev) => !prev)} data-testid="button-toggle-fikri-search-key">
+                  {showSearchKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => testFikriSearchMutation.mutate(localFikriConfig)} disabled={testFikriSearchMutation.isPending} className="gap-2 shrink-0" data-testid="button-test-fikri-search">
+                  {testFikriSearchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  فحص الاتصال
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-dashed p-3 text-sm text-muted-foreground">
+              أي مستخدم يختار <span className="font-semibold text-foreground">الافتراضي</span> في إعداداته سيستخدم هذه المفاتيح تلقائياً.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={() => saveFikriMutation.mutate(localFikriConfig)} disabled={saveFikriMutation.isPending} className="gap-2" data-testid="button-save-fikri-config">
+            {saveFikriMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            حفظ محرك فكري
+          </Button>
+        </div>
+      </div>
 
       <div className="card bg-card p-4 mb-4 space-y-3">
         <h3 className="font-medium text-sm mb-2">إضافة/تعديل إعداد</h3>
@@ -561,7 +722,7 @@ function SystemSettingsPanel() {
           );
         })}
 
-        {settings?.filter((s: any) => !knownFlags.some((f) => f.key === s.key)).map((s: any) => (
+        {settings?.filter((s: any) => !knownFlags.some((f) => f.key === s.key) && !hiddenSystemKeys.has(s.key)).map((s: any) => (
           <div key={s.key} className="card bg-card p-3 flex items-center justify-between" data-testid={`setting-${s.key}`}>
             <div>
               <p className="text-sm font-medium">{s.description || s.key}</p>

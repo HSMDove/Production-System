@@ -101,6 +101,9 @@ const SENSITIVE_SETTING_KEYS = new Set([
   "slack_bot_token",
   "slack_signing_secret",
 ]);
+const SENSITIVE_SYSTEM_SETTING_KEYS = new Set([
+  "fikri_gateway_config",
+]);
 
 function getEncryptionKey(): Buffer {
   const source = process.env.SETTINGS_ENCRYPTION_KEY || process.env.SESSION_SECRET || "fallback-secret-change-in-production";
@@ -905,25 +908,37 @@ export class DatabaseStorage implements IStorage {
   // ─── System Settings (Global Admin Controls) ──────────────────────────────
   async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
     const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.key, key));
-    return setting;
+    if (!setting) return undefined;
+    return {
+      ...setting,
+      value: setting.value && SENSITIVE_SYSTEM_SETTING_KEYS.has(setting.key) ? decryptRawValue(setting.value) : setting.value,
+    };
   }
 
   async getAllSystemSettings(): Promise<SystemSetting[]> {
-    return db.select().from(systemSettings).orderBy(systemSettings.key);
+    const all = await db.select().from(systemSettings).orderBy(systemSettings.key);
+    return all.map((setting) => ({
+      ...setting,
+      value: setting.value && SENSITIVE_SYSTEM_SETTING_KEYS.has(setting.key) ? decryptRawValue(setting.value) : setting.value,
+    }));
   }
 
   async upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting> {
-    const updateSet: any = { value, updatedAt: new Date() };
+    const persistedValue = value && SENSITIVE_SYSTEM_SETTING_KEYS.has(key) ? encryptRawValue(value) : value;
+    const updateSet: any = { value: persistedValue, updatedAt: new Date() };
     if (description !== undefined) updateSet.description = description;
     const [result] = await db
       .insert(systemSettings)
-      .values({ key, value, description: description || null, updatedAt: new Date() })
+      .values({ key, value: persistedValue, description: description || null, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: systemSettings.key,
         set: updateSet,
       })
       .returning();
-    return result;
+    return {
+      ...result,
+      value: result.value && SENSITIVE_SYSTEM_SETTING_KEYS.has(result.key) ? decryptRawValue(result.value) : result.value,
+    };
   }
 
   // ─── Training Samples ─────────────────────────────────────────────────────

@@ -1,6 +1,35 @@
 import OpenAI from "openai";
 import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
 import { storage } from "./storage";
+import { getFikriGatewayConfig, type FikriGatewayConfig } from "./fikri-gateway";
+
+type ChatCompletionMessage = {
+  role: "system" | "user" | "assistant" | "developer" | "tool" | "function";
+  content?: any;
+};
+
+type ChatCompletionRequest = {
+  model: string;
+  messages: ChatCompletionMessage[];
+  response_format?: { type: "json_object" };
+  temperature?: number;
+  max_tokens?: number;
+  tools?: any[];
+  tool_choice?: any;
+};
+
+type ChatCompletionResponse = {
+  choices: Array<{ message: { content: string | null; tool_calls?: any[] } }>;
+  usage?: { total_tokens?: number };
+};
+
+type AIChatClient = {
+  chat: {
+    completions: {
+      create: (request: ChatCompletionRequest) => Promise<ChatCompletionResponse>;
+    };
+  };
+};
 
 async function getSettingsMap(userId?: string): Promise<Map<string, string | null>> {
   if (!userId) return new Map();
@@ -12,28 +41,147 @@ async function getSettingsMap(userId?: string): Promise<Map<string, string | nul
   return map;
 }
 
-async function getSystemDefaults(): Promise<{ baseURL: string; apiKey: string; model: string; miniModel: string }> {
-  const [baseUrlSetting, apiKeySetting, modelSetting, miniModelSetting] = await Promise.all([
-    storage.getSystemSetting("default_ai_base_url"),
-    storage.getSystemSetting("default_ai_api_key"),
-    storage.getSystemSetting("default_ai_model"),
-    storage.getSystemSetting("default_ai_mini_model"),
-  ]);
+function buildGeminiPrompt(messages: ChatCompletionMessage[]): string {
+  const systemMessages = messages.filter((message) => message.role === "system").map((message) => message.content.trim()).filter(Boolean);
+  const nonSystemMessages = messages.filter((message) => message.role !== "system");
 
-  const adminBaseUrl = baseUrlSetting?.value?.trim() || "";
-  const adminApiKey = apiKeySetting?.value?.trim() || "";
-  const adminModel = modelSetting?.value?.trim() || "gpt-4o";
-  const adminMiniModel = miniModelSetting?.value?.trim() || "gpt-4o-mini";
+  const parts: string[] = [];
+  if (systemMessages.length > 0) {
+    parts.push(`تعليمات النظام:\n${systemMessages.join("\n\n")}`);
+  }
 
+  if (nonSystemMessages.length > 0) {
+    parts.push(
+      nonSystemMessages
+        .map((message) => `${message.role === "assistant" ? "المساعد" : "المستخدم"}:\n${message.content.trim()}`)
+        .join("\n\n"),
+    );
+  }
+
+  return parts.join("\n\n");
+}
+
+function createOpenAIChatClient(client: OpenAI): AIChatClient {
+  return client as unknown as AIChatClient;
+}
+
+function createGeminiChatClient(apiKey: string): AIChatClient {
   return {
-    baseURL: adminBaseUrl || process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || "",
-    apiKey: adminApiKey || process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "",
-    model: adminModel,
-    miniModel: adminMiniModel,
+    chat: {
+      completions: {
+        create: async (request: ChatCompletionRequest): Promise<ChatCompletionResponse> => {
+          const prompt = buildGeminiPrompt(request.messages);
+          const wantsJson = request.response_format?.type === "json_object";
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${request.model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [
+                      {
+                        text: wantsJson
+                          ? `${prompt}\n\nأجب بصيغة JSON object صالحة فقط بدون أي نص إضافي خارج JSON.`
+                          : prompt,
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  temperature: request.temperature,
+                  maxOutputTokens: request.max_tokens,
+                  ...(wantsJson ? { responseMimeType: "application/json" } : {}),
+                },
+              }),
+            },
+          );
+
+          if (!response.ok) {
+            const errorBody = await response.text().catch(() => "");
+            throw new Error(`Gemini API error ${response.status}: ${errorBody.slice(0, 300)}`);
+          }
+
+          const data = await response.json() as any;
+          const text = data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join("").trim() || "";
+          return {
+            choices: [{ message: { content: text || null } }],
+            usage: {
+              total_tokens:
+                data?.usageMetadata?.totalTokenCount ||
+                data?.usageMetadata?.candidatesTokenCount ||
+                data?.usageMetadata?.promptTokenCount,
+            },
+          };
+        },
+      },
+    },
   };
 }
 
-export type AIClientResult = { client: OpenAI; model: string; miniModel: string; providerUsed: ApiProviderType };
+function createSystemGatewayClient(config: FikriGatewayConfig): { client: AIChatClient; model: string; miniModel: string; providerUsed: ApiProviderType } {
+  const apiKey = config.aiApiKey.trim();
+  const model = config.aiModel.trim();
+
+  if (!apiKey) {
+    throw new Error("يرجى إدخال مفتاح API صحيح في محرك فكري داخل لوحة الإدارة");
+  }
+
+  if (!model) {
+    throw new Error("يرجى إدخال اسم نموذج صحيح في محرك فكري داخل لوحة الإدارة");
+  }
+
+  if (config.aiProvider === "gemini") {
+    return {
+      client: createGeminiChatClient(apiKey),
+      model,
+      miniModel: model,
+      providerUsed: "system_gemini",
+    };
+  }
+
+  const openAiClient = new OpenAI({
+    apiKey,
+    ...(config.aiProvider === "openrouter" ? { baseURL: "https://openrouter.ai/api/v1" } : {}),
+  });
+
+  return {
+    client: createOpenAIChatClient(openAiClient),
+    model,
+    miniModel: model,
+    providerUsed: config.aiProvider === "openrouter" ? "system_openrouter" : "system_openai",
+  };
+}
+
+export async function testSystemGatewayAiConnection(config: FikriGatewayConfig): Promise<{ provider: string; model: string; message: string }> {
+  const resolved = createSystemGatewayClient(config);
+  const response = await resolved.client.chat.completions.create({
+    model: resolved.model,
+    messages: [
+      { role: "system", content: "You are a connectivity probe. Respond with the single word OK." },
+      { role: "user", content: "Connection test" },
+    ],
+    temperature: 0,
+    max_tokens: 20,
+  });
+
+  const content = response.choices[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error("لم يصل رد صالح من مزود الذكاء الاصطناعي");
+  }
+
+  return {
+    provider: config.aiProvider,
+    model: resolved.model,
+    message: content,
+  };
+}
+
+export type AIClientResult = { client: AIChatClient; model: string; miniModel: string; providerUsed: ApiProviderType };
 
 export async function getAIClient(userId?: string): Promise<AIClientResult> {
   const userSettings = await getSettingsMap(userId);
@@ -55,10 +203,10 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     }
 
     return {
-      client: new OpenAI(clientOpts),
+      client: createOpenAIChatClient(new OpenAI(clientOpts)),
       model,
       miniModel: model,
-      providerUsed: "custom_api",
+      providerUsed: "user_custom_api",
     };
   }
 
@@ -72,26 +220,15 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     }
 
     return {
-      client: new OpenAI({ baseURL: baseURL.trim(), apiKey: apiKey.trim() || "local" }),
+      client: createOpenAIChatClient(new OpenAI({ baseURL: baseURL.trim(), apiKey: apiKey.trim() || "local" })),
       model,
       miniModel: model,
-      providerUsed: "custom_api",
+      providerUsed: "user_local",
     };
   }
 
-  const defaults = await getSystemDefaults();
-  if (!defaults.apiKey) {
-    throw new Error("لم يتم تكوين مزود الذكاء الاصطناعي الافتراضي. يرجى التواصل مع المدير أو اختيار مزود مخصص من الإعدادات.");
-  }
-  return {
-    client: new OpenAI({
-      baseURL: defaults.baseURL || undefined,
-      apiKey: defaults.apiKey,
-    }),
-    model: defaults.model,
-    miniModel: defaults.miniModel,
-    providerUsed: "system_default",
-  };
+  const defaults = await getFikriGatewayConfig();
+  return createSystemGatewayClient(defaults);
 }
 
 export async function logAIRequest(

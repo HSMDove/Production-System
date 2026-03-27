@@ -436,7 +436,18 @@ export type SystemSetting = typeof systemSettings.$inferSelect;
 export const apiRequestTypes = ["ai_chat", "ai_rewrite", "ai_ideas", "ai_explain", "ai_translate", "ai_summary", "ai_smart_view", "ai_sentiment", "ai_trends", "web_search"] as const;
 export type ApiRequestType = typeof apiRequestTypes[number];
 
-export const apiProviderTypes = ["system_default", "custom_api"] as const;
+export const apiProviderTypes = [
+  "system_default",
+  "custom_api",
+  "system_openai",
+  "system_openrouter",
+  "system_gemini",
+  "system_brave",
+  "system_perplexity",
+  "user_custom_api",
+  "user_local",
+  "user_custom_search",
+] as const;
 export type ApiProviderType = typeof apiProviderTypes[number];
 
 export const apiUsageLogs = pgTable("api_usage_logs", {

@@ -74,7 +74,7 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.3.8";
+  const appVersion = versionData?.version || "2.4.0";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
@@ -1250,14 +1250,14 @@ export default function Settings() {
                   {[
                     {
                       value: "replit",
-                      label: "النموذج الافتراضي",
-                      desc: "يعمل مباشرة بدون أي إعداد",
+                      label: "الافتراضي",
+                      desc: "يستخدم محرك فكري الذي يضبطه المدير",
                       icon: "⚡",
                     },
                     {
                       value: "custom",
                       label: "API مخصص",
-                      desc: "OpenAI أو Anthropic أو أي مزود",
+                      desc: "مفتاحك الشخصي عبر واجهة OpenAI-compatible",
                       icon: "🔑",
                     },
                     {
@@ -1340,7 +1340,7 @@ export default function Settings() {
                 {localSettings.ai_provider === "replit" && (
                   <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
                     <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    <p className="text-sm text-muted-foreground">يعمل تلقائياً — لا تحتاج لأي إعداد إضافي.</p>
+                    <p className="text-sm text-muted-foreground">سيتم استخدام مزود الذكاء الافتراضي المضبوط من لوحة الإدارة داخل محرك فكري.</p>
                   </div>
                 )}
               </CardContent>
@@ -1358,21 +1358,21 @@ export default function Settings() {
                   <Select value={localSettings.web_search_provider || "system_default"} onValueChange={(value) => updateSetting("web_search_provider", value)}>
                     <SelectTrigger data-testid="select-web-search-provider"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="system_default">النموذج الافتراضي للموقع</SelectItem>
-                      <SelectItem value="custom">مفتاح API مخصص</SelectItem>
+                      <SelectItem value="system_default">الافتراضي الإداري</SelectItem>
+                      <SelectItem value="custom">مفتاح API شخصي</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">اختر النموذج الافتراضي للموقع أو أضف مفتاحك الخاص</p>
+                  <p className="text-xs text-muted-foreground">عند اختيار الافتراضي الإداري سيتم استخدام مزود البحث المضبوط في لوحة الإدارة.</p>
                 </div>
                 {localSettings.web_search_provider === "system_default" && (
                   <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-3 flex items-center gap-3">
                     <Check className="h-4 w-4 text-green-500 shrink-0" />
-                    <p className="text-sm text-muted-foreground">يستخدم مفتاح البحث الافتراضي للموقع — لا تحتاج إعداد إضافي.</p>
+                    <p className="text-sm text-muted-foreground">يستخدم محرك فكري الإداري ومزود البحث الذي يحدده المدير.</p>
                   </div>
                 )}
                 {localSettings.web_search_provider === "custom" && (
                   <div className="space-y-1">
-                    <Label>Brave Search API Key</Label>
+                    <Label>مفتاح البحث الشخصي</Label>
                     <Input
                       type="password"
                       placeholder="BSA... أو BSP..."
@@ -1381,7 +1381,7 @@ export default function Settings() {
                       dir="ltr"
                       data-testid="input-web-search-api-key"
                     />
-                    <p className="text-xs text-muted-foreground">احصل على مفتاح مجاني من <span className="font-mono" dir="ltr">api.search.brave.com</span></p>
+                    <p className="text-xs text-muted-foreground">المسار الشخصي الحالي يستخدم Brave Search بمفتاحك الخاص.</p>
                   </div>
                 )}
               </CardContent>
