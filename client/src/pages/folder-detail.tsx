@@ -248,12 +248,7 @@ export default function FolderDetail() {
   };
 
   useEffect(() => {
-    if (!id) return;
-
-    if (!folder?.isBackgroundActive || (sources?.length ?? 0) === 0) {
-      initialSilentFetchFolderRef.current = null;
-      return;
-    }
+    if (!id || (sources?.length ?? 0) === 0) return;
 
     if (initialSilentFetchFolderRef.current === id) {
       return;
@@ -261,14 +256,14 @@ export default function FolderDetail() {
 
     initialSilentFetchFolderRef.current = id;
     void runSilentFolderFetch();
-  }, [id, folder?.isBackgroundActive, sources?.length]);
+  }, [id, sources?.length]);
 
   useEffect(() => {
-    if (!id || !folder?.isBackgroundActive || (sources?.length ?? 0) === 0) {
+    if (!id || (sources?.length ?? 0) === 0) {
       return;
     }
 
-    const intervalMs = Math.max(Math.round((folder.refreshInterval || 0) * 60 * 1000), 15000);
+    const intervalMs = Math.max(Math.round((folder?.refreshInterval || 0) * 60 * 1000), 15000);
     const intervalId = window.setInterval(() => {
       void runSilentFolderFetch();
     }, intervalMs);
@@ -276,32 +271,25 @@ export default function FolderDetail() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [id, folder?.isBackgroundActive, folder?.refreshInterval, sources?.length]);
+  }, [id, folder?.refreshInterval, sources?.length]);
 
   const handleRefreshClick = async () => {
     if (!id || (sources?.length ?? 0) === 0) return;
 
-    const result = await fetchAllSourcesMutation.mutateAsync({
-      blocking: true,
-      revealWhenDone: true,
-      timeoutMs: 20000,
-    });
-
-    if (result.timedOut) {
-      toast({
-        title: "استغرق التحديث وقتاً أطول من المتوقع",
-        description: "استمرينا في المعالجة بالخلفية. جرّب التحديث مرة أخرى بعد قليل.",
-        variant: "destructive",
-      });
-      return;
+    // الخطوة 1: اكشف الأخبار الجاهزة فوراً إذا وُجدت (< 100ms)
+    if (newContentCount > 0) {
+      try {
+        await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
+      } catch (error) {
+        console.error("Failed to mark content as displayed:", error);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
     }
 
-    if ((result.revealedCount ?? 0) === 0 && (result.itemsAdded ?? 0) === 0) {
-      toast({
-        title: "لا توجد أخبار جديدة",
-        description: "المجلد محدث حالياً",
-      });
-    }
+    // الخطوة 2: أطلق جلب جديد في الخلفية (بدون انتظار)
+    fetchAllSourcesMutation.mutate({ blocking: false });
+    toast({ title: "🔄 يجري التحديث في الخلفية" });
   };
 
   if (folderLoading) {

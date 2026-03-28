@@ -494,6 +494,7 @@ function SystemSettingsPanel() {
   const [newDesc, setNewDesc] = useState("");
   const [showAiKey, setShowAiKey] = useState(false);
   const [showSearchKey, setShowSearchKey] = useState(false);
+  const [refreshIntervalMinutes, setRefreshIntervalMinutes] = useState("60");
   const [localFikriConfig, setLocalFikriConfig] = useState({
     aiProvider: "openai" as AdminAIProvider,
     aiApiKey: "",
@@ -507,6 +508,15 @@ function SystemSettingsPanel() {
       setLocalFikriConfig(fikriConfig);
     }
   }, [fikriConfig]);
+
+  useEffect(() => {
+    if (settings) {
+      const intervalSetting = settings.find((s: any) => s.key === "folder_auto_refresh_interval_minutes");
+      if (intervalSetting?.value) {
+        setRefreshIntervalMinutes(intervalSetting.value);
+      }
+    }
+  }, [settings]);
 
   const upsertMutation = useMutation({
     mutationFn: (data: { key: string; value: string; description?: string }) =>
@@ -568,6 +578,7 @@ function SystemSettingsPanel() {
     "default_ai_mini_model",
     "default_search_api_key",
     "fikri_gateway_config",
+    "folder_auto_refresh_interval_minutes",
   ]);
 
   return (
@@ -698,6 +709,45 @@ function SystemSettingsPanel() {
           <Button onClick={() => saveFikriMutation.mutate(localFikriConfig)} disabled={saveFikriMutation.isPending} className="gap-2" data-testid="button-save-fikri-config">
             {saveFikriMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             حفظ محرك فكري
+          </Button>
+        </div>
+      </div>
+
+      <div className="card bg-card p-5 mb-4 space-y-4" data-testid="panel-refresh-interval">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-lg font-bold">التحديث التلقائي العالمي للمجلدات</h3>
+          <p className="text-sm text-muted-foreground">الفترة الافتراضية (بالدقائق) لجلب الأخبار تلقائياً لأي مجلد لا يملك فترة تحديث مخصصة.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Input
+            type="number"
+            min="5"
+            max="1440"
+            className="w-32"
+            dir="ltr"
+            value={refreshIntervalMinutes}
+            onChange={(e) => setRefreshIntervalMinutes(e.target.value)}
+            data-testid="input-refresh-interval"
+          />
+          <span className="text-sm text-muted-foreground">دقيقة (القيمة الافتراضية: 60)</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            disabled={upsertMutation.isPending}
+            onClick={() => {
+              const val = parseInt(refreshIntervalMinutes, 10);
+              if (isNaN(val) || val < 5) return;
+              upsertMutation.mutate({
+                key: "folder_auto_refresh_interval_minutes",
+                value: String(val),
+                description: "فترة التحديث التلقائي الافتراضية للمجلدات (بالدقائق)",
+              });
+            }}
+            data-testid="button-save-refresh-interval"
+          >
+            <Save className="h-4 w-4" />
+            حفظ
           </Button>
         </div>
       </div>
