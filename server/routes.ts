@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { generateOTP, sendOTPEmail } from "./auth";
-import { fetchRSSFeed, fetchMultipleSources } from "./fetcher";
+import { fetchRSSFeed, fetchMultipleSources, shouldFilterContent } from "./fetcher";
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
@@ -980,7 +980,26 @@ export async function registerRoutes(
     try {
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
-      const contentItems = await storage.getVisibleContentByFolderId(req.params.id);
+
+      const userId = req.session.userId!;
+      let contentItems = await storage.getVisibleContentByFolderId(req.params.id);
+
+      // Apply smart filter on read path if enabled (FEAT-004)
+      try {
+        const [enabledSetting, strictSetting] = await Promise.all([
+          storage.getSetting("news_filter_enabled", userId),
+          storage.getSetting("news_filter_strict_mode", userId),
+        ]);
+        if (enabledSetting?.value === "true") {
+          const strictMode = strictSetting?.value !== "false";
+          contentItems = contentItems.filter(
+            (item) => !shouldFilterContent(item.title, item.arabicTitle || item.summary || null, strictMode),
+          );
+        }
+      } catch {
+        // Fail-open: if settings load fails, show all content
+      }
+
       const allSources = await storage.getSourcesByFolderId(req.params.id);
       const sourcesMap = new Map(allSources.map(s => [s.id, s]));
       const contentWithSources = contentItems.map(item => ({
