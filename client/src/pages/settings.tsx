@@ -471,11 +471,12 @@ export default function Settings() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 sm:grid-cols-4">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 sm:grid-cols-5">
             <TabsTrigger value="account">الحساب</TabsTrigger>
             <TabsTrigger value="appearance">المظهر</TabsTrigger>
             <TabsTrigger value="notifications">الإشعارات</TabsTrigger>
             <TabsTrigger value="fikri">فكري 2.0 والذكاء</TabsTrigger>
+            <TabsTrigger value="smart-filter">الفلتر الذكي</TabsTrigger>
           </TabsList>
 
           <TabsContent value="account" className="space-y-4">
@@ -1710,6 +1711,63 @@ export default function Settings() {
             </Card>
 
           </TabsContent>
+
+          {/* ─── الفلتر الذكي ─── */}
+          <TabsContent value="smart-filter" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">🛡️ الفلتر الذكي</CardTitle>
+                <CardDescription>تحكّم في جودة الأخبار التي يصلك فكري — يعمل قبل تخزين أي خبر جديد.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+
+                {/* Toggle: تفعيل الفلتر */}
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">تفعيل الفلتر الذكي</Label>
+                    <p className="text-sm text-muted-foreground">عند التفعيل، يفحص فكري كل خبر جديد قبل تخزينه وتحليله.</p>
+                  </div>
+                  <Switch
+                    checked={localSettings.news_filter_enabled === "true"}
+                    onCheckedChange={(v) => updateSetting("news_filter_enabled", v ? "true" : "false")}
+                    data-testid="switch-news-filter-enabled"
+                  />
+                </div>
+
+                {localSettings.news_filter_enabled === "true" && (
+                  <>
+                    {/* Toggle: الفلتر الصارم */}
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <Label className="text-base">الفلتر الصارم الافتراضي</Label>
+                        <p className="text-sm text-muted-foreground">يحجب تلقائياً: إجابات الكلمات المتقاطعة والألعاب اليومية، الإعلانات المُقنَّعة، والمحتوى الترويجي.</p>
+                      </div>
+                      <Switch
+                        checked={localSettings.news_filter_strict_mode !== "false"}
+                        onCheckedChange={(v) => updateSetting("news_filter_strict_mode", v ? "true" : "false")}
+                        data-testid="switch-news-filter-strict"
+                      />
+                    </div>
+
+                    {/* Textarea: قواعد مخصصة */}
+                    <div className="space-y-2">
+                      <Label>قواعد مخصصة (اختياري)</Label>
+                      <Textarea
+                        rows={4}
+                        placeholder='مثال: "لا أريد أخبار سياسية، وأريد التركيز على التكنولوجيا فقط"'
+                        value={localSettings.news_filter_instructions || ""}
+                        onChange={(e) => updateSetting("news_filter_instructions", e.target.value)}
+                        data-testid="textarea-news-filter-instructions"
+                      />
+                      <p className="text-xs text-muted-foreground">💡 يقرأ فكري هذه التعليمات لكل دورة جلب جديدة — يستخدم استدعاء AI واحد فقط للدفعة الكاملة.</p>
+                    </div>
+                  </>
+                )}
+
+              </CardContent>
+            </Card>
+          </TabsContent>
+
         </Tabs>
 
         <div className="text-center text-sm text-muted-foreground py-4 border-t mt-6" data-testid="text-version">

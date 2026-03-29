@@ -1,6 +1,7 @@
 import { storage } from "./storage";
-import { fetchMultipleSources, fetchOGImage } from "./fetcher";
-import { generateArabicSummary, generateProfessionalTranslation } from "./openai";
+import { fetchMultipleSources, fetchOGImage, shouldFilterContent } from "./fetcher";
+import type { FetchResult } from "./fetcher";
+import { generateArabicSummary, generateProfessionalTranslation, batchFilterContent } from "./openai";
 import { processNewContentNotifications, processNewContentNotificationsForFolder } from "./notifier";
 import { getUserComposedSystemPrompt } from "./ai-system-prompt";
 import type { Folder, InsertContent, Source } from "@shared/schema";
@@ -239,10 +240,88 @@ export async function recoverOrphanedContent(): Promise<void> {
   }
 }
 
+// ─── FEAT-004: Smart Filter ───────────────────────────────────────────────────
+
+/**
+ * Applies the two-tier smart filter to fetched results before storage.
+ * Tier 1: instant keyword filter (zero cost).
+ * Tier 2: AI batch filter (1 API call, only when enabled + instructions exist).
+ * Fail-open: errors in either tier pass all content through.
+ */
+async function applySmartFilter(
+  results: FetchResult[],
+  userId: string | null,
+): Promise<FetchResult[]> {
+  // Load user filter settings
+  let filterEnabled = false;
+  let strictMode = true;
+  let filterInstructions = "";
+
+  if (userId) {
+    try {
+      const [enabledSetting, strictSetting, instructionsSetting] = await Promise.all([
+        storage.getSetting("news_filter_enabled", userId),
+        storage.getSetting("news_filter_strict_mode", userId),
+        storage.getSetting("news_filter_instructions", userId),
+      ]);
+      filterEnabled = enabledSetting?.value === "true";
+      strictMode = strictSetting?.value !== "false"; // default true
+      filterInstructions = instructionsSetting?.value || "";
+    } catch {
+      // Fail-open: if settings can't be loaded, skip filtering
+      return results;
+    }
+  }
+
+  // If filter is entirely disabled, skip everything
+  if (!filterEnabled) return results;
+
+  // Tier 1: instant keyword filter (runs whenever filterEnabled is true)
+  const afterTier1 = results.map((result) => ({
+    ...result,
+    items: result.items.filter(
+      (item) => !shouldFilterContent(item.title, item.summary ?? null, strictMode),
+    ),
+  }));
+
+  // Tier 2: AI batch filter — only when custom instructions are provided
+  if (!filterInstructions.trim()) return afterTier1;
+
+  try {
+    // Collect all items with a stable unique ID
+    const allItems = afterTier1.flatMap((result) =>
+      result.items.map((item) => ({
+        id: item.originalUrl,
+        title: item.title,
+        summary: item.summary ?? null,
+      })),
+    );
+
+    if (allItems.length === 0) return afterTier1;
+
+    const keepUrls = await batchFilterContent(allItems, filterInstructions, strictMode, userId || undefined);
+
+    // Filter each result's items by the AI's decision
+    return afterTier1.map((result) => ({
+      ...result,
+      items: result.items.filter((item) => keepUrls.has(item.originalUrl)),
+    }));
+  } catch {
+    // Fail-open: AI filter error → return after tier 1 only
+    return afterTier1;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function fetchFolderContent(folderId: string, folder?: Folder): Promise<FetchFolderResult> {
   const sources = await storage.getSourcesByFolderId(folderId);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const results = await fetchMultipleSources(sources);
+  const rawResults = await fetchMultipleSources(sources);
+
+  // Apply smart filter (FEAT-004) before storing any content
+  const folderOwnerUserId = folder?.userId ?? null;
+  const results = await applySmartFilter(rawResults, folderOwnerUserId).catch(() => rawResults);
 
   let totalAdded = 0;
   let skipped = 0;

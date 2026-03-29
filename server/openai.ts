@@ -1507,3 +1507,93 @@ export async function* streamAITokens(
     .trim();
   if (geminiText) yield geminiText;
 }
+
+// ─── FEAT-004: Smart AI Batch Filter ─────────────────────────────────────────
+
+/**
+ * Sends a batch of content items to the AI for quality filtering.
+ * Returns a Set of IDs that should be KEPT (pass-through).
+ * Fail-open: if AI call fails, all IDs are returned (nothing blocked).
+ */
+export async function batchFilterContent(
+  items: Array<{ id: string; title: string; summary: string | null }>,
+  filterInstructions: string,
+  strictMode: boolean,
+  userId?: string,
+): Promise<Set<string>> {
+  // Nothing to filter
+  if (items.length === 0) return new Set();
+
+  const allIds = new Set(items.map((i) => i.id));
+
+  try {
+    const { client, miniModel } = await getAIClient(userId);
+
+    const strictRules = strictMode
+      ? `\nقواعد الوضع الصارم (مُفعَّل):
+- احذف: إجابات الكلمات المتقاطعة والألعاب اليومية (crossword, wordle, spelling bee, connections, إلخ)
+- احذف: المحتوى الترويجي المُقنَّع والإعلانات والمحتوى الممول
+- احذف: محتوى النقر الطُعمي (clickbait) عديم القيمة`
+      : "";
+
+    const customRules = filterInstructions.trim()
+      ? `\nتعليمات المستخدم المخصصة:\n${filterInstructions.trim()}`
+      : "";
+
+    const systemPrompt = `أنت "فكري" بوابة جودة للمحتوى الإخباري.
+مهمتك: فحص عناوين وملخصات المحتوى التالي واختيار ما يستحق الاحتفاظ به.
+${strictRules}${customRules}
+
+أعد JSON فقط بهذا الشكل: {"keep": ["id1", "id2", ...]}
+أدرج في "keep" كل ID يستحق الاحتفاظ به. ما لم يُذكر يُحذف.`;
+
+    // Batch into chunks of 50 to avoid token limits
+    const BATCH_SIZE = 50;
+    const keepIds = new Set<string>();
+
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const chunk = items.slice(i, i + BATCH_SIZE);
+      const payload = chunk.map((item) => ({
+        id: item.id,
+        title: item.title,
+        summary: (item.summary || "").slice(0, 300),
+      }));
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+
+      try {
+        const response = await client.chat({
+          model: miniModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify(payload) },
+          ],
+          max_tokens: 1000,
+          temperature: 0,
+        });
+
+        clearTimeout(timeout);
+
+        const raw = response.content?.trim() || "";
+        // Extract JSON even if wrapped in markdown code fences
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as { keep?: string[] };
+          if (Array.isArray(parsed.keep)) {
+            for (const id of parsed.keep) keepIds.add(id);
+          }
+        }
+      } catch {
+        clearTimeout(timeout);
+        // Chunk failed → keep all items in this chunk (fail-open)
+        for (const item of chunk) keepIds.add(item.id);
+      }
+    }
+
+    return keepIds;
+  } catch {
+    // AI client unavailable → fail-open, keep everything
+    return allIds;
+  }
+}

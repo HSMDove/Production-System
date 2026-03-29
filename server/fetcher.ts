@@ -20,7 +20,7 @@ const parser = new Parser({
 
 const limit = pLimit(3);
 
-interface FetchResult {
+export interface FetchResult {
   sourceId: string;
   items: InsertContent[];
   error?: string;
@@ -1261,16 +1261,43 @@ const EXCLUDED_KEYWORDS = [
   'إعلان', 'ممول', 'مسابقة', 'اربح'
 ];
 
+// Additional keywords for strict mode filtering
+const STRICT_MODE_KEYWORDS = [
+  // Game answers & puzzles
+  'crossword answer', 'crossword answers', 'wordle answer', 'wordle hint',
+  'mini crossword', 'spelling bee answers', 'connections answer', 'connections answers',
+  'nyt puzzle', 'nyt games', 'game answer', 'game answers',
+  "today's answer", "today's wordle", "today's connections",
+  'daily answer', 'daily puzzle', 'puzzle answer', 'puzzle solution',
+  'strands answer', 'quordle answer', 'heardle answer',
+  // Advanced ad patterns
+  'best deals on', 'top deals', 'best picks', 'editors pick', "editor's pick",
+  'sponsored content', 'paid content', '#ad', '#sponsored', '#gifted',
+  'in partnership with', 'brand partner', 'this post contains affiliate',
+  'we may earn', 'commission may be earned', 'affiliate links',
+  // Clickbait / low-quality
+  'you won\'t believe', 'shocking truth', 'mind blowing',
+  'doctors hate', 'one weird trick', 'this simple trick',
+];
+
 // Check if content should be filtered out
-function shouldFilterContent(title: string, summary: string | null): boolean {
+export function shouldFilterContent(title: string, summary: string | null, strictMode = false): boolean {
   const textToCheck = `${title} ${summary || ''}`.toLowerCase();
-  
+
   for (const keyword of EXCLUDED_KEYWORDS) {
     if (textToCheck.includes(keyword.toLowerCase())) {
       return true;
     }
   }
-  
+
+  if (strictMode) {
+    for (const keyword of STRICT_MODE_KEYWORDS) {
+      if (textToCheck.includes(keyword.toLowerCase())) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
