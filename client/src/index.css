@@ -1179,3 +1179,286 @@ body {
   }
 
 }
+
+/* ═══════════════════════════════════════════════════════════
+   LIQUID GLASS EXPANSION — Folders, Sidebar, Buttons, Fikri
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Keyframe Animations ── */
+
+@keyframes fikri-ring-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes fikri-shimmer-label {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+@keyframes fikri-pulse-soft {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50%       { opacity: 0.40; transform: scale(1.06); }
+}
+
+/* ── Liquid Glass — Folder Cards ── */
+
+.liquid-glass-folder {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.06) 50%,
+    rgba(255, 255, 255, 0.13) 100%
+  ) !important;
+  backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
+  border: 1px solid rgba(255, 255, 255, 0.30) !important;
+  box-shadow:
+    0 4px 6px   rgba(0, 0, 0, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.10),
+    inset 0  1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.05) !important;
+  background-image: none !important;
+}
+
+.dark .liquid-glass-folder {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0.07) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow:
+    0 4px 6px   rgba(0, 0, 0, 0.18),
+    0 12px 40px rgba(0, 0, 0, 0.40),
+    inset 0  1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.28) !important;
+}
+
+/* Hover: compound selector beats both .folder-surface:hover and .liquid-glass-folder base */
+.folder-surface.liquid-glass-folder:hover {
+  box-shadow:
+    0 8px  12px rgba(0, 0, 0, 0.06),
+    0 24px 56px rgba(0, 0, 0, 0.13),
+    0 0 0 1.5px hsl(var(--primary) / 0.18),
+    inset 0  1px 0 rgba(255, 255, 255, 0.80),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.04) !important;
+}
+
+.dark .folder-surface.liquid-glass-folder:hover {
+  box-shadow:
+    0 8px  12px rgba(0, 0, 0, 0.28),
+    0 24px 56px rgba(0, 0, 0, 0.50),
+    0 0 0 1.5px hsl(var(--primary) / 0.35),
+    inset 0  1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.32) !important;
+}
+
+/* ── Liquid Glass — Sources Sidebar ── */
+
+.liquid-glass-sidebar {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.17) 0%,
+    rgba(255, 255, 255, 0.07) 60%,
+    rgba(255, 255, 255, 0.11) 100%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    inset 1px 0 0 rgba(255, 255, 255, 0.40),
+    inset 0  1px 0 rgba(255, 255, 255, 0.30) !important;
+  background-image: none !important;
+}
+
+.dark .liquid-glass-sidebar {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 60%,
+    rgba(255, 255, 255, 0.05) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.32),
+    inset 1px 0 0 rgba(255, 255, 255, 0.08),
+    inset 0  1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Liquid Glass — General Buttons ── */
+
+.liquid-glass-btn {
+  background: rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 2px 8px  rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+  transition: all 0.2s ease !important;
+}
+
+.dark .liquid-glass-btn {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+  box-shadow:
+    0 2px 8px  rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;
+}
+
+.liquid-glass-btn:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.38) !important;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
+  transform: translateY(-1px) !important;
+}
+
+.dark .liquid-glass-btn:hover {
+  background: rgba(255, 255, 255, 0.13) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
+
+/* ── Fikri Nav Button (Header & Mobile) ── */
+
+.fikri-nav-btn {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary) / 0.18) 0%,
+    hsl(var(--primary) / 0.06) 100%
+  ) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border: 1px solid hsl(var(--primary) / 0.38) !important;
+  box-shadow:
+    0 3px 12px hsl(var(--primary) / 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
+  color: hsl(var(--primary)) !important;
+  font-weight: 700 !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.fikri-nav-btn:hover {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary) / 0.28) 0%,
+    hsl(var(--primary) / 0.12) 100%
+  ) !important;
+  border-color: hsl(var(--primary) / 0.58) !important;
+  box-shadow:
+    0 0 0 3px hsl(var(--primary) / 0.14),
+    0 5px 18px hsl(var(--primary) / 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  transform: translateY(-1px) scale(1.02) !important;
+}
+
+.dark .fikri-nav-btn {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary) / 0.22) 0%,
+    hsl(var(--primary) / 0.08) 100%
+  ) !important;
+  border-color: hsl(var(--primary) / 0.45) !important;
+  box-shadow:
+    0 3px 12px hsl(var(--primary) / 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .fikri-nav-btn:hover {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--primary) / 0.35) 0%,
+    hsl(var(--primary) / 0.15) 100%
+  ) !important;
+  border-color: hsl(var(--primary) / 0.65) !important;
+  box-shadow:
+    0 0 0 3px hsl(var(--primary) / 0.22),
+    0 5px 18px hsl(var(--primary) / 0.40),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+}
+
+/* ── Fikri FAB — Spinning Iridescent Ring ── */
+
+.fikri-fab-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 28px;
+  background: conic-gradient(
+    from 0deg,
+    hsl(var(--primary)          / 0.95) 0deg,
+    hsl(var(--accent)           / 0.75) 90deg,
+    rgba(255, 255, 255, 0.92)            170deg,
+    hsl(var(--secondary)        / 0.70) 250deg,
+    hsl(var(--primary)          / 0.95) 360deg
+  );
+  animation: fikri-ring-spin 3.5s linear infinite;
+  filter: blur(5px);
+  pointer-events: none;
+}
+
+/* A second, softer outer halo that pulses */
+.fikri-fab-halo {
+  position: absolute;
+  inset: -12px;
+  border-radius: 34px;
+  background: conic-gradient(
+    from 180deg,
+    hsl(var(--primary) / 0.45),
+    hsl(var(--secondary) / 0.30) 120deg,
+    hsl(var(--accent) / 0.35) 240deg,
+    hsl(var(--primary) / 0.45) 360deg
+  );
+  animation:
+    fikri-ring-spin 6s linear infinite reverse,
+    fikri-pulse-soft 2.8s ease-in-out infinite;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+/* ── Fikri FAB — Image styling ── */
+
+.fikri-fab-img {
+  border: 2px solid rgba(255, 255, 255, 0.58) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.10),
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+}
+
+/* ── Fikri FAB — Label badge ── */
+
+.fikri-fab-label {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary)) 0%,
+    hsl(var(--secondary) / 0.85) 50%,
+    hsl(var(--primary)) 100%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: fikri-shimmer-label 2.8s ease-in-out infinite !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.52) !important;
+  box-shadow:
+    0 2px 12px hsl(var(--primary) / 0.42),
+    0 0 0 2px hsl(var(--primary) / 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.03em !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+.dark .fikri-fab-label {
+  box-shadow:
+    0 2px 14px hsl(var(--primary) / 0.55),
+    0 0 0 2px hsl(var(--primary) / 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}

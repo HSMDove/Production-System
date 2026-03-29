@@ -141,7 +141,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
   return (
     <Card
-      className="folder-surface group glass-surface flex h-full min-h-[14rem] flex-col rounded-[1.618rem]"
+      className="folder-surface liquid-glass-folder group flex h-full min-h-[14rem] flex-col rounded-[1.618rem]"
       data-testid={`card-folder-${folder.id}`}
     >
       <CardHeader className="px-4 pb-3 pt-4">

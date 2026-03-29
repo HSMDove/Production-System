@@ -79,7 +79,7 @@ export function Header() {
                               <Button
                                 key={item.href}
                                 variant="outline"
-                                className="w-full justify-start gap-3"
+                                className="w-full justify-start gap-3 fikri-nav-btn"
                                 onClick={() => {
                                   setOpen(true);
                                   setMobileMenuOpen(false);
@@ -146,7 +146,7 @@ export function Header() {
                   key={item.href}
                   variant="ghost"
                   size="sm"
-                  className="gap-2"
+                  className="gap-2 fikri-nav-btn"
                   data-testid={item.testId}
                   onClick={() => setOpen(true)}
                 >

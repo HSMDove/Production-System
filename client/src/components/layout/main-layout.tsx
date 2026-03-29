@@ -25,18 +25,25 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {showFikriLauncher && (
         <button
-          className="fixed z-[30] flex flex-col items-center gap-2 transition-transform duration-150 hover:scale-105 active:scale-95"
+          className="fixed z-[30] flex flex-col items-center gap-2.5 transition-transform duration-200 hover:scale-110 active:scale-95"
           style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))", left: "1.25rem" }}
           data-testid="button-fikri-fab"
           onClick={() => setOpen(true)}
+          aria-label="فتح فكري"
         >
-          <img
-            src={fikriImage}
-            alt="فكري"
-            className="h-14 w-14 rounded-[22px] border-[3px] border-border object-cover shadow-[6px_6px_0_0_rgba(0,0,0,0.88)] sm:h-16 sm:w-16"
-            draggable={false}
-          />
-          <span className="rounded-full border-[3px] border-border bg-primary px-3 py-1 text-[10px] font-black text-primary-foreground shadow-[4px_4px_0_0_rgba(0,0,0,0.88)] sm:text-xs">
+          {/* Image with spinning iridescent ring */}
+          <div className="relative">
+            <div className="fikri-fab-halo" />
+            <div className="fikri-fab-ring" />
+            <img
+              src={fikriImage}
+              alt="فكري"
+              className="relative z-10 h-14 w-14 sm:h-16 sm:w-16 rounded-[22px] object-cover fikri-fab-img"
+              draggable={false}
+            />
+          </div>
+          {/* Shimmer label badge */}
+          <span className="fikri-fab-label rounded-full px-3 py-1 text-[10px] sm:text-xs relative z-10">
             فكري 2
           </span>
         </button>
