@@ -819,6 +819,8 @@ function extractOGImageFromHtml(html: string, url: string): string | null {
 
   const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
   const searchArea = articleMatch ? articleMatch[1] : html;
+
+  // Pass 1: src= attribute (standard images)
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
   let imgMatch;
   while ((imgMatch = imgRegex.exec(searchArea)) !== null) {
@@ -826,9 +828,17 @@ function extractOGImageFromHtml(html: string, url: string): string | null {
     const srcUrl = imgMatch[1];
     const widthMatch = src.match(/width=["']?(\d+)/i);
     const heightMatch = src.match(/height=["']?(\d+)/i);
-    if (widthMatch && parseInt(widthMatch[1]) < 100) continue;
-    if (heightMatch && parseInt(heightMatch[1]) < 100) continue;
+    if (widthMatch && parseInt(widthMatch[1]) < 50) continue;
+    if (heightMatch && parseInt(heightMatch[1]) < 50) continue;
     const resolved = resolveImageUrl(srcUrl, url);
+    if (resolved) return resolved;
+  }
+
+  // Pass 2: lazy-loaded images (data-src, data-lazy-src, data-original)
+  const lazyRegex = /<img[^>]+(?:data-src|data-lazy-src|data-original)=["']([^"']+)["'][^>]*>/gi;
+  let lazyMatch;
+  while ((lazyMatch = lazyRegex.exec(searchArea)) !== null) {
+    const resolved = resolveImageUrl(lazyMatch[1], url);
     if (resolved) return resolved;
   }
 
@@ -1263,18 +1273,25 @@ const EXCLUDED_KEYWORDS = [
 
 // Additional keywords for strict mode filtering
 const STRICT_MODE_KEYWORDS = [
-  // Game answers & puzzles
+  // Game answers & puzzles — exact title patterns used by publications
   'crossword answer', 'crossword answers', 'wordle answer', 'wordle hint',
   'mini crossword', 'spelling bee answers', 'connections answer', 'connections answers',
-  'nyt puzzle', 'nyt games', 'game answer', 'game answers',
-  "today's answer", "today's wordle", "today's connections",
+  'nyt puzzle', 'nyt games', 'nyt connections', 'nyt strands', 'nyt wordle', 'nyt mini',
+  'game answer', 'game answers',
+  "today's answer", "today's wordle", "today's connections", "today's nyt",
   'daily answer', 'daily puzzle', 'puzzle answer', 'puzzle solution',
   'strands answer', 'quordle answer', 'heardle answer',
+  // Broad patterns that match REAL title formats (e.g. "Hints and Answers for March 29")
+  'hints and answers', 'hints, answers', 'answers and help',
+  'hints and help', 'clues and answers',
   // Advanced ad patterns
   'best deals on', 'top deals', 'best picks', 'editors pick', "editor's pick",
   'sponsored content', 'paid content', '#ad', '#sponsored', '#gifted',
   'in partnership with', 'brand partner', 'this post contains affiliate',
   'we may earn', 'commission may be earned', 'affiliate links',
+  // Product roundups (review-farm content)
+  'expert-approved', "buyer's guide", 'tested and reviewed',
+  'best noise-canceling', 'best earbuds', 'best headphones', 'best smart',
   // Clickbait / low-quality
   'you won\'t believe', 'shocking truth', 'mind blowing',
   'doctors hate', 'one weird trick', 'this simple trick',

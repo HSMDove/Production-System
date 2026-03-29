@@ -203,6 +203,34 @@ export async function backfillReadyContentMissingArabic(limit: number = 25): Pro
   return processed;
 }
 
+/**
+ * Retry image extraction for content that ended up with imageUrl = null.
+ * Runs as a background job every 10 minutes in the scheduler.
+ */
+export async function backfillContentMissingImages(limit = 20): Promise<void> {
+  const candidates = await storage.getContentMissingImage(limit);
+  if (candidates.length === 0) return;
+
+  console.log(`[ImageBackfill] Attempting thumbnails for ${candidates.length} items`);
+
+  for (const item of candidates) {
+    try {
+      const source = await storage.getSourceById(item.sourceId);
+      // Skip twitter/youtube — they handle images differently
+      if (shouldSkipImageBackfill(source?.type, item.imageUrl)) continue;
+      if (!item.originalUrl) continue;
+
+      const img = await fetchOGImage(item.originalUrl);
+      if (img) {
+        await storage.updateContentImageUrl(item.id, img);
+        console.log(`[ImageBackfill] ✓ ${item.title.substring(0, 50)}`);
+      }
+    } catch {
+      // fail-safe: skip this item silently
+    }
+  }
+}
+
 export async function backfillFolderContentMissingArabic(folderId: string): Promise<number> {
   const candidates = await storage.getReadyContentMissingArabicByFolder(folderId, 20);
   if (candidates.length === 0) return 0;

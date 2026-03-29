@@ -1784,7 +1784,11 @@ export default function Settings() {
                   </div>
                   <Switch
                     checked={smartConfig.globalEnabled}
-                    onCheckedChange={(v) => updateSmartConfig((c) => ({ ...c, globalEnabled: v }))}
+                    onCheckedChange={(v) => {
+                      const next = { ...smartConfig, globalEnabled: v };
+                      updateSmartConfig(() => next);
+                      saveSmartFiltersMutation.mutate(next);
+                    }}
                     data-testid="switch-smart-filter-global"
                   />
                 </div>

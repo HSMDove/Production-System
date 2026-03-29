@@ -238,6 +238,7 @@ export interface IStorage {
   getOrphanedProcessingContent(olderThanMinutes?: number): Promise<Content[]>;
   getReadyContentMissingArabic(limit?: number): Promise<Content[]>;
   getReadyContentMissingArabicByFolder(folderId: string, limit?: number): Promise<Content[]>;
+  getContentMissingImage(limit?: number): Promise<Content[]>;
 
   getAllSources(): Promise<Source[]>;
 
@@ -634,6 +635,17 @@ export class DatabaseStorage implements IStorage {
         eq(content.folderId, folderId),
         eq(content.processingStatus, "ready"),
         or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
+      ))
+      .orderBy(desc(content.fetchedAt))
+      .limit(limit);
+    return rows.map(decompressContent);
+  }
+
+  async getContentMissingImage(limit: number = 20): Promise<Content[]> {
+    const rows = await db.select().from(content)
+      .where(and(
+        eq(content.processingStatus, "ready"),
+        isNull(content.imageUrl),
       ))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
