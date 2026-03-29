@@ -243,72 +243,87 @@ export async function recoverOrphanedContent(): Promise<void> {
 // ─── FEAT-004: Smart Filter ───────────────────────────────────────────────────
 
 /**
- * Applies the two-tier smart filter to fetched results before storage.
- * Tier 1: instant keyword filter (zero cost).
- * Tier 2: AI batch filter (1 API call, only when enabled + instructions exist).
- * Fail-open: errors in either tier pass all content through.
+ * Applies smart filters to fetched results before storage (FEAT-004).
+ * Uses the SmartFiltersConfig stored in the settings table.
+ * Tier 1: instant keyword filter (default filter, zero cost).
+ * Tier 2: AI batch filter per custom filter (1 call each, only when description exists).
+ * Fail-open: any error passes all content through.
  */
 async function applySmartFilter(
   results: FetchResult[],
   userId: string | null,
+  folderId: string,
 ): Promise<FetchResult[]> {
-  // Load user filter settings
-  let filterEnabled = false;
-  let strictMode = true;
-  let filterInstructions = "";
-
-  if (userId) {
-    try {
-      const [enabledSetting, strictSetting, instructionsSetting] = await Promise.all([
-        storage.getSetting("news_filter_enabled", userId),
-        storage.getSetting("news_filter_strict_mode", userId),
-        storage.getSetting("news_filter_instructions", userId),
-      ]);
-      filterEnabled = enabledSetting?.value === "true";
-      strictMode = strictSetting?.value !== "false"; // default true
-      filterInstructions = instructionsSetting?.value || "";
-    } catch {
-      // Fail-open: if settings can't be loaded, skip filtering
-      return results;
-    }
-  }
-
-  // If filter is entirely disabled, skip everything
-  if (!filterEnabled) return results;
-
-  // Tier 1: instant keyword filter (runs whenever filterEnabled is true)
-  const afterTier1 = results.map((result) => ({
-    ...result,
-    items: result.items.filter(
-      (item) => !shouldFilterContent(item.title, item.summary ?? null, strictMode),
-    ),
-  }));
-
-  // Tier 2: AI batch filter — only when custom instructions are provided
-  if (!filterInstructions.trim()) return afterTier1;
+  if (!userId) return results;
 
   try {
-    // Collect all items with a stable unique ID
-    const allItems = afterTier1.flatMap((result) =>
-      result.items.map((item) => ({
-        id: item.originalUrl,
-        title: item.title,
-        summary: item.summary ?? null,
-      })),
+    const configSetting = await storage.getSetting("smart_filters_config", userId);
+    if (!configSetting?.value) return results;
+
+    const config = JSON.parse(configSetting.value) as {
+      globalEnabled: boolean;
+      filters: Array<{
+        id: string;
+        name: string;
+        description: string;
+        isDefault: boolean;
+        isEnabled: boolean;
+        folderIds: string[] | null;
+      }>;
+    };
+
+    if (!config.globalEnabled) return results;
+
+    // Find active filters that apply to this folder
+    const activeFilters = (config.filters || []).filter(
+      (f) => f.isEnabled && (f.folderIds === null || f.folderIds.includes(folderId)),
     );
 
-    if (allItems.length === 0) return afterTier1;
+    if (activeFilters.length === 0) return results;
 
-    const keepUrls = await batchFilterContent(allItems, filterInstructions, strictMode, userId || undefined);
+    const hasDefaultFilter = activeFilters.some((f) => f.isDefault);
+    const customFilters = activeFilters.filter((f) => !f.isDefault && f.description.trim());
 
-    // Filter each result's items by the AI's decision
-    return afterTier1.map((result) => ({
-      ...result,
-      items: result.items.filter((item) => keepUrls.has(item.originalUrl)),
-    }));
+    // Tier 1: Instant keyword filter (default filter)
+    let filtered = hasDefaultFilter
+      ? results.map((result) => ({
+          ...result,
+          items: result.items.filter(
+            (item) => !shouldFilterContent(item.title, item.summary ?? null, true),
+          ),
+        }))
+      : results;
+
+    // Tier 2: AI batch filter per custom filter
+    for (const customFilter of customFilters) {
+      const allItems = filtered.flatMap((result) =>
+        result.items.map((item) => ({
+          id: item.originalUrl,
+          title: item.title,
+          summary: item.summary ?? null,
+        })),
+      );
+
+      if (allItems.length === 0) break;
+
+      const unique = Array.from(new Map(allItems.map((i) => [i.id, i])).values());
+
+      const keepUrls = await batchFilterContent(
+        unique,
+        customFilter.description,
+        false,
+        userId,
+      ).catch(() => new Set(unique.map((i) => i.id)));
+
+      filtered = filtered.map((result) => ({
+        ...result,
+        items: result.items.filter((item) => keepUrls.has(item.originalUrl)),
+      }));
+    }
+
+    return filtered;
   } catch {
-    // Fail-open: AI filter error → return after tier 1 only
-    return afterTier1;
+    return results; // fail-open
   }
 }
 
@@ -321,7 +336,7 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
 
   // Apply smart filter (FEAT-004) before storing any content
   const folderOwnerUserId = folder?.userId ?? null;
-  const results = await applySmartFilter(rawResults, folderOwnerUserId).catch(() => rawResults);
+  const results = await applySmartFilter(rawResults, folderOwnerUserId, folderId).catch(() => rawResults);
 
   let totalAdded = 0;
   let skipped = 0;

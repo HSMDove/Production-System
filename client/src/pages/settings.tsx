@@ -30,6 +30,27 @@ type FolderEntry = { id: string; name: string; color: string };
 
 type SettingsData = Record<string, string | null>;
 
+interface SmartFilter {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  isEnabled: boolean;
+  folderIds: string[] | null;
+}
+
+interface SmartFiltersConfig {
+  globalEnabled: boolean;
+  filters: SmartFilter[];
+}
+
+const DEFAULT_SMART_CONFIG: SmartFiltersConfig = {
+  globalEnabled: false,
+  filters: [
+    { id: "default", name: "الفلتر الافتراضي", description: "", isDefault: true, isEnabled: true, folderIds: null },
+  ],
+};
+
 export default function Settings() {
   const { theme, colorMode, setTheme, setColorMode } = useTheme();
   const { toast } = useToast();
@@ -64,6 +85,14 @@ export default function Settings() {
   const [newMappingTargetId, setNewMappingTargetId] = useState("");
   const [slackConnectionTab, setSlackConnectionTab] = useState<"auto" | "manual">("auto");
 
+  // ─── Smart Filters state ────────────────────────────────────────────────
+  const [smartConfig, setSmartConfig] = useState<SmartFiltersConfig>(DEFAULT_SMART_CONFIG);
+  const [showAddFilter, setShowAddFilter] = useState(false);
+  const [newFilterName, setNewFilterName] = useState("");
+  const [newFilterDesc, setNewFilterDesc] = useState("");
+  const [newFilterFolderIds, setNewFilterFolderIds] = useState<string[] | null>(null);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketTitle, setTicketTitle] = useState("");
   const [ticketDescription, setTicketDescription] = useState("");
@@ -81,6 +110,7 @@ export default function Settings() {
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
   const { data: folderMappings } = useQuery<FolderMappingEntry[]>({ queryKey: ["/api/integrations/folder-mappings"] });
   const { data: folders } = useQuery<FolderEntry[]>({ queryKey: ["/api/folders"] });
+  const { data: smartFiltersData } = useQuery<SmartFiltersConfig>({ queryKey: ["/api/settings/smart-filters"] });
   type SlackChannel = { id: string; name: string; topic?: string; memberCount?: number };
 
   const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
@@ -89,6 +119,10 @@ export default function Settings() {
   useEffect(() => {
     if (settings) setLocalSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (smartFiltersData) setSmartConfig(smartFiltersData);
+  }, [smartFiltersData]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -162,6 +196,27 @@ export default function Settings() {
     (integrationChannels || []).filter(c => c.platform === "slack" && c.credentials?.connection_type === "oauth"),
     [integrationChannels]
   );
+
+  // ─── Smart Filters mutations ─────────────────────────────────────────────
+  const saveSmartFiltersMutation = useMutation({
+    mutationFn: (config: SmartFiltersConfig) => apiRequest("PUT", "/api/settings/smart-filters", config),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/smart-filters"] });
+      toast({ title: "✅ تم حفظ الفلاتر" });
+    },
+    onError: () => toast({ title: "خطأ في حفظ الفلاتر", variant: "destructive" }),
+  });
+
+  const applyToExistingMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/settings/smart-filters/apply-to-existing"),
+    onSuccess: () => toast({ title: "✅ جاري التطبيق على الأخبار القديمة في الخلفية" }),
+    onError: () => toast({ title: "خطأ في تطبيق الفلاتر", variant: "destructive" }),
+  });
+
+  function updateSmartConfig(updater: (prev: SmartFiltersConfig) => SmartFiltersConfig) {
+    setSmartConfig((prev) => updater(prev));
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const hasManualSlackConfig = !!(localSettings.slack_bot_token || localSettings.slack_webhook_url);
   const hasOAuthSlackConfig = slackOAuthConnections.length > 0;
@@ -1712,56 +1767,255 @@ export default function Settings() {
 
           </TabsContent>
 
-          {/* ─── الفلتر الذكي ─── */}
+          {/* ─── الفلاتر الذكية ─── */}
           <TabsContent value="smart-filter" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">🛡️ الفلتر الذكي</CardTitle>
-                <CardDescription>تحكّم في جودة الأخبار التي يصلك فكري — يعمل قبل تخزين أي خبر جديد.</CardDescription>
+                <CardTitle className="flex items-center gap-2">🛡️ الفلاتر الذكية</CardTitle>
+                <CardDescription>تحكّم بجودة الأخبار — يُطبَّق على الأخبار القديمة والجديدة والقادمة.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-5">
 
-                {/* Toggle: تفعيل الفلتر */}
+                {/* Global toggle */}
                 <div className="flex items-center justify-between rounded-lg border p-4">
                   <div className="space-y-0.5">
-                    <Label className="text-base">تفعيل الفلتر الذكي</Label>
-                    <p className="text-sm text-muted-foreground">عند التفعيل، يفحص فكري كل خبر جديد قبل تخزينه وتحليله.</p>
+                    <Label className="text-base font-semibold">تفعيل الفلاتر</Label>
+                    <p className="text-sm text-muted-foreground">فعّل لتُطبَّق الفلاتر على جميع أخبارك.</p>
                   </div>
                   <Switch
-                    checked={localSettings.news_filter_enabled === "true"}
-                    onCheckedChange={(v) => updateSetting("news_filter_enabled", v ? "true" : "false")}
-                    data-testid="switch-news-filter-enabled"
+                    checked={smartConfig.globalEnabled}
+                    onCheckedChange={(v) => updateSmartConfig((c) => ({ ...c, globalEnabled: v }))}
+                    data-testid="switch-smart-filter-global"
                   />
                 </div>
 
-                {localSettings.news_filter_enabled === "true" && (
-                  <>
-                    {/* Toggle: الفلتر الصارم */}
-                    <div className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <Label className="text-base">الفلتر الصارم الافتراضي</Label>
-                        <p className="text-sm text-muted-foreground">يحجب تلقائياً: إجابات الكلمات المتقاطعة والألعاب اليومية، الإعلانات المُقنَّعة، والمحتوى الترويجي.</p>
+                {smartConfig.globalEnabled && (
+                  <div className="space-y-3">
+
+                    {/* Filter cards */}
+                    {smartConfig.filters.map((filter) => (
+                      <div key={filter.id} className="rounded-lg border p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-sm truncate">
+                              {filter.isDefault ? "🔒" : "📝"} {filter.name}
+                            </span>
+                            {filter.isDefault && (
+                              <span className="text-xs bg-muted px-2 py-0.5 rounded-full text-muted-foreground shrink-0">افتراضي</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!filter.isDefault && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={() =>
+                                  updateSmartConfig((c) => ({ ...c, filters: c.filters.filter((f) => f.id !== filter.id) }))
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <Switch
+                              checked={filter.isEnabled}
+                              onCheckedChange={(v) =>
+                                updateSmartConfig((c) => ({
+                                  ...c,
+                                  filters: c.filters.map((f) => f.id === filter.id ? { ...f, isEnabled: v } : f),
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          {filter.isDefault
+                            ? "يحجب تلقائياً: الإعلانات، إجابات الألعاب اليومية، المحتوى الترويجي، والنتائج عديمة القيمة."
+                            : `"${filter.description}"`}
+                        </p>
+
+                        {/* Folder chips */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">طبّق على:</Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() =>
+                                updateSmartConfig((c) => ({
+                                  ...c,
+                                  filters: c.filters.map((f) => f.id === filter.id ? { ...f, folderIds: null } : f),
+                                }))
+                              }
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                filter.folderIds === null
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/50 hover:bg-muted border-border"
+                              }`}
+                            >
+                              كل المجلدات
+                            </button>
+                            {(folders || []).map((folder) => {
+                              const selected = filter.folderIds !== null && filter.folderIds.includes(folder.id);
+                              return (
+                                <button
+                                  key={folder.id}
+                                  onClick={() => {
+                                    const cur = filter.folderIds ?? [];
+                                    const next = cur.includes(folder.id)
+                                      ? cur.filter((id) => id !== folder.id)
+                                      : [...cur, folder.id];
+                                    updateSmartConfig((c) => ({
+                                      ...c,
+                                      filters: c.filters.map((f) =>
+                                        f.id === filter.id ? { ...f, folderIds: next.length === 0 ? null : next } : f,
+                                      ),
+                                    }));
+                                  }}
+                                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                    selected
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "bg-muted/50 hover:bg-muted border-border"
+                                  }`}
+                                >
+                                  {folder.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <Switch
-                        checked={localSettings.news_filter_strict_mode !== "false"}
-                        onCheckedChange={(v) => updateSetting("news_filter_strict_mode", v ? "true" : "false")}
-                        data-testid="switch-news-filter-strict"
-                      />
+                    ))}
+
+                    {/* Add new filter */}
+                    {!showAddFilter ? (
+                      <Button variant="outline" className="w-full gap-2" onClick={() => setShowAddFilter(true)}>
+                        <Plus className="h-4 w-4" />
+                        إضافة فلتر جديد
+                      </Button>
+                    ) : (
+                      <div className="rounded-lg border border-dashed p-4 space-y-3">
+                        <p className="text-sm font-medium">فلتر جديد</p>
+                        <div className="space-y-1">
+                          <Label className="text-xs">اسم الفلتر</Label>
+                          <Input
+                            placeholder="مثال: فلتر السياسة"
+                            value={newFilterName}
+                            onChange={(e) => setNewFilterName(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">اوصف لفكري ماذا تريد حجبه</Label>
+                          <Textarea
+                            rows={3}
+                            placeholder='مثال: "لا أريد أخبار رياضية أو سياسية، أريد التركيز على التكنولوجيا فقط"'
+                            value={newFilterDesc}
+                            onChange={(e) => setNewFilterDesc(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">طبّق على:</Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() => setNewFilterFolderIds(null)}
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                newFilterFolderIds === null
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-muted/50 hover:bg-muted border-border"
+                              }`}
+                            >
+                              كل المجلدات
+                            </button>
+                            {(folders || []).map((folder) => {
+                              const selected = newFilterFolderIds !== null && newFilterFolderIds.includes(folder.id);
+                              return (
+                                <button
+                                  key={folder.id}
+                                  onClick={() => {
+                                    const cur = newFilterFolderIds ?? [];
+                                    const next = cur.includes(folder.id)
+                                      ? cur.filter((id) => id !== folder.id)
+                                      : [...cur, folder.id];
+                                    setNewFilterFolderIds(next.length === 0 ? null : next);
+                                  }}
+                                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                    selected
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "bg-muted/50 hover:bg-muted border-border"
+                                  }`}
+                                >
+                                  {folder.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={!newFilterName.trim() || !newFilterDesc.trim()}
+                            onClick={() => {
+                              const newFilter: SmartFilter = {
+                                id: crypto.randomUUID(),
+                                name: newFilterName.trim(),
+                                description: newFilterDesc.trim(),
+                                isDefault: false,
+                                isEnabled: true,
+                                folderIds: newFilterFolderIds,
+                              };
+                              updateSmartConfig((c) => ({ ...c, filters: [...c.filters, newFilter] }));
+                              setNewFilterName("");
+                              setNewFilterDesc("");
+                              setNewFilterFolderIds(null);
+                              setShowAddFilter(false);
+                            }}
+                          >
+                            حفظ الفلتر
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setShowAddFilter(false);
+                              setNewFilterName("");
+                              setNewFilterDesc("");
+                              setNewFilterFolderIds(null);
+                            }}
+                          >
+                            إلغاء
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        className="flex-1 gap-2"
+                        onClick={() => saveSmartFiltersMutation.mutate(smartConfig)}
+                        disabled={saveSmartFiltersMutation.isPending}
+                      >
+                        {saveSmartFiltersMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        حفظ الإعدادات
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        disabled={applyToExistingMutation.isPending || saveSmartFiltersMutation.isPending}
+                        onClick={() => {
+                          saveSmartFiltersMutation.mutate(smartConfig);
+                          applyToExistingMutation.mutate();
+                        }}
+                      >
+                        {applyToExistingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        تطبيق على الأخبار القديمة
+                      </Button>
                     </div>
 
-                    {/* Textarea: قواعد مخصصة */}
-                    <div className="space-y-2">
-                      <Label>قواعد مخصصة (اختياري)</Label>
-                      <Textarea
-                        rows={4}
-                        placeholder='مثال: "لا أريد أخبار سياسية، وأريد التركيز على التكنولوجيا فقط"'
-                        value={localSettings.news_filter_instructions || ""}
-                        onChange={(e) => updateSetting("news_filter_instructions", e.target.value)}
-                        data-testid="textarea-news-filter-instructions"
-                      />
-                      <p className="text-xs text-muted-foreground">💡 يقرأ فكري هذه التعليمات لكل دورة جلب جديدة — يستخدم استدعاء AI واحد فقط للدفعة الكاملة.</p>
-                    </div>
-                  </>
+                  </div>
+                )}
+
+                {!smartConfig.globalEnabled && (
+                  <p className="text-sm text-muted-foreground text-center py-4">فعّل الفلاتر من الأعلى لبدء إعداد قواعد الفلترة.</p>
                 )}
 
               </CardContent>

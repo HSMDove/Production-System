@@ -662,6 +662,36 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // ─── Smart Filters types (FEAT-004) ──────────────────────────────────────
+  interface SmartFilter {
+    id: string;
+    name: string;
+    description: string;
+    isDefault: boolean;
+    isEnabled: boolean;
+    folderIds: string[] | null;
+  }
+
+  interface SmartFiltersConfig {
+    globalEnabled: boolean;
+    filters: SmartFilter[];
+  }
+
+  const DEFAULT_SMART_FILTERS_CONFIG: SmartFiltersConfig = {
+    globalEnabled: false,
+    filters: [
+      {
+        id: "default",
+        name: "الفلتر الافتراضي",
+        description: "",
+        isDefault: true,
+        isEnabled: true,
+        folderIds: null,
+      },
+    ],
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   app.use("/api", async (req: Request, _res: Response, next: NextFunction) => {
     if (req.session?.userId) {
       storage.updateUserLastActive(req.session.userId).catch(() => {});
@@ -984,20 +1014,37 @@ export async function registerRoutes(
       const userId = req.session.userId!;
       let contentItems = await storage.getVisibleContentByFolderId(req.params.id);
 
-      // Apply smart filter on read path if enabled (FEAT-004)
+      // Apply smart filters on read path (FEAT-004)
       try {
-        const [enabledSetting, strictSetting] = await Promise.all([
-          storage.getSetting("news_filter_enabled", userId),
-          storage.getSetting("news_filter_strict_mode", userId),
+        const [configSetting, blockedSetting] = await Promise.all([
+          storage.getSetting("smart_filters_config", userId),
+          storage.getSetting("smart_filters_blocked_urls", userId),
         ]);
-        if (enabledSetting?.value === "true") {
-          const strictMode = strictSetting?.value !== "false";
-          contentItems = contentItems.filter(
-            (item) => !shouldFilterContent(item.title, item.arabicTitle || item.summary || null, strictMode),
+
+        if (configSetting?.value) {
+          const config = JSON.parse(configSetting.value) as SmartFiltersConfig;
+          const blockedUrls = new Set<string>(
+            blockedSetting?.value ? (JSON.parse(blockedSetting.value) as string[]) : [],
           );
+
+          if (config.globalEnabled) {
+            const folderId = req.params.id;
+            const activeFilters = (config.filters || []).filter(
+              (f) => f.isEnabled && (f.folderIds === null || f.folderIds.includes(folderId)),
+            );
+            const hasDefaultFilter = activeFilters.some((f) => f.isDefault);
+
+            contentItems = contentItems.filter((item) => {
+              if (hasDefaultFilter && shouldFilterContent(item.title, item.arabicTitle || item.summary || null, true)) {
+                return false;
+              }
+              if (blockedUrls.has(item.originalUrl)) return false;
+              return true;
+            });
+          }
         }
       } catch {
-        // Fail-open: if settings load fails, show all content
+        // fail-open: show all content if filter fails
       }
 
       const allSources = await storage.getSourcesByFolderId(req.params.id);
@@ -3245,6 +3292,92 @@ export async function registerRoutes(
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message || "Failed to test bot token" });
     }
+  });
+
+  // ─── Smart Filters (FEAT-004) ────────────────────────────────────────────
+
+  app.get("/api/settings/smart-filters", async (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const setting = await storage.getSetting("smart_filters_config", req.session.userId);
+      if (!setting?.value) return res.json(DEFAULT_SMART_FILTERS_CONFIG);
+      res.json(JSON.parse(setting.value) as SmartFiltersConfig);
+    } catch {
+      res.status(500).json({ error: "Failed to load smart filters" });
+    }
+  });
+
+  app.put("/api/settings/smart-filters", async (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      await storage.upsertSetting("smart_filters_config", JSON.stringify(req.body), req.session.userId);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to save smart filters" });
+    }
+  });
+
+  app.post("/api/settings/smart-filters/apply-to-existing", async (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: "Unauthorized" });
+    const userId = req.session.userId;
+    // Respond immediately, run in background
+    res.json({ started: true });
+
+    (async () => {
+      try {
+        const setting = await storage.getSetting("smart_filters_config", userId);
+        if (!setting?.value) return;
+        const config = JSON.parse(setting.value) as SmartFiltersConfig;
+        if (!config.globalEnabled) return;
+
+        const allFolders = await storage.getAllFolders(userId);
+        const blockedUrls = new Set<string>();
+
+        for (const filter of config.filters) {
+          if (!filter.isEnabled || filter.isDefault || !filter.description.trim()) continue;
+
+          const targetFolderIds = filter.folderIds === null
+            ? allFolders.map((f) => f.id)
+            : filter.folderIds;
+
+          const allItems: Array<{ id: string; title: string; summary: string | null; originalUrl: string }> = [];
+          for (const folderId of targetFolderIds) {
+            const content = await storage.getContentByFolderId(folderId);
+            for (const item of content) {
+              allItems.push({
+                id: item.originalUrl,
+                title: item.title,
+                summary: item.arabicTitle || item.summary || null,
+                originalUrl: item.originalUrl,
+              });
+            }
+          }
+
+          if (allItems.length === 0) continue;
+
+          // Deduplicate by URL
+          const unique = Array.from(new Map(allItems.map((i) => [i.id, i])).values());
+
+          const { batchFilterContent } = await import("./openai");
+          const keepUrls = await batchFilterContent(unique, filter.description, false, userId);
+
+          for (const item of unique) {
+            if (!keepUrls.has(item.originalUrl)) {
+              blockedUrls.add(item.originalUrl);
+            }
+          }
+        }
+
+        await storage.upsertSetting(
+          "smart_filters_blocked_urls",
+          JSON.stringify([...blockedUrls]),
+          userId,
+        );
+        console.log(`[SmartFilter] Applied to existing content: ${blockedUrls.size} URLs blocked for user ${userId}`);
+      } catch (e) {
+        console.error("[SmartFilter] Error applying to existing content:", e);
+      }
+    })();
   });
 
   // Fikri Kashshaf - AI-powered source discovery
