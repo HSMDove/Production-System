@@ -60,7 +60,10 @@ export function FikriOverlay() {
   const [isStreaming, setIsStreaming]         = useState(false);
   const [pendingUserMsg, setPendingUserMsg]   = useState<string | null>(null);
   const [streamingText, setStreamingText]     = useState("");
-  const abortRef = useRef<AbortController | null>(null);
+  const abortRef             = useRef<AbortController | null>(null);
+  const messagesLengthRef    = useRef(0);
+  const waitingForSettleRef  = useRef(false);
+  const finalStreamTextRef   = useRef("");
 
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -88,9 +91,35 @@ export function FikriOverlay() {
     }
   }, [activeConversationId, isNewMode, conversations]);
 
+  // Smooth scroll only when a new persisted message is appended
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversationData?.messages, streamingText, pendingUserMsg, chatError]);
+    const newLen = conversationData?.messages?.length ?? 0;
+    if (newLen !== messagesLengthRef.current) {
+      messagesLengthRef.current = newLen;
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [conversationData?.messages?.length]);
+
+  // Instant-pin to bottom while streaming — avoids animation thrashing / jitter
+  useEffect(() => {
+    if (isStreaming) {
+      bottomRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+    }
+  }, [isStreaming, streamingText]);
+
+  // Clear optimistic state only after query has settled with the new assistant message
+  useEffect(() => {
+    if (!waitingForSettleRef.current) return;
+    if (!isStreaming && conversationData?.messages && conversationData.messages.length > 0) {
+      const lastMsg = conversationData.messages[conversationData.messages.length - 1];
+      if (lastMsg.role === "assistant") {
+        waitingForSettleRef.current = false;
+        finalStreamTextRef.current = "";
+        setPendingUserMsg(null);
+        setStreamingText("");
+      }
+    }
+  }, [isStreaming, conversationData?.messages]);
 
   const deleteConversationMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/assistant/conversations/${id}`),
@@ -119,6 +148,7 @@ export function FikriOverlay() {
     setPendingUserMsg(text);
     setStreamingText("");
     setIsStreaming(true);
+    waitingForSettleRef.current = true;
 
     try {
       const ctrl = new AbortController();
@@ -175,7 +205,9 @@ export function FikriOverlay() {
             setStreamingText((prev) => prev + data.text);
           } else if (eventType === "done") {
             const finalConvId = data.conversationId || doneConvId || activeConversationId;
-            queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations", finalConvId, "messages"] });
+            finalStreamTextRef.current = streamingText;
+            await queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations", finalConvId, "messages"] });
+            // Non-awaited — sidebar list refreshes asynchronously
             queryClient.invalidateQueries({ queryKey: ["/api/assistant/conversations"] });
           } else if (eventType === "error") {
             throw new Error(data.message || "فشل إرسال الرسالة");
@@ -183,16 +215,20 @@ export function FikriOverlay() {
         }
       }
     } catch (err: any) {
+      waitingForSettleRef.current = false;
       if (err.name !== "AbortError") {
         const errorText = err.message || "فشل إرسال الرسالة";
         const match = errorText.match(/\d+:\s*\{?"?error"?:?\s*"?([^"}\n]+)"?\}?/);
         setChatError(match ? match[1] : errorText.replace(/^\d+:\s*/, ""));
+        // On error: clear optimistic state immediately since no query settlement will occur
+        setPendingUserMsg(null);
+        setStreamingText("");
       }
     } finally {
-      setPendingUserMsg(null);
-      setStreamingText("");
       setIsStreaming(false);
       abortRef.current = null;
+      // pendingUserMsg and streamingText are cleared by the query-settle effect on success,
+      // or by the catch block on error.
     }
   };
 
@@ -210,7 +246,7 @@ export function FikriOverlay() {
 
       <aside
         dir="rtl"
-        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col bg-card border-l border-border shadow-2xl"
+        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col liquid-glass border-l shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
@@ -336,7 +372,7 @@ export function FikriOverlay() {
 
                 {/* Live streaming assistant response */}
                 {isStreaming && (
-                  <div dir="rtl" className="rounded-2xl px-3 py-2 text-sm leading-relaxed text-right bg-muted text-foreground">
+                  <div dir="rtl" className="rounded-2xl px-3 py-2 text-sm leading-relaxed text-right bg-muted text-foreground will-change-transform">
                     {streamingText ? (
                       <>
                         <MarkdownMessage content={streamingText} />

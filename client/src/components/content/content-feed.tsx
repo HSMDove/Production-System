@@ -130,11 +130,26 @@ function getSourceDisplayName(item: ContentWithSource): string {
   }
 }
 
-function ContentCard({ item, showSmartView }: { 
-  item: ContentWithSource; 
+// Module-level cache: persists across remounts within a browser session
+const failedImageUrls = new Set<string>();
+
+function isValidImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function ContentCard({ item, showSmartView }: {
+  item: ContentWithSource;
   showSmartView?: boolean;
 }) {
-  const [imageError, setImageError] = useState(false);
+  const [imageError, setImageError] = useState(
+    () => !!item.imageUrl && failedImageUrls.has(item.imageUrl)
+  );
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
   const { toast } = useToast();
   const broadcastResetRef = useRef<number | null>(null);
@@ -192,14 +207,14 @@ function ContentCard({ item, showSmartView }: {
     if (!isRead) readMutation.mutate();
   };
 
-  const hasValidImage = item.imageUrl && !imageError;
+  const hasValidImage = isValidImageUrl(item.imageUrl) && !imageError;
   const ageBand = getContentAgeBand(item);
   const ageAccent = getAgeAccentStyles(ageBand);
   const thumbPlaceholder = getThumbnailPlaceholder(item.source?.type);
   
   return (
-    <Card 
-      className={`glass-surface content-news-card transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
+    <Card
+      className={`liquid-glass content-news-card transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
       <CardContent className="p-0">
@@ -228,11 +243,15 @@ function ContentCard({ item, showSmartView }: {
             <div className="w-20 h-20 rounded-lg overflow-hidden border border-border/50">
               {hasValidImage ? (
                 <div className="relative w-full h-full">
-                  <img 
-                    src={item.imageUrl!} 
+                  <img
+                    src={item.imageUrl!}
                     alt={displayTitle}
                     className="w-full h-full object-cover"
-                    onError={() => setImageError(true)}
+                    loading="lazy"
+                    onError={() => {
+                      if (item.imageUrl) failedImageUrls.add(item.imageUrl);
+                      setImageError(true);
+                    }}
                   />
                   {isVideo && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -273,18 +292,18 @@ function ContentCard({ item, showSmartView }: {
               </div>
               
               {/* Title — always 2 lines max */}
-              <h3 
-                className="text-sm font-semibold leading-snug line-clamp-2 text-foreground" 
+              <h3
+                className="news-title text-base font-semibold leading-snug line-clamp-2 text-foreground"
                 dir="auto"
                 data-testid={`text-content-title-${item.id}`}
               >
                 {displayTitle}
               </h3>
-              
+
               {/* Summary — 2 lines max on sm+ */}
               {displaySummary && (
-                <p 
-                  className="hidden sm:block text-xs text-muted-foreground line-clamp-2" 
+                <p
+                  className="news-summary hidden sm:block text-sm text-muted-foreground line-clamp-2"
                   dir="auto"
                 >
                   {displaySummary}

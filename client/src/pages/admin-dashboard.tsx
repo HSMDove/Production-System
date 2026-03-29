@@ -5,8 +5,26 @@ import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
   Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock,
-  Sparkles, RotateCcw
+  Sparkles, RotateCcw, Network, ExternalLink
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +38,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 import { ADMIN_MODEL_CATALOG, getDefaultModel, type AdminAIProvider } from "@/lib/model-catalog";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections";
 
 const tabDescriptions: Record<Tab, string> = {
   analytics: "ملخص تنفيذي سريع لحركة النظام والمستخدمين والمحتوى داخل المنصة.",
@@ -33,6 +51,7 @@ const tabDescriptions: Record<Tab, string> = {
   settings: "مفاتيح تشغيل المنصة والإعدادات العامة التي تتحكم في سلوك النظام بالكامل.",
   admins: "إدارة الحسابات الإدارية والصلاحيات وكلمات المرور دون مغادرة اللوحة.",
   audit: "سجل قرارات الإدارة والعمليات الحساسة لمراجعة التغييرات بدقة.",
+  connections: "إدارة روابط التكامل الخارجية للمنصة: النطاقات، DNS، قواعد البيانات، وغيرها.",
 };
 
 export default function AdminDashboard() {
@@ -51,6 +70,7 @@ export default function AdminDashboard() {
     { id: "settings", label: "إعدادات النظام", icon: Settings },
     { id: "admins", label: "إدارة المدراء", icon: Shield },
     { id: "audit", label: "سجل التدقيق", icon: FileText },
+    { id: "connections", label: "الاتصالات", icon: Network },
   ];
   const activeTabMeta = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const ActiveIcon = activeTabMeta.icon;
@@ -152,6 +172,7 @@ export default function AdminDashboard() {
           {activeTab === "settings" && <SystemSettingsPanel />}
           {activeTab === "admins" && <AdminsPanel />}
           {activeTab === "audit" && <AuditPanel />}
+          {activeTab === "connections" && <ConnectionsPanel />}
         </section>
       </main>
       </div>
@@ -1556,6 +1577,330 @@ function TicketsPanel() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CONNECTIONS PANEL — client-side, stored in localStorage
+// ────────────────────────────────────────────────────────────────────────────
+
+const CONNECTIONS_STORAGE_KEY = "nasaq_admin_connections";
+
+type ConnectionCategory = "Domain" | "DNS" | "Database" | "Custom";
+
+interface Connection {
+  id: string;
+  name: string;
+  category: ConnectionCategory;
+  url: string;
+  description: string;
+  icon: string;
+}
+
+const DEFAULT_CONNECTIONS: Connection[] = [
+  {
+    id: "sahabah-domain",
+    name: "Sahabah",
+    category: "Domain",
+    url: "https://sahabah.com.sa/?lang=ar",
+    description: "مزود النطاق الرئيسي للمنصة",
+    icon: "🌐",
+  },
+  {
+    id: "cloudflare-dns",
+    name: "Cloudflare",
+    category: "DNS",
+    url: "https://dash.cloudflare.com/fd3e46c097777a2cc0b4fb16efdbe079/home/overview",
+    description: "إدارة DNS والتوجيه والحماية من DDoS",
+    icon: "☁️",
+  },
+  {
+    id: "neon-database",
+    name: "Neon",
+    category: "Database",
+    url: "https://neon.com/",
+    description: "قاعدة بيانات PostgreSQL المدارة",
+    icon: "🗄️",
+  },
+];
+
+const CATEGORY_LABELS: Record<ConnectionCategory, string> = {
+  Domain: "نطاق",
+  DNS: "DNS",
+  Database: "قاعدة بيانات",
+  Custom: "مخصص",
+};
+
+const CATEGORY_COLORS: Record<ConnectionCategory, string> = {
+  Domain:   "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  DNS:      "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  Database: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  Custom:   "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+};
+
+function loadConnections(): Connection[] {
+  try {
+    const stored = localStorage.getItem(CONNECTIONS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_CONNECTIONS;
+}
+
+function saveConnections(connections: Connection[]): void {
+  try {
+    localStorage.setItem(CONNECTIONS_STORAGE_KEY, JSON.stringify(connections));
+  } catch {}
+}
+
+const EMPTY_FORM: Omit<Connection, "id"> = {
+  name: "",
+  category: "Custom",
+  url: "",
+  description: "",
+  icon: "🔗",
+};
+
+function ConnectionsPanel() {
+  const { toast } = useToast();
+  const [connections, setConnections] = useState<Connection[]>(loadConnections);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Connection | null>(null);
+  const [form, setForm] = useState<Omit<Connection, "id">>(EMPTY_FORM);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof Omit<Connection, "id">, string>>>({});
+
+  const persistAndSet = (updated: Connection[]) => {
+    setConnections(updated);
+    saveConnections(updated);
+  };
+
+  const openAdd = () => {
+    setEditTarget(null);
+    setForm(EMPTY_FORM);
+    setFormErrors({});
+    setDialogOpen(true);
+  };
+
+  const openEdit = (conn: Connection) => {
+    setEditTarget(conn);
+    setForm({ name: conn.name, category: conn.category, url: conn.url, description: conn.description, icon: conn.icon });
+    setFormErrors({});
+    setDialogOpen(true);
+  };
+
+  const validate = (): boolean => {
+    const errors: typeof formErrors = {};
+    if (!form.name.trim()) errors.name = "الاسم مطلوب";
+    if (!form.url.trim()) {
+      errors.url = "الرابط مطلوب";
+    } else {
+      try { new URL(form.url); } catch { errors.url = "رابط غير صالح — يجب أن يبدأ بـ https://"; }
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validate()) return;
+    if (editTarget) {
+      persistAndSet(connections.map(c => c.id === editTarget.id ? { ...form, id: editTarget.id } : c));
+      toast({ title: "تم التحديث", description: `تم تحديث الاتصال: ${form.name}` });
+    } else {
+      const newConn: Connection = { ...form, id: `conn-${Date.now()}` };
+      persistAndSet([...connections, newConn]);
+      toast({ title: "تمت الإضافة", description: `تمت إضافة الاتصال: ${form.name}` });
+    }
+    setDialogOpen(false);
+  };
+
+  const handleDelete = (id: string) => {
+    persistAndSet(connections.filter(c => c.id !== id));
+    setDeleteConfirmId(null);
+    toast({ title: "تم الحذف", variant: "destructive" });
+  };
+
+  return (
+    <div dir="rtl">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold">الاتصالات والتكاملات ({connections.length})</h2>
+        <Button onClick={openAdd} className="gap-2" data-testid="button-add-connection">
+          <Plus className="h-4 w-4" />
+          إضافة اتصال
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {connections.map((conn) => (
+          <div
+            key={conn.id}
+            className="card bg-card p-4 space-y-3"
+            data-testid={`connection-card-${conn.id}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-2xl flex-shrink-0" aria-hidden>{conn.icon}</span>
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{conn.name}</p>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[conn.category]}`}>
+                    {CATEGORY_LABELS[conn.category]}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7"
+                  onClick={() => openEdit(conn)}
+                  data-testid={`button-edit-connection-${conn.id}`}
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteConfirmId(conn.id)}
+                  data-testid={`button-delete-connection-${conn.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {conn.description && (
+              <p className="text-sm text-muted-foreground">{conn.description}</p>
+            )}
+
+            <a
+              href={conn.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              data-testid={`link-connection-${conn.id}`}
+            >
+              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate" dir="ltr">{conn.url}</span>
+            </a>
+          </div>
+        ))}
+      </div>
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "تعديل الاتصال" : "إضافة اتصال جديد"}</DialogTitle>
+            <DialogDescription>
+              {editTarget ? "عدّل تفاصيل الاتصال أدناه." : "أدخل تفاصيل الاتصال الجديد."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Icon + Name */}
+            <div className="flex gap-3">
+              <div className="w-20">
+                <Label htmlFor="conn-icon">أيقونة</Label>
+                <Input
+                  id="conn-icon"
+                  value={form.icon}
+                  onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
+                  className="mt-1 text-center text-xl"
+                  maxLength={4}
+                  data-testid="input-connection-icon"
+                />
+              </div>
+              <div className="flex-1">
+                <Label htmlFor="conn-name">الاسم *</Label>
+                <Input
+                  id="conn-name"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  className="mt-1"
+                  placeholder="مثال: Cloudflare"
+                  data-testid="input-connection-name"
+                />
+                {formErrors.name && <p className="text-xs text-destructive mt-1">{formErrors.name}</p>}
+              </div>
+            </div>
+
+            {/* Category */}
+            <div>
+              <Label htmlFor="conn-category">الفئة</Label>
+              <Select
+                value={form.category}
+                onValueChange={v => setForm(f => ({ ...f, category: v as ConnectionCategory }))}
+              >
+                <SelectTrigger id="conn-category" className="mt-1" data-testid="select-connection-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(CATEGORY_LABELS) as ConnectionCategory[]).map(cat => (
+                    <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* URL */}
+            <div>
+              <Label htmlFor="conn-url">الرابط *</Label>
+              <Input
+                id="conn-url"
+                value={form.url}
+                onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                className="mt-1"
+                placeholder="https://example.com"
+                dir="ltr"
+                data-testid="input-connection-url"
+              />
+              {formErrors.url && <p className="text-xs text-destructive mt-1">{formErrors.url}</p>}
+            </div>
+
+            {/* Description */}
+            <div>
+              <Label htmlFor="conn-desc">الوصف</Label>
+              <Textarea
+                id="conn-desc"
+                value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                className="mt-1"
+                rows={2}
+                placeholder="وصف اختياري للاتصال"
+                data-testid="input-connection-description"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="flex-row-reverse gap-2">
+            <Button onClick={handleSave} data-testid="button-save-connection">
+              <Save className="h-4 w-4 ml-1" />
+              {editTarget ? "حفظ التعديلات" : "إضافة"}
+            </Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={o => { if (!o) setDeleteConfirmId(null); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف الاتصال</AlertDialogTitle>
+            <AlertDialogDescription>هل أنت متأكد من حذف هذا الاتصال؟ لا يمكن التراجع.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-row-reverse gap-2">
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              data-testid="button-confirm-delete-connection"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
