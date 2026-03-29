@@ -1,5 +1,26 @@
-import { eq, and, or, desc, isNull, gt, lt, sql } from "drizzle-orm";
+import { eq, and, or, desc, isNull, gt, lt, sql, inArray } from "drizzle-orm";
 import crypto from "crypto";
+import { gzipSync, gunzipSync } from "zlib";
+
+// ─── Field-level gzip compression (transparent, backward-compatible) ──────────
+const GZ_PREFIX = "__gz__:";
+
+function compressField(text: string): string {
+  return GZ_PREFIX + gzipSync(Buffer.from(text, "utf8")).toString("base64");
+}
+
+function decompressField(text: string): string {
+  if (!text.startsWith(GZ_PREFIX)) return text;
+  return gunzipSync(Buffer.from(text.slice(GZ_PREFIX.length), "base64")).toString("utf8");
+}
+
+function decompressContent<T extends { arabicFullSummary?: string | null; rewrittenContent?: string | null }>(c: T): T {
+  return {
+    ...c,
+    arabicFullSummary: c.arabicFullSummary ? decompressField(c.arabicFullSummary) : c.arabicFullSummary,
+    rewrittenContent: c.rewrittenContent ? decompressField(c.rewrittenContent) : c.rewrittenContent,
+  };
+}
 import { db } from "./db";
 import {
   folders,
@@ -291,6 +312,14 @@ export interface IStorage {
 
   // User Activity
   updateUserLastActive(userId: string): Promise<void>;
+
+  // Assistant message deletion (for memory summarization)
+  deleteAssistantMessagesByIds(ids: string[]): Promise<void>;
+
+  // Daily cleanup jobs
+  cleanupExpiredOtpCodes(): Promise<number>;
+  cleanupOldApiUsageLogs(daysToKeep?: number): Promise<number>;
+  cleanupStaleProcessingContent(hoursOld?: number): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -444,24 +473,25 @@ export class DatabaseStorage implements IStorage {
     const userFolders = await this.getAllFolders(userId);
     const folderIds = userFolders.map((f) => f.id);
     if (folderIds.length === 0) return [];
-    const { inArray } = await import("drizzle-orm");
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(and(inArray(content.folderId, folderIds), FULLY_PROCESSED_CONTENT_CONDITION))
       .orderBy(content.fetchedAt);
+    return rows.map(decompressContent);
   }
 
   async getContentByFolderId(folderId: string): Promise<Content[]> {
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(and(eq(content.folderId, folderId), FULLY_PROCESSED_CONTENT_CONDITION))
       .orderBy(desc(content.publishedAt), desc(content.fetchedAt));
+    return rows.map(decompressContent);
   }
 
   async getVisibleContentByFolderId(folderId: string): Promise<Content[]> {
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(
@@ -472,6 +502,7 @@ export class DatabaseStorage implements IStorage {
         ),
       )
       .orderBy(desc(content.publishedAt), desc(content.fetchedAt));
+    return rows.map(decompressContent);
   }
 
   async getAllSources(): Promise<Source[]> {
@@ -506,7 +537,7 @@ export class DatabaseStorage implements IStorage {
 
   async getContentById(id: string): Promise<Content | undefined> {
     const [item] = await db.select().from(content).where(eq(content.id, id));
-    return item;
+    return item ? decompressContent(item) : undefined;
   }
 
   async updateContentSentiment(id: string, sentiment: SentimentType, sentimentScore: number, keywords: string[]): Promise<Content | undefined> {
@@ -530,10 +561,10 @@ export class DatabaseStorage implements IStorage {
   async updateContentTranslation(id: string, arabicTitle: string, arabicFullSummary: string): Promise<Content | undefined> {
     const [updated] = await db
       .update(content)
-      .set({ arabicTitle, arabicFullSummary })
+      .set({ arabicTitle, arabicFullSummary: compressField(arabicFullSummary) })
       .where(eq(content.id, id))
       .returning();
-    return updated;
+    return updated ? decompressContent(updated) : undefined;
   }
 
   async updateContentImageUrl(id: string, imageUrl: string): Promise<Content | undefined> {
@@ -546,12 +577,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUnanalyzedContent(limit: number = 20): Promise<Content[]> {
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(isNull(content.sentiment))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
+    return rows.map(decompressContent);
   }
 
   async getUndisplayedContentCount(folderId: string): Promise<number> {
@@ -579,23 +611,25 @@ export class DatabaseStorage implements IStorage {
 
   async getOrphanedProcessingContent(olderThanMinutes: number = 10): Promise<Content[]> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
-    return db.select().from(content)
+    const rows = await db.select().from(content)
       .where(and(eq(content.processingStatus, "processing"), lt(content.fetchedAt, cutoff)))
       .orderBy(content.fetchedAt);
+    return rows.map(decompressContent);
   }
 
   async getReadyContentMissingArabic(limit: number = 25): Promise<Content[]> {
-    return db.select().from(content)
+    const rows = await db.select().from(content)
       .where(and(
         eq(content.processingStatus, "ready"),
         or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
       ))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
+    return rows.map(decompressContent);
   }
 
   async getReadyContentMissingArabicByFolder(folderId: string, limit: number = 20): Promise<Content[]> {
-    return db.select().from(content)
+    const rows = await db.select().from(content)
       .where(and(
         eq(content.folderId, folderId),
         eq(content.processingStatus, "ready"),
@@ -603,6 +637,7 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
+    return rows.map(decompressContent);
   }
 
   // ─── Ideas ────────────────────────────────────────────────────────────────
@@ -751,11 +786,12 @@ export class DatabaseStorage implements IStorage {
 
   // ─── Notifications ────────────────────────────────────────────────────────
   async getUnnotifiedContent(): Promise<Content[]> {
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(isNull(content.notifiedAt))
       .orderBy(desc(content.fetchedAt));
+    return rows.map(decompressContent);
   }
 
   async markContentNotified(id: string): Promise<Content | undefined> {
@@ -764,29 +800,29 @@ export class DatabaseStorage implements IStorage {
       .set({ notifiedAt: new Date() })
       .where(eq(content.id, id))
       .returning();
-    return updated;
+    return updated ? decompressContent(updated) : undefined;
   }
 
   async updateContentRewrite(id: string, rewrittenContent: string): Promise<Content | undefined> {
     const [updated] = await db
       .update(content)
-      .set({ rewrittenContent })
+      .set({ rewrittenContent: compressField(rewrittenContent) })
       .where(eq(content.id, id))
       .returning();
-    return updated;
+    return updated ? decompressContent(updated) : undefined;
   }
 
   async getUnusedContentByFolderId(folderId: string): Promise<Content[]> {
-    return db
+    const rows = await db
       .select()
       .from(content)
       .where(and(eq(content.folderId, folderId), eq(content.usedForIdeas, false)))
       .orderBy(desc(content.fetchedAt));
+    return rows.map(decompressContent);
   }
 
   async markContentUsedForIdeas(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    const { inArray } = await import("drizzle-orm");
     await db
       .update(content)
       .set({ usedForIdeas: true })
@@ -799,7 +835,7 @@ export class DatabaseStorage implements IStorage {
       .set({ readAt: new Date() })
       .where(eq(content.id, id))
       .returning();
-    return updated;
+    return updated ? decompressContent(updated) : undefined;
   }
 
   // ─── Assistant Conversations ──────────────────────────────────────────────
@@ -849,7 +885,7 @@ export class DatabaseStorage implements IStorage {
   async createAssistantMessage(message: InsertAssistantMessage): Promise<AssistantMessage> {
     const [created] = await db
       .insert(assistantMessages)
-      .values({ ...message, role: message.role as "user" | "assistant", metadata: (message as any).metadata ?? null })
+      .values({ ...message, role: message.role as "user" | "assistant" | "context_summary", metadata: (message as any).metadata ?? null })
       .returning();
     await db
       .update(assistantConversations)
@@ -1308,6 +1344,34 @@ export class DatabaseStorage implements IStorage {
     } as any).returning();
     await db.update(supportTickets).set({ updatedAt: new Date() } as any).where(eq(supportTickets.id, ticketId));
     return reply;
+  }
+
+  // ─── Assistant Message Deletion (Memory Summarization) ───────────────────
+  async deleteAssistantMessagesByIds(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.delete(assistantMessages).where(inArray(assistantMessages.id, ids));
+  }
+
+  // ─── Daily Cleanup Jobs ───────────────────────────────────────────────────
+  async cleanupExpiredOtpCodes(): Promise<number> {
+    const result = await db.delete(otpCodes).where(
+      sql`${otpCodes.expiresAt} < NOW() OR ${otpCodes.used} = true`
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async cleanupOldApiUsageLogs(daysToKeep: number = 30): Promise<number> {
+    const cutoff = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
+    const result = await db.delete(apiUsageLogs).where(lt(apiUsageLogs.createdAt, cutoff));
+    return result.rowCount ?? 0;
+  }
+
+  async cleanupStaleProcessingContent(hoursOld: number = 24): Promise<number> {
+    const cutoff = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+    const result = await db.delete(content).where(
+      and(eq(content.processingStatus, "processing"), lt(content.fetchedAt, cutoff))
+    );
+    return result.rowCount ?? 0;
   }
 }
 

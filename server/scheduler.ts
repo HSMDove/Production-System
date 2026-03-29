@@ -10,8 +10,10 @@ const folderInFlight = new Set<string>();
 const SCHEDULER_TICK_MS = 5 * 1000;
 const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
 const READY_BACKFILL_INTERVAL_MS = 30 * 1000;
+const DAILY_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let lastOrphanReaperRun = 0;
 let lastReadyBackfillRun = 0;
+let lastDailyCleanupRun = 0;
 
 async function runFolderFetch(folderId: string) {
   if (folderInFlight.has(folderId)) return;
@@ -57,6 +59,19 @@ async function tick() {
           }
         })
         .catch((e) => console.error("[Backfill] Error:", e));
+    }
+
+    if (Date.now() - lastDailyCleanupRun >= DAILY_CLEANUP_INTERVAL_MS) {
+      lastDailyCleanupRun = Date.now();
+      Promise.all([
+        storage.cleanupExpiredOtpCodes(),
+        storage.cleanupOldApiUsageLogs(30),
+        storage.cleanupStaleProcessingContent(24),
+      ])
+        .then(([otpDeleted, logsDeleted, staleDeleted]) => {
+          log(`[Cleanup] OTP: ${otpDeleted} deleted, API logs: ${logsDeleted} deleted, Stale content: ${staleDeleted} deleted`, "scheduler");
+        })
+        .catch((e) => console.error("[Cleanup] Error:", e));
     }
 
     const allFolders = await storage.getAllFoldersSystem();

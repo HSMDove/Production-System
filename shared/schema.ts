@@ -308,7 +308,7 @@ export const assistantConversations = pgTable("assistant_conversations", {
 export const assistantMessages = pgTable("assistant_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   conversationId: varchar("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
-  role: text("role").notNull().$type<"user" | "assistant">(),
+  role: text("role").notNull().$type<"user" | "assistant" | "context_summary">(),
   content: text("content").notNull(),
   action: text("action"),
   statusLabel: text("status_label"),

@@ -239,6 +239,66 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
   }
 }
 
+// ─── AI Memory Summarization ─────────────────────────────────────────────────
+// When a conversation exceeds SUMMARIZE_THRESHOLD messages, the oldest
+// MESSAGES_TO_SUMMARIZE messages are condensed into a single context_summary
+// message. This keeps DB size bounded while preserving conversational context.
+const SUMMARIZE_THRESHOLD = 30;
+const MESSAGES_TO_SUMMARIZE = 20;
+
+async function maybeSummarizeConversation(conversationId: string, userId: string): Promise<void> {
+  try {
+    const allMessages = await storage.getAssistantMessagesByConversationId(conversationId);
+    const regular = allMessages.filter((m) => m.role !== "context_summary");
+    if (regular.length < SUMMARIZE_THRESHOLD) return;
+
+    const toSummarize = regular.slice(0, MESSAGES_TO_SUMMARIZE);
+    const dialogText = toSummarize
+      .map((m) => `${m.role === "user" ? "المستخدم" : "فكري"}: ${m.content}`)
+      .join("\n\n");
+
+    const client = await getAIClient(userId);
+    const result = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "أنت مساعد متخصص في تلخيص المحادثات. لخّص المحادثة التالية في فقرة موجزة (لا تتجاوز 400 كلمة) تحفظ السياق الجوهري والقرارات والمعلومات المهمة.",
+        },
+        { role: "user", content: dialogText },
+      ],
+      temperature: 0.3,
+      max_tokens: 600,
+    });
+
+    const summary = result.choices[0]?.message?.content;
+    if (!summary) return;
+
+    await storage.createAssistantMessage({
+      conversationId,
+      role: "context_summary" as any,
+      content: `[ملخص ${toSummarize.length} رسالة سابقة]: ${summary}`,
+      metadata: { summarizedCount: toSummarize.length, summarizedAt: new Date().toISOString() } as any,
+    });
+
+    await storage.deleteAssistantMessagesByIds(toSummarize.map((m) => m.id));
+  } catch (err) {
+    console.error("[MemorySummarize] Failed:", err);
+    // Non-critical — never block the main chat flow
+  }
+}
+
+// Builds history array from stored messages, hoisting any context_summary to the front.
+function buildHistoryFromMessages(messages: Array<{ role: string; content: string }>): Array<{ role: "user" | "assistant"; content: string }> {
+  const summary = messages.find((m) => m.role === "context_summary");
+  const regular = messages.filter((m) => m.role !== "context_summary");
+  const recentRegular = regular.slice(-15).map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+  if (summary) {
+    return [{ role: "assistant" as const, content: summary.content }, ...recentRegular];
+  }
+  return recentRegular;
+}
+
 // Runs the tool-calling phase (up to 3 iterations). Returns the prepared message
 // array plus metadata. If the LLM answered directly (no tools), immediateAnswer is set.
 async function runAssistantToolPhase(
@@ -1747,14 +1807,16 @@ export async function registerRoutes(
       }
 
       const existingMessages = await storage.getAssistantMessagesByConversationId(conversationId);
-      const history = existingMessages.map((m) => ({ role: m.role, content: m.content }));
-      const mergedHistory = [...history, ...(body.history || [])].slice(-16);
+      const mergedHistory = buildHistoryFromMessages([...existingMessages, ...(body.history || [])]);
 
       await storage.createAssistantMessage({
         conversationId,
         role: "user",
         content: userMessage,
       });
+
+      // Summarize old messages if conversation is long (non-blocking fire-and-forget)
+      maybeSummarizeConversation(conversationId, userId).catch(() => {});
 
       const webUser = await storage.getUserById(userId);
       const result = await runAssistantEngine(userMessage, mergedHistory, userId, webUser?.name || undefined);
@@ -1816,12 +1878,15 @@ export async function registerRoutes(
       // Persist the user turn before streaming the assistant reply.
       await storage.createAssistantMessage({ conversationId, role: "user", content: userMessage });
 
+      // Summarize old messages if conversation is long (non-blocking)
+      maybeSummarizeConversation(conversationId, userId).catch(() => {});
+
       const existingMessages = await storage.getAssistantMessagesByConversationId(conversationId);
       // Exclude the user message we just saved (last item) from history.
-      const history = existingMessages
-        .slice(0, -1)
-        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
-      const mergedHistory = [...history, ...(body.history || [])].slice(-16);
+      const mergedHistory = buildHistoryFromMessages([
+        ...existingMessages.slice(0, -1),
+        ...(body.history || []),
+      ]);
 
       const webUser = await storage.getUserById(userId);
       const phase   = await runAssistantToolPhase(userMessage, mergedHistory, userId, webUser?.name || undefined);
