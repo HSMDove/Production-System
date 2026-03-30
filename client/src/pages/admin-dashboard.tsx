@@ -5,7 +5,7 @@ import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
   Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock,
-  Sparkles, RotateCcw, Network, ExternalLink, Newspaper, Globe
+  Sparkles, RotateCcw, Network, ExternalLink, Newspaper, Globe, Type, Upload
 } from "lucide-react";
 import {
   Dialog,
@@ -840,6 +840,15 @@ function SystemSettingsPanel() {
   );
 }
 
+const ARABIC_FONTS = [
+  { label: "Tajawal (افتراضي)", value: "Tajawal" },
+  { label: "Cairo", value: "Cairo" },
+  { label: "Noto Sans Arabic", value: "Noto Sans Arabic" },
+  { label: "Almarai", value: "Almarai" },
+  { label: "Rubik", value: "Rubik" },
+  { label: "IBM Plex Arabic", value: "IBM Plex Arabic" },
+];
+
 function PagesPanel() {
   const { toast } = useToast();
   const { data, isLoading } = useQuery<LoginPageContent>({
@@ -864,6 +873,22 @@ function PagesPanel() {
     if (savedFamily) setFontFamily(savedFamily);
     setFontSource(savedSource || null);
   }, [systemSettings]);
+
+  // Dynamically load Google Font for the live preview when a predefined font is chosen
+  useEffect(() => {
+    if (fontSource) return; // custom font — no Google Fonts link needed
+    const url = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontFamily)}:wght@400;700;900&display=swap`;
+    const existing = document.querySelector("link[data-font-preview]");
+    if (existing) {
+      existing.setAttribute("href", url);
+    } else {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = url;
+      link.setAttribute("data-font-preview", "1");
+      document.head.appendChild(link);
+    }
+  }, [fontFamily, fontSource]);
 
   const updateHighlights = (section: "login" | "verify", index: number, value: string) => {
     setForm((prev) => {
@@ -957,6 +982,86 @@ function PagesPanel() {
         </aside>
 
         <div className="space-y-4">
+          {/* ── Font Management Card ── */}
+          <div className="card bg-card p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-[14px] border-[2px] border-black/85 bg-card p-2 shadow-[3px_3px_0_0_rgba(0,0,0,0.85)]">
+                <Type className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black">خط الموقع</h3>
+                <p className="text-sm text-muted-foreground">يُطبَّق على جميع المستخدمين فوراً عند الحفظ.</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Predefined Arabic Google Fonts */}
+              <div className="space-y-2">
+                <Label>اختر خطاً مدمجاً</Label>
+                <Select
+                  value={ARABIC_FONTS.some((f) => f.value === fontFamily) ? fontFamily : "Tajawal"}
+                  onValueChange={(v) => { setFontFamily(v); setFontSource(null); }}
+                >
+                  <SelectTrigger data-testid="select-font-family">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ARABIC_FONTS.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Custom font upload */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Upload className="h-3.5 w-3.5" />
+                  أو ارفع خطاً مخصصاً (.woff, .woff2, .ttf, .otf)
+                </Label>
+                <Input
+                  type="file"
+                  accept=".woff,.woff2,.ttf,.otf"
+                  onChange={(e) => handleFontUpload(e.target.files?.[0] ?? null)}
+                  data-testid="input-font-upload"
+                />
+                {fontSource && (
+                  <p className="text-xs font-bold text-green-600 dark:text-green-400">
+                    ✓ خط مخصص محمّل: {fontFamily}
+                  </p>
+                )}
+              </div>
+
+              {/* Live preview */}
+              <div className="rounded-xl border-2 border-dashed border-border p-4 text-center" data-testid="font-preview">
+                <p
+                  style={{
+                    fontFamily: fontSource ? `"${fontFamily}", sans-serif` : `${fontFamily}, sans-serif`,
+                    fontSize: "1.25rem",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  مرحباً بك في نَسَق — The quick brown fox
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">معاينة مباشرة: {fontFamily}</p>
+              </div>
+
+              <Button
+                onClick={() => saveFontMutation.mutate()}
+                disabled={saveFontMutation.isPending}
+                data-testid="button-save-font"
+              >
+                {saveFontMutation.isPending
+                  ? <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                  : <Save className="h-4 w-4 ml-2" />}
+                حفظ إعدادات الخط
+              </Button>
+            </div>
+          </div>
+
+          {/* ── Login Page Content Card ── */}
           <div className="card bg-card p-5">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

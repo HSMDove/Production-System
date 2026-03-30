@@ -1212,10 +1212,11 @@ body {
 .liquid-glass-folder {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(255, 255, 255, 0.06) 50%,
-    rgba(255, 255, 255, 0.13) 100%
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.16) 100%
   ) !important;
+  background-color: transparent !important;
   backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
   -webkit-backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
   border: 1px solid rgba(255, 255, 255, 0.30) !important;
@@ -1224,16 +1225,16 @@ body {
     0 12px 40px rgba(0, 0, 0, 0.10),
     inset 0  1px 0 rgba(255, 255, 255, 0.65),
     inset 0 -1px 0 rgba(0,   0,   0,   0.05) !important;
-  background-image: none !important;
 }
 
 .dark .liquid-glass-folder {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.10) 0%,
-    rgba(255, 255, 255, 0.03) 50%,
-    rgba(255, 255, 255, 0.07) 100%
+    rgba(255, 255, 255, 0.20) 0%,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0.14) 100%
   ) !important;
+  background-color: transparent !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow:
     0 4px 6px   rgba(0, 0, 0, 0.18),
@@ -1509,14 +1510,14 @@ body {
 @layer components {
   /* News card text */
   .content-news-card .news-title {
-    font-size: 0.9375rem !important;  /* 15px — up from text-sm (14px) */
+    font-size: 1.0625rem !important;  /* 17px — comfortable reading size */
     line-height: 1.45 !important;
     font-weight: 700 !important;
   }
 
   .content-news-card .news-summary {
-    font-size: 0.8125rem !important;  /* 13px — up from text-xs (12px) */
-    line-height: 1.6 !important;
+    font-size: 0.9375rem !important;  /* 15px — clearly legible body text */
+    line-height: 1.65 !important;
   }
 
   /* Smart view / AI-generated content */

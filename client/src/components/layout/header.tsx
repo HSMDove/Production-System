@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,9 @@ function markAllSeen(ids: string[]) {
 function ReleaseNotesDropdown() {
   const [open, setOpen] = useState(false);
   const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
+  // Fixed positioning — escapes the header stacking context created by backdrop-filter
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
 
   const { data: notes = [] } = useQuery<ReleaseNote[]>({
     queryKey: ["/api/release-notes"],
@@ -78,6 +81,16 @@ function ReleaseNotesDropdown() {
   const unseenCount = unseenReleaseCount + userAnnouncements.length;
 
   function handleOpen() {
+    // Calculate position from the button's viewport rect so the dropdown is
+    // rendered with position:fixed, fully escaping ancestor stacking contexts
+    // (nb-header-shell creates one via backdrop-filter)
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    }
     setOpen(true);
     if (notes.length > 0) {
       const allIds = notes.map((n) => n.id);
@@ -89,6 +102,7 @@ function ReleaseNotesDropdown() {
   return (
     <div className="relative">
       <Button
+        ref={buttonRef}
         variant="outline"
         size="icon"
         className="relative"
@@ -106,21 +120,23 @@ function ReleaseNotesDropdown() {
 
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Full-viewport backdrop at z-9998 to close on outside click */}
           <div
-            className="fixed inset-0 z-[250]"
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
             onClick={() => setOpen(false)}
           />
-          {/* Dropdown panel */}
+          {/* Dropdown rendered with position:fixed — not clipped by any stacking context */}
           <div
             dir="rtl"
-            className="absolute left-0 top-full mt-2 z-[260] w-[340px] sm:w-[390px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
+            style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+            className="w-[340px] sm:w-[390px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
             data-testid="release-notes-dropdown"
           >
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/15">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-primary" />
-                <span className="font-black text-sm">ملاحظات الإصدار</span>
+                <span className="font-black text-sm">الإشعارات والتحديثات</span>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -132,6 +148,7 @@ function ReleaseNotesDropdown() {
             </div>
 
             <div className="max-h-[460px] overflow-y-auto divide-y divide-white/10">
+              {/* Section 1: User announcements / notifications */}
               <div className="px-4 py-3">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xs font-black text-foreground/60">الإشعارات</span>
@@ -161,6 +178,7 @@ function ReleaseNotesDropdown() {
                 )}
               </div>
 
+              {/* Section 2: Release notes / updates */}
               <div className="px-4 py-3">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xs font-black text-foreground/60">التحديثات</span>
@@ -214,9 +232,6 @@ export function Header() {
 
   useEffect(() => {
     setMobileMenuOpen(false);
-
-    // Defensive cleanup for mobile Sheet/Dialog side-effects that can linger
-    // on some route transitions in mobile browsers.
     document.body.style.removeProperty("pointer-events");
     document.body.style.removeProperty("overflow");
     document.body.removeAttribute("data-scroll-locked");
@@ -275,7 +290,6 @@ export function Header() {
                               </Button>
                             );
                           }
-
                           return (
                             <Link key={item.href} href={item.href}>
                               <Button
@@ -318,58 +332,56 @@ export function Header() {
                     </div>
                   </SheetContent>
                 </Sheet>
-                </div>
+              </div>
             </div>
 
             <nav className="hidden flex-wrap items-center gap-2.5 lg:flex">
-          {navItems.map((item) => {
-            if (item.href === "/model") {
-              if (location === "/settings") return null;
-              return (
-                <Button
-                  key={item.href}
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 fikri-nav-btn"
-                  data-testid={item.testId}
-                  onClick={() => setOpen(true)}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Button>
-              );
-            }
-
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={location === item.href ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  data-testid={item.testId}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.label}</span>
+              {navItems.map((item) => {
+                if (item.href === "/model") {
+                  if (location === "/settings") return null;
+                  return (
+                    <Button
+                      key={item.href}
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 fikri-nav-btn"
+                      data-testid={item.testId}
+                      onClick={() => setOpen(true)}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </Button>
+                  );
+                }
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <Button
+                      variant={location === item.href ? "default" : "outline"}
+                      size="sm"
+                      className="gap-2"
+                      data-testid={item.testId}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.label}</span>
+                    </Button>
+                  </Link>
+                );
+              })}
+              <Link href="/settings">
+                <Button variant={location === "/settings" ? "default" : "outline"} size="icon" data-testid="link-settings">
+                  <Settings className="h-4 w-4" />
                 </Button>
               </Link>
-            );
-          })}
-
-          <Link href="/settings">
-            <Button variant={location === "/settings" ? "default" : "outline"} size="icon" data-testid="link-settings">
-              <Settings className="h-4 w-4" />
-            </Button>
-          </Link>
-          {isAdmin && (
-            <Link href="/admin/login">
-              <Button variant="outline" size="icon" data-testid="link-admin" title="لوحة التحكم">
-                <Shield className="h-4 w-4" />
-              </Button>
-            </Link>
-          )}
-          <ReleaseNotesDropdown />
-          <ThemeToggle />
-        </nav>
+              {isAdmin && (
+                <Link href="/admin/login">
+                  <Button variant="outline" size="icon" data-testid="link-admin" title="لوحة التحكم">
+                    <Shield className="h-4 w-4" />
+                  </Button>
+                </Link>
+              )}
+              <ReleaseNotesDropdown />
+              <ThemeToggle />
+            </nav>
           </div>
         </div>
       </div>
