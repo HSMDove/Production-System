@@ -222,6 +222,8 @@ img.apple-emoji {
     @apply font-sans antialiased bg-background text-foreground;
     text-align: right;
     font-weight: 700;
+    font-size: clamp(1rem, 0.98rem + 0.2vw, 1.05rem);
+    line-height: 1.7;
   }
 
   [dir="rtl"] input,
@@ -768,6 +770,7 @@ body {
 .nb-header-shell {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  overflow: visible;
 }
 
 .nb-header-stripes {
@@ -1500,7 +1503,7 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TYPOGRAPHY — Mobile-first Content Readability v2.5.1
+   TYPOGRAPHY — Mobile-first Content Readability v2.5.2
    ═══════════════════════════════════════════════════════════ */
 
 @layer components {

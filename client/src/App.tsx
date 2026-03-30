@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -53,37 +54,80 @@ function Router() {
   );
 }
 
-function App() {
+function AppContent() {
+  const { data: branding } = useQuery<{ fontFamily: string | null; fontSource: string | null }>({
+    queryKey: ["/api/system-settings/public-branding"],
+    queryFn: () => fetch("/api/system-settings/public-branding").then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
     initAppleEmoji();
   }, []);
 
+  useEffect(() => {
+    const prevStyle = document.getElementById("dynamic-site-font");
+    if (prevStyle) prevStyle.remove();
+    if (!branding?.fontFamily) return;
+
+    const sanitizedFamily = branding.fontFamily.replace(/"/g, "");
+    const style = document.createElement("style");
+    style.id = "dynamic-site-font";
+    if (branding.fontSource) {
+      style.textContent = `
+        @font-face {
+          font-family: "${sanitizedFamily}";
+          src: url("${branding.fontSource}");
+          font-display: swap;
+        }
+        :root {
+          --font-sans: "${sanitizedFamily}", Tajawal, sans-serif;
+          --font-serif: "${sanitizedFamily}", Cairo, serif;
+        }
+      `;
+    } else {
+      style.textContent = `
+        :root {
+          --font-sans: "${sanitizedFamily}", Tajawal, sans-serif;
+          --font-serif: "${sanitizedFamily}", Cairo, serif;
+        }
+      `;
+    }
+    document.head.appendChild(style);
+  }, [branding?.fontFamily, branding?.fontSource]);
+
+  return (
+    <ThemeProvider defaultTheme="default" defaultColorMode="dark" storageKey="nasaq-accent">
+      <TooltipProvider>
+        <FikriOverlayProvider>
+          <AuthGuard>
+            <Toaster />
+            <ErrorBoundary fullScreen={false}>
+              <TopBannerDisplay />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
+            <ErrorBoundary fullScreen={false}>
+              <FikriOverlay />
+            </ErrorBoundary>
+            <ErrorBoundary fullScreen={false}>
+              <WelcomeCards />
+            </ErrorBoundary>
+            <ErrorBoundary fullScreen={false}>
+              <AnnouncementModal />
+            </ErrorBoundary>
+          </AuthGuard>
+        </FikriOverlayProvider>
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="default" defaultColorMode="dark" storageKey="nasaq-accent">
-        <TooltipProvider>
-          <FikriOverlayProvider>
-            <AuthGuard>
-              <Toaster />
-              <ErrorBoundary fullScreen={false}>
-                <TopBannerDisplay />
-              </ErrorBoundary>
-              <ErrorBoundary>
-                <Router />
-              </ErrorBoundary>
-              <ErrorBoundary fullScreen={false}>
-                <FikriOverlay />
-              </ErrorBoundary>
-              <ErrorBoundary fullScreen={false}>
-                <WelcomeCards />
-              </ErrorBoundary>
-              <ErrorBoundary fullScreen={false}>
-                <AnnouncementModal />
-              </ErrorBoundary>
-            </AuthGuard>
-          </FikriOverlayProvider>
-        </TooltipProvider>
-      </ThemeProvider>
+      <AppContent />
     </QueryClientProvider>
   );
 }

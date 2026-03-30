@@ -25,6 +25,14 @@ interface ReleaseNote {
   publishedAt: string | null;
 }
 
+interface UserAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  icon: string | null;
+  createdAt: string;
+}
+
 const navItems = [
   { href: "/", icon: FolderOpen, label: t("nav.folders"), testId: "link-dashboard" },
   { href: "/ideas", icon: Lightbulb, label: t("nav.ideas"), testId: "link-ideas" },
@@ -60,8 +68,14 @@ function ReleaseNotesDropdown() {
     queryFn: () => apiRequest("GET", "/api/release-notes").then((r) => r.json()),
     staleTime: 5 * 60 * 1000,
   });
+  const { data: userAnnouncements = [] } = useQuery<UserAnnouncement[]>({
+    queryKey: ["/api/announcements/unseen"],
+    queryFn: () => apiRequest("GET", "/api/announcements/unseen").then((r) => r.json()),
+    staleTime: 60 * 1000,
+  });
 
-  const unseenCount = notes.filter((n) => !seenIds.has(n.id)).length;
+  const unseenReleaseCount = notes.filter((n) => !seenIds.has(n.id)).length;
+  const unseenCount = unseenReleaseCount + userAnnouncements.length;
 
   function handleOpen() {
     setOpen(true);
@@ -94,13 +108,13 @@ function ReleaseNotesDropdown() {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-[40]"
+            className="fixed inset-0 z-[250]"
             onClick={() => setOpen(false)}
           />
           {/* Dropdown panel */}
           <div
             dir="rtl"
-            className="absolute left-0 top-full mt-2 z-[50] w-[340px] sm:w-[380px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
+            className="absolute left-0 top-full mt-2 z-[260] w-[340px] sm:w-[390px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
             data-testid="release-notes-dropdown"
           >
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/15">
@@ -117,36 +131,73 @@ function ReleaseNotesDropdown() {
               </button>
             </div>
 
-            <div className="max-h-[420px] overflow-y-auto divide-y divide-white/10">
-              {notes.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-sm font-bold text-foreground/50">لا توجد تحديثات حالياً</p>
+            <div className="max-h-[460px] overflow-y-auto divide-y divide-white/10">
+              <div className="px-4 py-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs font-black text-foreground/60">الإشعارات</span>
+                  <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-black text-primary">
+                    {userAnnouncements.length}
+                  </span>
                 </div>
-              ) : (
-                notes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="px-4 py-3 hover:bg-white/8 transition-colors"
-                    data-testid={`release-note-item-${note.id}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl leading-none mt-0.5 shrink-0">{note.emoji || "🚀"}</span>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                          <span className="font-black text-sm">{note.title}</span>
-                          <span className="text-[10px] font-mono text-foreground/50 border border-border rounded px-1">v{note.version}</span>
+                {userAnnouncements.length === 0 ? (
+                  <p className="py-2 text-sm font-bold text-foreground/50">لا توجد إشعارات جديدة</p>
+                ) : (
+                  <div className="space-y-2">
+                    {userAnnouncements.map((item) => (
+                      <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl leading-none mt-0.5 shrink-0">{item.icon || "🔔"}</span>
+                          <div className="min-w-0">
+                            <p className="font-black text-sm">{item.title}</p>
+                            <p className="text-xs text-foreground/70 leading-relaxed line-clamp-2">{item.body}</p>
+                            <p className="text-[10px] text-foreground/45 mt-1">
+                              {new Date(item.createdAt).toLocaleString("ar-SA")}
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-xs text-foreground/65 leading-relaxed whitespace-pre-wrap line-clamp-3">{note.body}</p>
-                        {note.publishedAt && (
-                          <p className="text-[10px] text-foreground/40 mt-1">
-                            {new Date(note.publishedAt).toLocaleDateString("ar-SA")}
-                          </p>
-                        )}
                       </div>
-                    </div>
+                    ))}
                   </div>
-                ))
-              )}
+                )}
+              </div>
+
+              <div className="px-4 py-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs font-black text-foreground/60">التحديثات</span>
+                  <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-black text-primary">
+                    {notes.length}
+                  </span>
+                </div>
+                {notes.length === 0 ? (
+                  <p className="py-2 text-sm font-bold text-foreground/50">لا توجد تحديثات حالياً</p>
+                ) : (
+                  <div className="space-y-2">
+                    {notes.map((note) => (
+                      <div
+                        key={note.id}
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition-colors"
+                        data-testid={`release-note-item-${note.id}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl leading-none mt-0.5 shrink-0">{note.emoji || "🚀"}</span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                              <span className="font-black text-sm">{note.title}</span>
+                              <span className="text-[10px] font-mono text-foreground/50 border border-border rounded px-1">v{note.version}</span>
+                            </div>
+                            <p className="text-xs text-foreground/65 leading-relaxed whitespace-pre-wrap line-clamp-3">{note.body}</p>
+                            {note.publishedAt && (
+                              <p className="text-[10px] text-foreground/40 mt-1">
+                                {new Date(note.publishedAt).toLocaleDateString("ar-SA")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </>

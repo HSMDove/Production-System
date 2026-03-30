@@ -258,7 +258,7 @@ async function maybeSummarizeConversation(conversationId: string, userId: string
       .map((m) => `${m.role === "user" ? "المستخدم" : "فكري"}: ${m.content}`)
       .join("\n\n");
 
-    const client = await getAIClient(userId);
+    const { client } = await getAIClient(userId);
     const result = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -715,6 +715,21 @@ export async function registerRoutes(
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: "Failed to get flags" });
+    }
+  });
+
+  app.get("/api/system-settings/public-branding", async (_req, res) => {
+    try {
+      const [fontFamily, fontSource] = await Promise.all([
+        storage.getSystemSetting("site_font_family"),
+        storage.getSystemSetting("site_font_source"),
+      ]);
+      res.json({
+        fontFamily: fontFamily?.value || null,
+        fontSource: fontSource?.value || null,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get branding settings" });
     }
   });
 
@@ -4508,9 +4523,9 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.4.1" });
+      res.json({ version: setting?.value || "2.5.2" });
     } catch {
-      res.json({ version: "2.4.1" });
+      res.json({ version: "2.5.2" });
     }
   });
 

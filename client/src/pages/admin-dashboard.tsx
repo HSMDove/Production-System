@@ -847,12 +847,23 @@ function PagesPanel() {
   });
   const [selectedPage, setSelectedPage] = useState<"login">("login");
   const [form, setForm] = useState<LoginPageContent>(defaultLoginPageContent);
+  const [fontFamily, setFontFamily] = useState("Tajawal");
+  const [fontSource, setFontSource] = useState<string | null>(null);
+  const { data: systemSettings } = useQuery<any[]>({ queryKey: ["/api/admin/system-settings"] });
 
   useEffect(() => {
     if (data) {
       setForm(data);
     }
   }, [data]);
+
+  useEffect(() => {
+    if (!systemSettings) return;
+    const savedFamily = systemSettings.find((s) => s.key === "site_font_family")?.value;
+    const savedSource = systemSettings.find((s) => s.key === "site_font_source")?.value;
+    if (savedFamily) setFontFamily(savedFamily);
+    setFontSource(savedSource || null);
+  }, [systemSettings]);
 
   const updateHighlights = (section: "login" | "verify", index: number, value: string) => {
     setForm((prev) => {
@@ -882,6 +893,44 @@ function PagesPanel() {
       toast({ title: "خطأ", description: error?.message || "فشل حفظ محتوى الصفحة", variant: "destructive" });
     },
   });
+
+  const saveFontMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", "/api/admin/system-settings", {
+        key: "site_font_family",
+        value: fontFamily,
+        description: "الخط المعتمد للموقع بالكامل",
+      });
+      await apiRequest("PUT", "/api/admin/system-settings", {
+        key: "site_font_source",
+        value: fontSource,
+        description: "مصدر ملف الخط المخصص (data URL)",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/system-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-settings/public-branding"] });
+      toast({ title: "تم حفظ إعدادات الخط", description: "سيتم تطبيق الخط على جميع المستخدمين مباشرة." });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل حفظ إعدادات الخط", variant: "destructive" });
+    },
+  });
+
+  const handleFontUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!/\.(woff2?|ttf|otf)$/i.test(file.name)) {
+      toast({ title: "صيغة غير مدعومة", description: "الملفات المدعومة: woff, woff2, ttf, otf", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFontSource(typeof reader.result === "string" ? reader.result : null);
+      setFontFamily(file.name.replace(/\.(woff2?|ttf|otf)$/i, ""));
+      toast({ title: "تم رفع الخط", description: "لا تنسَ الضغط على حفظ إعدادات الخط." });
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (isLoading) return <PanelLoader />;
 
@@ -997,6 +1046,48 @@ function PagesPanel() {
                   />
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="card bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black">خط الموقع</h3>
+                <p className="text-sm text-muted-foreground">اختر خطاً افتراضياً أو ارفع خطاً مخصصاً ليتم تطبيقه على الجميع.</p>
+              </div>
+              <Button onClick={() => saveFontMutation.mutate()} disabled={saveFontMutation.isPending} data-testid="button-save-site-font">
+                {saveFontMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+                حفظ إعدادات الخط
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>الخط الافتراضي</Label>
+                <Select value={fontFamily} onValueChange={(v) => { setFontFamily(v); setFontSource(null); }}>
+                  <SelectTrigger data-testid="select-site-font-family"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Tajawal">Tajawal</SelectItem>
+                    <SelectItem value="Cairo">Cairo</SelectItem>
+                    <SelectItem value="Inter">Inter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>رفع خط مخصص</Label>
+                <Input type="file" accept=".woff,.woff2,.ttf,.otf" onChange={(e) => handleFontUpload(e.target.files?.[0] || null)} data-testid="input-upload-site-font" />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/60 p-4">
+              <p className="text-xs text-muted-foreground mb-2">معاينة</p>
+              <p
+                className="text-base"
+                style={{ fontFamily: `"${fontFamily}", Tajawal, sans-serif` }}
+              >
+                الخط الحالي: <span className="font-black">{fontFamily}</span> — هذا نص تجريبي لعرض شكل الخط قبل الحفظ.
+              </p>
+              {fontSource && <p className="mt-2 text-xs text-emerald-600 font-bold">تم تحميل خط مخصص من جهازك وهو جاهز للحفظ.</p>}
             </div>
           </div>
         </div>
@@ -2121,7 +2212,7 @@ function ReleaseNotesPanel() {
                 <Label className="text-xs font-bold mb-1 block">رقم الإصدار *</Label>
                 <Input
                   dir="ltr"
-                  placeholder="2.5.1"
+                  placeholder="2.5.2"
                   value={form.version}
                   onChange={(e) => setForm({ ...form, version: e.target.value })}
                   data-testid="input-rn-version"

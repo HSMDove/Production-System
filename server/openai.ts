@@ -1559,23 +1559,23 @@ ${strictRules}${customRules}
         summary: (item.summary || "").slice(0, 300),
       }));
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
-
       try {
-        const response = await client.chat({
-          model: miniModel,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: JSON.stringify(payload) },
-          ],
-          max_tokens: 1000,
-          temperature: 0,
-        });
+        const response = await Promise.race([
+          client.chat.completions.create({
+            model: miniModel,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: JSON.stringify(payload) },
+            ],
+            max_tokens: 1000,
+            temperature: 0,
+          }),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error("AI filter request timed out")), 10_000);
+          }),
+        ]);
 
-        clearTimeout(timeout);
-
-        const raw = response.content?.trim() || "";
+        const raw = response.choices[0]?.message?.content?.trim() || "";
         // Extract JSON even if wrapped in markdown code fences
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -1585,7 +1585,6 @@ ${strictRules}${customRules}
           }
         }
       } catch {
-        clearTimeout(timeout);
         // Chunk failed → keep all items in this chunk (fail-open)
         for (const item of chunk) keepIds.add(item.id);
       }
