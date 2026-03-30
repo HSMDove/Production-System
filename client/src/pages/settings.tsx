@@ -738,7 +738,7 @@ export default function Settings() {
 
                     <div className="space-y-2 max-h-[300px] overflow-y-auto">
                       {selectedTicketData.replies.map((r) => (
-                        <div key={r.id} className={`rounded-lg p-3 text-sm ${r.isAdmin ? "bg-primary/10 border border-primary/20 mr-4" : "bg-muted/50 border ml-4"}`}>
+                        <div key={r.id} className={`rounded-lg p-3 text-sm ${r.isAdmin ? "bg-primary/10 border border-primary/20 me-4" : "bg-muted/50 border ms-4"}`}>
                           <div className="flex items-center gap-2 mb-1">
                             <span className={`text-xs font-medium ${r.isAdmin ? "text-primary" : "text-muted-foreground"}`}>
                               {r.isAdmin ? "فريق الدعم" : "أنت"}
@@ -1046,7 +1046,7 @@ export default function Settings() {
                               <AccordionContent className="text-xs text-muted-foreground space-y-2">
                                 <p>ادخل على <span dir="ltr" className="bg-background px-1 rounded">OAuth & Permissions</span> وانزل إلى <span dir="ltr" className="bg-background px-1 rounded">Bot Token Scopes</span></p>
                                 <p>أضف الصلاحيات:</p>
-                                <div className="ml-4 space-y-1">
+                                <div className="ms-4 space-y-1">
                                   <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:history</code></p>
                                   <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">channels:read</code></p>
                                   <p><code dir="ltr" className="text-[10px] bg-background px-2 py-1 rounded">chat:write</code></p>

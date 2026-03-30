@@ -64,7 +64,7 @@ function ReleaseNotesDropdown() {
   const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
   // Fixed positioning — escapes the header stacking context created by backdrop-filter
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const [pos, setPos] = useState({ top: 0, right: 0, width: 340 });
 
   const { data: notes = [] } = useQuery<ReleaseNote[]>({
     queryKey: ["/api/release-notes"],
@@ -81,15 +81,18 @@ function ReleaseNotesDropdown() {
   const unseenCount = unseenReleaseCount + userAnnouncements.length;
 
   function handleOpen() {
-    // Calculate position from the button's viewport rect so the dropdown is
-    // rendered with position:fixed, fully escaping ancestor stacking contexts
-    // (nb-header-shell creates one via backdrop-filter)
+    // Calculate position with viewport clamping so the dropdown never overflows
+    // off-screen, especially on mobile (iPhone 390px etc.)
     const rect = buttonRef.current?.getBoundingClientRect();
     if (rect) {
-      setPos({
-        top: rect.bottom + 8,
-        right: window.innerWidth - rect.right,
-      });
+      const vw = window.innerWidth;
+      // Responsive width: full-width on very small screens with 16px margins
+      const dropdownWidth = vw < 640 ? Math.min(340, vw - 16) : 390;
+      // Right anchor: distance from right edge of viewport to right edge of button
+      const rawRight = vw - rect.right;
+      // Clamp so left edge never goes off-screen (8px min margin on each side)
+      const safeRight = Math.max(8, Math.min(rawRight, vw - dropdownWidth - 8));
+      setPos({ top: rect.bottom + 8, right: safeRight, width: dropdownWidth });
     }
     setOpen(true);
     if (notes.length > 0) {
@@ -129,8 +132,8 @@ function ReleaseNotesDropdown() {
           {/* Dropdown rendered with position:fixed — not clipped by any stacking context */}
           <div
             dir="rtl"
-            style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
-            className="w-[340px] sm:w-[390px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
+            style={{ position: "fixed", top: pos.top, right: pos.right, width: pos.width, zIndex: 9999 }}
+            className="rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
             data-testid="release-notes-dropdown"
           >
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/15">

@@ -34,5 +34,16 @@ export async function ensureIntegrationTables() {
       target_id text NOT NULL,
       created_at timestamp NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS release_notes (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      version text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      emoji text DEFAULT '🚀',
+      is_published boolean NOT NULL DEFAULT false,
+      published_at timestamp,
+      created_at timestamp NOT NULL DEFAULT NOW(),
+      updated_at timestamp NOT NULL DEFAULT NOW()
+    );
   `);
 }

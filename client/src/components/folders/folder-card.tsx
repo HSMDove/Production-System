@@ -148,10 +148,12 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
         <div className="flex items-start justify-between gap-3">
           <Link href={`/folder/${folder.id}`} className="flex min-w-0 flex-1 items-center gap-3">
             <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-[2px] border-white/40 text-xl"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl leading-none"
               style={{
-                backgroundColor: folderColor,
-                backgroundImage: "linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0))",
+                background: `${folderColor}28`,
+                border: `1px solid ${folderColor}55`,
+                backdropFilter: "blur(12px)",
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 10px ${folderColor}22`,
               }}
             >
               {folder.emoji || "📁"}
@@ -231,13 +233,13 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
 
       <CardContent className="flex flex-1 flex-col gap-3 px-4 pb-4 pt-0">
         <Link href={`/folder/${folder.id}`} className="grid grid-cols-2 gap-2">
-          <div className="rounded-[16px] border-[2px] border-border/70 bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+          <div className="folder-stat-pill rounded-2xl px-3 py-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Rss className="h-4 w-4" />
               <span>{sourceCount} مصدر</span>
             </div>
           </div>
-          <div className="rounded-[16px] border-[2px] border-border/70 bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+          <div className="folder-stat-pill rounded-2xl px-3 py-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <span>{contentCount} خبر</span>
             </div>

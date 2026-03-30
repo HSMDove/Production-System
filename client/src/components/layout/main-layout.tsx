@@ -26,7 +26,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       {showFikriLauncher && (
         <button
           className="fixed z-[30] flex flex-col items-center gap-2.5 transition-transform duration-200 hover:scale-110 active:scale-95"
-          style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))", left: "1.25rem" }}
+          style={{ bottom: "calc(1.25rem + env(safe-area-inset-bottom, 0px))", right: "1.25rem" }}
           data-testid="button-fikri-fab"
           onClick={() => setOpen(true)}
           aria-label="فتح فكري"
