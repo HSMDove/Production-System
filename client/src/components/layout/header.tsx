@@ -100,7 +100,7 @@ function ReleaseNotesDropdown() {
   }
 
   return (
-    <div className="relative">
+    <>
       <Button
         ref={buttonRef}
         variant="outline"
@@ -220,7 +220,7 @@ function ReleaseNotesDropdown() {
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
 
