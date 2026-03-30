@@ -396,7 +396,7 @@ export default function FolderDetail() {
               onClick={handleRefreshClick}
               disabled={fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
               data-testid="button-refresh-all"
-              className="gap-1.5 relative"
+              className={`gap-1.5 relative${newContentCount > 0 && !fetchAllSourcesMutation.isPending ? " refresh-btn-glow" : ""}`}
             >
               <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">{newContentCount > 0 ? `${newContentCount} جديد` : "تحديث"}</span>

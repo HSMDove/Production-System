@@ -1213,35 +1213,35 @@ body {
 .liquid-glass-folder {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.22) 0%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.16) 100%
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.58) 50%,
+    rgba(255, 255, 255, 0.66) 100%
   ) !important;
   background-color: transparent !important;
   backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
   -webkit-backdrop-filter: blur(28px) saturate(220%) brightness(1.01) !important;
-  border: 1px solid rgba(255, 255, 255, 0.30) !important;
+  border: 1px solid rgba(255, 255, 255, 0.70) !important;
   box-shadow:
-    0 4px 6px   rgba(0, 0, 0, 0.04),
+    0 4px 6px   rgba(0, 0, 0, 0.05),
     0 12px 40px rgba(0, 0, 0, 0.10),
-    inset 0  1px 0 rgba(255, 255, 255, 0.65),
-    inset 0 -1px 0 rgba(0,   0,   0,   0.05) !important;
+    inset 0  1px 0 rgba(255, 255, 255, 0.90),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.04) !important;
 }
 
 .dark .liquid-glass-folder {
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.20) 0%,
-    rgba(255, 255, 255, 0.07) 50%,
-    rgba(255, 255, 255, 0.14) 100%
+    rgba(40, 35, 65, 0.82) 0%,
+    rgba(28, 22, 52, 0.72) 50%,
+    rgba(35, 28, 60, 0.78) 100%
   ) !important;
   background-color: transparent !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow:
-    0 4px 6px   rgba(0, 0, 0, 0.18),
-    0 12px 40px rgba(0, 0, 0, 0.40),
-    inset 0  1px 0 rgba(255, 255, 255, 0.11),
-    inset 0 -1px 0 rgba(0,   0,   0,   0.28) !important;
+    0 4px 6px   rgba(0, 0, 0, 0.22),
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0  1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 -1px 0 rgba(0,   0,   0,   0.30) !important;
 }
 
 /* Hover: compound selector beats both .folder-surface:hover and .liquid-glass-folder base */
@@ -1266,15 +1266,15 @@ body {
 /* ── Liquid Glass — Folder Stat Pills ── */
 
 .folder-stat-pill {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.10);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
 
 .dark .folder-stat-pill {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 /* ── Liquid Glass — Sources Sidebar ── */
@@ -1586,4 +1586,27 @@ body {
     pointer-events: none;
     line-height: 1;
   }
+}
+
+/* ── Refresh Button — New Content Pulse & Glow ── */
+
+@keyframes refresh-btn-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 8px 2px rgba(239, 68, 68, 0.25);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15), 0 0 18px 6px rgba(239, 68, 68, 0.35);
+    transform: scale(1.06);
+  }
+}
+
+.refresh-btn-glow {
+  animation: refresh-btn-pulse 2.4s ease-in-out infinite;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  color: rgb(239, 68, 68) !important;
+}
+
+.refresh-btn-glow svg {
+  color: rgb(239, 68, 68);
 }

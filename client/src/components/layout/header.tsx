@@ -132,7 +132,7 @@ function ReleaseNotesDropdown() {
           <div
             dir="rtl"
             style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
-            className="rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
+            className="rounded-[20px] liquid-glass-modal shadow-2xl overflow-hidden"
             data-testid="release-notes-dropdown"
           >
             <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/15">
