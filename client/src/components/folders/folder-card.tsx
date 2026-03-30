@@ -150,10 +150,9 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
             <div
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl leading-none"
               style={{
-                background: `${folderColor}28`,
-                border: `1px solid ${folderColor}55`,
-                backdropFilter: "blur(12px)",
-                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 10px ${folderColor}22`,
+                background: `${folderColor}45`,
+                border: `1.5px solid ${folderColor}80`,
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 8px ${folderColor}30`,
               }}
             >
               {folder.emoji || "📁"}

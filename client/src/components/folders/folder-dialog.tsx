@@ -100,7 +100,7 @@ export function FolderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="dialog-folder">
+      <DialogContent className="sm:max-w-md liquid-glass-modal sm:rounded-[20px]" data-testid="dialog-folder">
         <DialogHeader>
           <DialogTitle>
             {folder ? "تعديل المجلد" : "إنشاء مجلد جديد"}
