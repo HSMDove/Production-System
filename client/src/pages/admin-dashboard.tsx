@@ -5,7 +5,7 @@ import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
   Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock,
-  Sparkles, RotateCcw, Network, ExternalLink
+  Sparkles, RotateCcw, Network, ExternalLink, Newspaper, Globe
 } from "lucide-react";
 import {
   Dialog,
@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 import { ADMIN_MODEL_CATALOG, getDefaultModel, type AdminAIProvider } from "@/lib/model-catalog";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections" | "release-notes";
 
 const tabDescriptions: Record<Tab, string> = {
   analytics: "ملخص تنفيذي سريع لحركة النظام والمستخدمين والمحتوى داخل المنصة.",
@@ -52,6 +52,7 @@ const tabDescriptions: Record<Tab, string> = {
   admins: "إدارة الحسابات الإدارية والصلاحيات وكلمات المرور دون مغادرة اللوحة.",
   audit: "سجل قرارات الإدارة والعمليات الحساسة لمراجعة التغييرات بدقة.",
   connections: "إدارة روابط التكامل الخارجية للمنصة: النطاقات، DNS، قواعد البيانات، وغيرها.",
+  "release-notes": "نشر وإدارة ملاحظات الإصدارات التي تظهر للمستخدمين عبر جرس الإشعارات في الرأسية.",
 };
 
 export default function AdminDashboard() {
@@ -71,6 +72,7 @@ export default function AdminDashboard() {
     { id: "admins", label: "إدارة المدراء", icon: Shield },
     { id: "audit", label: "سجل التدقيق", icon: FileText },
     { id: "connections", label: "الاتصالات", icon: Network },
+    { id: "release-notes", label: "ملاحظات الإصدار", icon: Newspaper },
   ];
   const activeTabMeta = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const ActiveIcon = activeTabMeta.icon;
@@ -173,6 +175,7 @@ export default function AdminDashboard() {
           {activeTab === "admins" && <AdminsPanel />}
           {activeTab === "audit" && <AuditPanel />}
           {activeTab === "connections" && <ConnectionsPanel />}
+          {activeTab === "release-notes" && <ReleaseNotesPanel />}
         </section>
       </main>
       </div>
@@ -1895,6 +1898,300 @@ function ConnectionsPanel() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
               data-testid="button-confirm-delete-connection"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// RELEASE NOTES PANEL — full-stack CRUD (DB-backed)
+// ────────────────────────────────────────────────────────────────────────────
+
+interface ReleaseNoteItem {
+  id: string;
+  version: string;
+  title: string;
+  body: string;
+  emoji: string | null;
+  isPublished: boolean;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const emptyForm = { version: "", title: "", body: "", emoji: "🚀", isPublished: false };
+
+function ReleaseNotesPanel() {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ReleaseNoteItem | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const { data: notes = [], isLoading, refetch } = useQuery<ReleaseNoteItem[]>({
+    queryKey: ["/api/admin/release-notes"],
+    queryFn: () => apiRequest("GET", "/api/admin/release-notes").then((r) => r.json()),
+  });
+
+  function openCreate() {
+    setEditTarget(null);
+    setForm(emptyForm);
+    setFormErrors({});
+    setDialogOpen(true);
+  }
+
+  function openEdit(note: ReleaseNoteItem) {
+    setEditTarget(note);
+    setForm({
+      version: note.version,
+      title: note.title,
+      body: note.body,
+      emoji: note.emoji || "🚀",
+      isPublished: note.isPublished,
+    });
+    setFormErrors({});
+    setDialogOpen(true);
+  }
+
+  function validateForm() {
+    const errors: Record<string, string> = {};
+    if (!form.version.trim()) errors.version = "رقم الإصدار مطلوب";
+    if (!form.title.trim()) errors.title = "العنوان مطلوب";
+    if (!form.body.trim()) errors.body = "المحتوى مطلوب";
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  async function handleSave() {
+    if (!validateForm()) return;
+    try {
+      if (editTarget) {
+        const res = await apiRequest("PATCH", `/api/admin/release-notes/${editTarget.id}`, form);
+        if (!res.ok) throw new Error();
+        toast({ title: "تم التحديث بنجاح" });
+      } else {
+        const res = await apiRequest("POST", "/api/admin/release-notes", form);
+        if (!res.ok) throw new Error();
+        toast({ title: "تم إنشاء الملاحظة بنجاح" });
+      }
+      setDialogOpen(false);
+      refetch();
+    } catch {
+      toast({ title: "حدث خطأ", variant: "destructive" });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      const res = await apiRequest("DELETE", `/api/admin/release-notes/${id}`);
+      if (!res.ok) throw new Error();
+      toast({ title: "تم الحذف بنجاح" });
+      setDeleteConfirmId(null);
+      refetch();
+    } catch {
+      toast({ title: "فشل الحذف", variant: "destructive" });
+    }
+  }
+
+  async function togglePublish(note: ReleaseNoteItem) {
+    try {
+      const res = await apiRequest("PATCH", `/api/admin/release-notes/${note.id}`, {
+        isPublished: !note.isPublished,
+      });
+      if (!res.ok) throw new Error();
+      toast({ title: note.isPublished ? "تم إلغاء النشر" : "تم النشر بنجاح" });
+      refetch();
+    } catch {
+      toast({ title: "حدث خطأ", variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-black">ملاحظات الإصدار</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            {notes.length} ملاحظة — {notes.filter((n) => n.isPublished).length} منشورة
+          </p>
+        </div>
+        <Button onClick={openCreate} className="gap-2" data-testid="button-add-release-note">
+          <Plus className="h-4 w-4" />
+          ملاحظة جديدة
+        </Button>
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <PanelLoader />
+      ) : notes.length === 0 ? (
+        <div className="rounded-[22px] border-[3px] border-dashed border-border p-12 text-center">
+          <Newspaper className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+          <p className="font-bold text-muted-foreground">لا توجد ملاحظات إصدار بعد</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">أنشئ أول ملاحظة لتظهر في جرس الإشعارات</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notes.map((note) => (
+            <div
+              key={note.id}
+              className="rounded-[20px] border-[3px] border-black/90 bg-card p-4 shadow-[4px_4px_0_0_rgba(0,0,0,0.88)] flex items-start gap-4"
+              data-testid={`release-note-${note.id}`}
+            >
+              <div className="text-3xl leading-none mt-0.5">{note.emoji || "🚀"}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="font-black text-lg leading-tight">{note.title}</span>
+                  <Badge variant="outline" className="text-xs font-mono shrink-0">v{note.version}</Badge>
+                  {note.isPublished ? (
+                    <Badge className="text-xs bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/40 shrink-0">منشور</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs shrink-0">مسودة</Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-wrap">{note.body}</p>
+                {note.publishedAt && (
+                  <p className="text-xs text-muted-foreground/60 mt-1 flex items-center gap-1">
+                    <Globe className="h-3 w-3" />
+                    نُشر {new Date(note.publishedAt).toLocaleDateString("ar-SA")}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => togglePublish(note)}
+                  data-testid={`button-toggle-publish-${note.id}`}
+                  title={note.isPublished ? "إلغاء النشر" : "نشر"}
+                >
+                  {note.isPublished ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEdit(note)}
+                  data-testid={`button-edit-release-note-${note.id}`}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setDeleteConfirmId(note.id)}
+                  data-testid={`button-delete-release-note-${note.id}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Create / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{editTarget ? "تعديل ملاحظة الإصدار" : "إنشاء ملاحظة إصدار جديدة"}</DialogTitle>
+            <DialogDescription>أدخل تفاصيل الإصدار لتظهر في جرس الإشعارات للمستخدمين.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Emoji + Version row */}
+            <div className="flex gap-3">
+              <div className="w-24">
+                <Label className="text-xs font-bold mb-1 block">الرمز</Label>
+                <Input
+                  value={form.emoji}
+                  onChange={(e) => setForm({ ...form, emoji: e.target.value })}
+                  maxLength={4}
+                  className="text-center text-xl"
+                  data-testid="input-rn-emoji"
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs font-bold mb-1 block">رقم الإصدار *</Label>
+                <Input
+                  dir="ltr"
+                  placeholder="2.5.1"
+                  value={form.version}
+                  onChange={(e) => setForm({ ...form, version: e.target.value })}
+                  data-testid="input-rn-version"
+                />
+                {formErrors.version && <p className="text-xs text-destructive mt-1">{formErrors.version}</p>}
+              </div>
+            </div>
+
+            {/* Title */}
+            <div>
+              <Label className="text-xs font-bold mb-1 block">العنوان *</Label>
+              <Input
+                placeholder="مثال: تحسينات الأداء وإصلاح الأخطاء"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                data-testid="input-rn-title"
+              />
+              {formErrors.title && <p className="text-xs text-destructive mt-1">{formErrors.title}</p>}
+            </div>
+
+            {/* Body */}
+            <div>
+              <Label className="text-xs font-bold mb-1 block">المحتوى / التفاصيل *</Label>
+              <Textarea
+                placeholder={"• إصلاح مشكلة...\n• تحسين..."}
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+                rows={5}
+                data-testid="input-rn-body"
+              />
+              {formErrors.body && <p className="text-xs text-destructive mt-1">{formErrors.body}</p>}
+            </div>
+
+            {/* Publish toggle */}
+            <div className="flex items-center gap-3">
+              <Switch
+                id="rn-publish"
+                checked={form.isPublished}
+                onCheckedChange={(v) => setForm({ ...form, isPublished: v })}
+                data-testid="switch-rn-publish"
+              />
+              <Label htmlFor="rn-publish" className="text-sm font-semibold cursor-pointer">
+                نشر فوراً (سيظهر للمستخدمين في جرس الإشعارات)
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
+            <Button onClick={handleSave} data-testid="button-save-release-note">
+              <Save className="h-4 w-4 mr-2" />
+              {editTarget ? "حفظ التعديلات" : "إنشاء"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>هل أنت متأكد من حذف هذه الملاحظة؟ لا يمكن التراجع عن هذا الإجراء.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+              data-testid="button-confirm-delete-release-note"
             >
               حذف
             </AlertDialogAction>

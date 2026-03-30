@@ -197,7 +197,7 @@ export function WelcomeCards() {
             <div className="overflow-hidden" style={{ minHeight: containerHeight ?? 160, transition: "min-height 0.3s ease" }}>
               <div ref={contentRef} style={contentStyle}>
                 {card.emoji && (
-                  <div className="text-5xl mb-4">{card.emoji}</div>
+                  <div className="emoji-stable text-5xl mb-4">{card.emoji}</div>
                 )}
 
                 <h2 className="text-xl font-bold leading-relaxed">

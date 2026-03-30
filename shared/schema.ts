@@ -629,3 +629,26 @@ export const ticketReplies = pgTable("ticket_replies", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type TicketReply = typeof ticketReplies.$inferSelect;
+
+// ─── Release Notes ────────────────────────────────────────────────────────────
+
+export const releaseNotes = pgTable("release_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  version: text("version").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  emoji: text("emoji").default("🚀"),
+  isPublished: boolean("is_published").default(false).notNull(),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertReleaseNoteSchema = createInsertSchema(releaseNotes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ReleaseNote = typeof releaseNotes.$inferSelect;
+export type InsertReleaseNote = z.infer<typeof insertReleaseNoteSchema>;

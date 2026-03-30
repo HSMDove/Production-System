@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield, Bell, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { t } from "@/i18n";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Sheet,
   SheetContent,
@@ -13,6 +15,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+
+interface ReleaseNote {
+  id: string;
+  version: string;
+  title: string;
+  body: string;
+  emoji: string | null;
+  publishedAt: string | null;
+}
 
 const navItems = [
   { href: "/", icon: FolderOpen, label: t("nav.folders"), testId: "link-dashboard" },
@@ -22,6 +33,127 @@ const navItems = [
   { href: "/trends", icon: TrendingUp, label: t("nav.trends"), testId: "link-trends" },
   { href: "/model", icon: Bot, label: t("nav.fikri"), testId: "link-model" },
 ];
+
+const SEEN_NOTES_KEY = "nasaq_seen_release_notes";
+
+function getSeenIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SEEN_NOTES_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markAllSeen(ids: string[]) {
+  try {
+    localStorage.setItem(SEEN_NOTES_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
+function ReleaseNotesDropdown() {
+  const [open, setOpen] = useState(false);
+  const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
+
+  const { data: notes = [] } = useQuery<ReleaseNote[]>({
+    queryKey: ["/api/release-notes"],
+    queryFn: () => apiRequest("GET", "/api/release-notes").then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const unseenCount = notes.filter((n) => !seenIds.has(n.id)).length;
+
+  function handleOpen() {
+    setOpen(true);
+    if (notes.length > 0) {
+      const allIds = notes.map((n) => n.id);
+      markAllSeen(allIds);
+      setSeenIds(new Set(allIds));
+    }
+  }
+
+  return (
+    <div className="relative">
+      <Button
+        variant="outline"
+        size="icon"
+        className="relative"
+        onClick={handleOpen}
+        data-testid="button-release-notes-bell"
+        aria-label="ملاحظات الإصدار"
+      >
+        <Bell className="h-4 w-4" />
+        {unseenCount > 0 && (
+          <span className="notif-bell-badge" data-testid="badge-unseen-count">
+            {unseenCount > 9 ? "9+" : unseenCount}
+          </span>
+        )}
+      </Button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-[40]"
+            onClick={() => setOpen(false)}
+          />
+          {/* Dropdown panel */}
+          <div
+            dir="rtl"
+            className="absolute left-0 top-full mt-2 z-[50] w-[340px] sm:w-[380px] rounded-[20px] border border-white/20 liquid-glass shadow-2xl overflow-hidden"
+            data-testid="release-notes-dropdown"
+          >
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/15">
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-primary" />
+                <span className="font-black text-sm">ملاحظات الإصدار</span>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1 hover:bg-white/10 transition-colors"
+                data-testid="button-close-release-notes"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto divide-y divide-white/10">
+              {notes.length === 0 ? (
+                <div className="py-10 text-center">
+                  <p className="text-sm font-bold text-foreground/50">لا توجد تحديثات حالياً</p>
+                </div>
+              ) : (
+                notes.map((note) => (
+                  <div
+                    key={note.id}
+                    className="px-4 py-3 hover:bg-white/8 transition-colors"
+                    data-testid={`release-note-item-${note.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl leading-none mt-0.5 shrink-0">{note.emoji || "🚀"}</span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                          <span className="font-black text-sm">{note.title}</span>
+                          <span className="text-[10px] font-mono text-foreground/50 border border-border rounded px-1">v{note.version}</span>
+                        </div>
+                        <p className="text-xs text-foreground/65 leading-relaxed whitespace-pre-wrap line-clamp-3">{note.body}</p>
+                        {note.publishedAt && (
+                          <p className="text-[10px] text-foreground/40 mt-1">
+                            {new Date(note.publishedAt).toLocaleDateString("ar-SA")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function Header() {
   const [location] = useLocation();
@@ -59,6 +191,7 @@ export function Header() {
               </Link>
 
               <div className="flex items-center gap-2 lg:hidden">
+                <ReleaseNotesDropdown />
                 <ThemeToggle />
                 <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                   <SheetTrigger asChild>
@@ -183,6 +316,7 @@ export function Header() {
               </Button>
             </Link>
           )}
+          <ReleaseNotesDropdown />
           <ThemeToggle />
         </nav>
           </div>

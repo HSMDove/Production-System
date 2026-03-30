@@ -24,6 +24,7 @@ import {
   updatePromptTemplateSchema,
   insertIdeaCommentSchema,
   insertIdeaAssignmentSchema,
+  insertReleaseNoteSchema,
   type Folder,
   type Source,
   type Idea,
@@ -4655,6 +4656,82 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       res.json(reply);
     } catch (error) {
       res.status(500).json({ error: "فشل إرسال الرد" });
+    }
+  });
+
+  // ─── Release Notes ────────────────────────────────────────────────────────
+
+  // Public: get all published notes (used by the header bell)
+  app.get("/api/release-notes", requireAuth, async (_req, res) => {
+    try {
+      const notes = await storage.getPublishedReleaseNotes();
+      res.json(notes);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب ملاحظات الإصدار" });
+    }
+  });
+
+  // Admin: get all notes (published + drafts)
+  app.get("/api/admin/release-notes", requireAdmin, async (_req, res) => {
+    try {
+      const notes = await storage.getAllReleaseNotes();
+      res.json(notes);
+    } catch (error) {
+      res.status(500).json({ error: "فشل جلب ملاحظات الإصدار" });
+    }
+  });
+
+  // Admin: create a new release note
+  app.post("/api/admin/release-notes", requireAdmin, async (req, res) => {
+    try {
+      const parsed = insertReleaseNoteSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "بيانات غير صحيحة", details: parsed.error.flatten() });
+      }
+      const note = await storage.createReleaseNote(parsed.data);
+      await storage.createAuditLog(
+        (req as any).session?.userId || "system",
+        "release_note_created",
+        `إنشاء ملاحظة إصدار: ${note.version} — ${note.title}`,
+        req.ip || undefined,
+      );
+      res.status(201).json(note);
+    } catch (error) {
+      res.status(500).json({ error: "فشل إنشاء ملاحظة الإصدار" });
+    }
+  });
+
+  // Admin: update a release note
+  app.patch("/api/admin/release-notes/:id", requireAdmin, async (req, res) => {
+    try {
+      const note = await storage.updateReleaseNote(req.params.id, req.body);
+      if (!note) return res.status(404).json({ error: "ملاحظة الإصدار غير موجودة" });
+      await storage.createAuditLog(
+        (req as any).session?.userId || "system",
+        "release_note_updated",
+        `تعديل ملاحظة إصدار: ${note.version}`,
+        req.ip || undefined,
+      );
+      res.json(note);
+    } catch (error) {
+      res.status(500).json({ error: "فشل تعديل ملاحظة الإصدار" });
+    }
+  });
+
+  // Admin: delete a release note
+  app.delete("/api/admin/release-notes/:id", requireAdmin, async (req, res) => {
+    try {
+      const deleted = await storage.deleteReleaseNote(req.params.id);
+      if (!deleted) return res.status(404).json({ error: "ملاحظة الإصدار غير موجودة" });
+      await storage.createAuditLog(
+        (req as any).session?.userId || "system",
+        "release_note_deleted",
+        `حذف ملاحظة إصدار: ${req.params.id}`,
+        req.ip || undefined,
+      );
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "فشل حذف ملاحظة الإصدار" });
     }
   });
 

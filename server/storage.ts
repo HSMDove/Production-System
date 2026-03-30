@@ -104,6 +104,9 @@ import {
   type TicketCategory,
   ticketReplies,
   type TicketReply,
+  releaseNotes,
+  type ReleaseNote,
+  type InsertReleaseNote,
 } from "@shared/schema";
 
 const FULLY_PROCESSED_CONTENT_CONDITION = and(
@@ -1362,6 +1365,52 @@ export class DatabaseStorage implements IStorage {
   async deleteAssistantMessagesByIds(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await db.delete(assistantMessages).where(inArray(assistantMessages.id, ids));
+  }
+
+  // ─── Release Notes ────────────────────────────────────────────────────────
+  async getAllReleaseNotes(): Promise<ReleaseNote[]> {
+    return db.select().from(releaseNotes).orderBy(desc(releaseNotes.createdAt));
+  }
+
+  async getPublishedReleaseNotes(): Promise<ReleaseNote[]> {
+    return db.select().from(releaseNotes)
+      .where(eq(releaseNotes.isPublished, true))
+      .orderBy(desc(releaseNotes.publishedAt));
+  }
+
+  async getReleaseNoteById(id: string): Promise<ReleaseNote | undefined> {
+    const [note] = await db.select().from(releaseNotes).where(eq(releaseNotes.id, id));
+    return note;
+  }
+
+  async createReleaseNote(data: InsertReleaseNote): Promise<ReleaseNote> {
+    const now = new Date();
+    const [note] = await db.insert(releaseNotes).values({
+      ...data,
+      publishedAt: data.isPublished ? now : null,
+    }).returning();
+    return note;
+  }
+
+  async updateReleaseNote(id: string, data: Partial<InsertReleaseNote>): Promise<ReleaseNote | undefined> {
+    const existing = await this.getReleaseNoteById(id);
+    if (!existing) return undefined;
+    const publishedAt =
+      data.isPublished && !existing.isPublished
+        ? new Date()
+        : data.isPublished === false
+        ? null
+        : existing.publishedAt;
+    const [note] = await db.update(releaseNotes)
+      .set({ ...data, publishedAt, updatedAt: new Date() })
+      .where(eq(releaseNotes.id, id))
+      .returning();
+    return note;
+  }
+
+  async deleteReleaseNote(id: string): Promise<boolean> {
+    const result = await db.delete(releaseNotes).where(eq(releaseNotes.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ─── Daily Cleanup Jobs ───────────────────────────────────────────────────

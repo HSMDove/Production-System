@@ -512,7 +512,9 @@ body {
     radial-gradient(circle at 50% 80%, hsl(var(--accent) / 0.14), transparent 24%),
     repeating-linear-gradient(135deg, rgba(0,0,0,0.05) 0 2px, transparent 2px 18px),
     radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
-  background-size: auto, auto, auto, auto, 24px 24px;
+  /* fixed prevents the dot grid from tiling as the user scrolls */
+  background-attachment: fixed;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 28px 28px;
 }
 
 
@@ -1461,4 +1463,108 @@ body {
     0 2px 14px hsl(var(--primary) / 0.55),
     0 0 0 2px hsl(var(--primary) / 0.20),
     inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EMOJI STABILITY — prevent sub-pixel jitter from transforms
+   ═══════════════════════════════════════════════════════════ */
+
+/* Stabilise emojis inside animated or transformed containers */
+.emoji-stable,
+.folder-surface .text-4xl,
+.folder-surface .text-3xl,
+.folder-surface .text-2xl {
+  display: inline-block;
+  will-change: auto;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Prevent sub-pixel rendering differences across browsers */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Emoji picker grid items — scale without composite-layer bleed */
+.emoji-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateZ(0);
+  will-change: transform;
+  transition: transform 0.12s ease, background-color 0.12s ease;
+}
+
+.emoji-picker-item:hover {
+  transform: scale(1.18) translateZ(0);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TYPOGRAPHY — Mobile-first Content Readability v2.5.1
+   ═══════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* News card text */
+  .content-news-card .news-title {
+    font-size: 0.9375rem !important;  /* 15px — up from text-sm (14px) */
+    line-height: 1.45 !important;
+    font-weight: 700 !important;
+  }
+
+  .content-news-card .news-summary {
+    font-size: 0.8125rem !important;  /* 13px — up from text-xs (12px) */
+    line-height: 1.6 !important;
+  }
+
+  /* Smart view / AI-generated content */
+  .smart-view-content {
+    font-size: 1.0625rem;
+    line-height: 1.85;
+  }
+
+  .smart-view-content h1,
+  .smart-view-content h2 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+  }
+
+  .smart-view-content h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .smart-view-content p {
+    font-size: 1.0625rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Fikri chat messages — slightly larger for readability */
+  .fikri-message-text {
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+
+  /* Notification bell badge */
+  .notif-bell-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-size: 9px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    border: 2px solid hsl(var(--background));
+    pointer-events: none;
+    line-height: 1;
+  }
 }

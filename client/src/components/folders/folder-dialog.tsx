@@ -241,7 +241,7 @@ function EmojiPicker({ value, onChange, color }: { value: string; onChange: (v: 
                 key={emoji}
                 type="button"
                 onClick={() => { onChange(emoji); setShowGrid(false); }}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg text-base transition-all hover:scale-125 hover:bg-muted ${value === emoji ? "bg-primary/20 ring-1 ring-primary" : ""}`}
+                className={`emoji-picker-item flex h-7 w-7 items-center justify-center rounded-lg text-base hover:bg-muted ${value === emoji ? "bg-primary/20 ring-1 ring-primary" : ""}`}
                 data-testid={`button-emoji-${emoji}`}
               >
                 {emoji}
