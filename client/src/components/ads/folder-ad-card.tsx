@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { X, Megaphone } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
+import { AdSlotRenderer } from "@/components/ads/ad-slot-renderer";
+import { useAdSettings } from "@/hooks/use-ad-settings";
 
-const VISIT_KEY   = "nasaq_ad_visit_count";
-const DISMISS_KEY = "nasaq_folder_ad_dismissed_at";
-const SESSION_KEY = "nasaq_visit_counted";
+const VISIT_KEY      = "nasaq_ad_visit_count";
+const DISMISS_KEY    = "nasaq_folder_ad_dismissed_at";
+const SESSION_KEY    = "nasaq_visit_counted";
 const REAPPEAR_AFTER = 2; // reappear after 2 more visits
 
 function getVisitCount(): number {
@@ -27,20 +28,19 @@ function incrementVisitIfNeeded(): number {
 
 export function FolderAdCard() {
   const [visible, setVisible] = useState(false);
+  const { configs } = useAdSettings();
+  const config = configs.folder;
 
   useEffect(() => {
     const currentVisit = incrementVisitIfNeeded();
     const dismissedAt  = getDismissedAt();
 
     if (dismissedAt === 0) {
-      // Never dismissed — always show
       setVisible(true);
     } else if (currentVisit >= dismissedAt + REAPPEAR_AFTER) {
-      // Enough visits have passed — reset dismiss and show again
       localStorage.removeItem(DISMISS_KEY);
       setVisible(true);
     }
-    // Otherwise: still hidden
   }, []);
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -66,44 +66,9 @@ export function FolderAdCard() {
         <X className="h-3 w-3" />
       </button>
 
-      {/* Sponsored badge */}
-      <div className="mb-3 flex items-center justify-between">
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-          <Megaphone className="h-2.5 w-2.5" />
-          مُموَّل
-        </span>
-      </div>
-
-      {/* Ad icon */}
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl text-2xl"
-        style={{
-          background: "rgba(247,203,70,0.18)",
-          border: "1.5px solid rgba(247,203,70,0.45)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 8px rgba(247,203,70,0.25)",
-        }}
-      >
-        ✨
-      </div>
-
-      {/* Ad text */}
+      {/* Dynamic content */}
       <div className="flex-1">
-        <h3 className="text-base font-bold leading-snug text-foreground">
-          أعلن في نَسَق
-        </h3>
-        <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-          تواصل مع جمهور تقني مُتخصص في منطقة MENA.
-        </p>
-      </div>
-
-      {/* CTA */}
-      <div className="mt-3 border-t border-amber-400/20 pt-3">
-        <a
-          href="#"
-          className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-500 dark:text-amber-400"
-          onClick={(e) => e.preventDefault()}
-        >
-          اعرف أكثر →
-        </a>
+        <AdSlotRenderer config={config} />
       </div>
     </div>
   );
