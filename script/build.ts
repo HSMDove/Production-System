@@ -70,7 +70,8 @@ async function buildAll() {
     define: {
       "process.env.NODE_ENV": '"production"',
     },
-    minify: true,
+    // Keep server bundle readable in production logs (Railway crash diagnostics)
+    minify: false,
     external: externals,
     logLevel: "info",
   });

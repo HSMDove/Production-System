@@ -1,11 +1,17 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
 import { createServer } from "http";
+import { registerRoutes } from "./routes";
 import { startScheduler } from "./scheduler";
-import { pool, ensureIntegrationTables } from "./db";
+import { serveStatic } from "./static";
+import {
+  checkDatabaseReady,
+  ensureIntegrationTables,
+  getPool,
+  initializeDatabase,
+} from "./db";
+import { resolveRuntimeEnv, StartupConfigError } from "./config/env";
 
 const app = express();
 const httpServer = createServer(app);
@@ -23,42 +29,6 @@ declare module "express-session" {
   }
 }
 
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
-
-app.use(express.urlencoded({ extended: false }));
-
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
-
-const PgSession = connectPgSimple(session);
-
-app.use(
-  session({
-    store: new PgSession({
-      pool,
-      tableName: "session",
-      createTableIfMissing: true,
-    }),
-    secret: process.env.SESSION_SECRET || "fallback-secret-change-in-production",
-    resave: false,
-    saveUninitialized: false,
-    proxy: process.env.NODE_ENV === "production",
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" as const : "lax" as const,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    },
-  }),
-);
-
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -70,74 +40,189 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+function setupBodyParsers() {
+  app.use(
+    express.json({
+      verify: (req, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  app.use(express.urlencoded({ extended: false }));
+}
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+function setupSession(sessionSecret: string, isProduction: boolean) {
+  const PgSession = connectPgSimple(session);
+
+  app.use(
+    session({
+      store: new PgSession({
+        pool: getPool(),
+        tableName: "session",
+        createTableIfMissing: true,
+      }),
+      secret: sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      proxy: isProduction,
+      cookie: {
+        secure: isProduction,
+        httpOnly: true,
+        sameSite: isProduction ? ("none" as const) : ("lax" as const),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      },
+    }),
+  );
+}
+
+function setupApiRequestLogging() {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    const path = req.path;
+    let capturedJsonResponse: Record<string, any> | undefined;
+
+    const originalResJson = res.json;
+    res.json = function (bodyJson, ...args) {
+      capturedJsonResponse = bodyJson;
+      return originalResJson.apply(res, [bodyJson, ...args]);
+    };
+
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      if (path.startsWith("/api")) {
+        let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+        if (capturedJsonResponse) {
+          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        }
+
+        log(logLine);
       }
+    });
 
-      log(logLine);
+    next();
+  });
+}
+
+function setupHealthRoutes() {
+  app.get("/healthz", (_req, res) => {
+    res.status(200).json({ status: "ok" });
+  });
+
+  app.get("/readyz", async (_req, res) => {
+    try {
+      await checkDatabaseReady(2_000);
+      res.status(200).json({ status: "ready" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      res.status(503).json({ status: "not_ready", reason: message });
     }
   });
+}
 
-  next();
-});
-
-(async () => {
-  await ensureIntegrationTables();
-  await pool.query(
-    `
-      insert into system_settings (key, value, description, updated_at)
-      values ($1, $2, $3, now())
-      on conflict (key) do update
-      set value = excluded.value,
-          description = excluded.description,
-          updated_at = now()
-    `,
-    ["app_version", APP_VERSION, "رقم إصدار التطبيق"],
-  ).catch((error) => {
-    log(`failed to sync app version setting: ${error instanceof Error ? error.message : String(error)}`, "startup");
-  });
-  await registerRoutes(httpServer, app);
-
+function setupErrorHandler() {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
-  });
+    log(`request failed (${status}): ${message}`, "error");
 
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
+  });
+}
+
+function handleStartupFailure(error: unknown) {
+  if (error instanceof StartupConfigError) {
+    log(`startup failed: ${error.message}`, "startup");
+    process.exit(1);
+    return;
   }
 
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-      startScheduler();
-    },
-  );
-})();
+  if (error instanceof Error) {
+    log(`startup failed: ${error.message}`, "startup");
+    if (process.env.NODE_ENV !== "production") {
+      console.error(error);
+    }
+  } else {
+    log(`startup failed: ${String(error)}`, "startup");
+  }
+
+  process.exit(1);
+}
+
+async function bootstrap() {
+  try {
+    const env = resolveRuntimeEnv();
+    const isProduction = env.nodeEnv === "production";
+
+    if (isProduction) {
+      app.set("trust proxy", 1);
+    }
+
+    initializeDatabase({
+      connectionString: env.databaseUrl,
+      useNeonSsl: env.useNeonSsl,
+    });
+
+    if (!env.settingsEncryptionKey) {
+      log(
+        "SETTINGS_ENCRYPTION_KEY is not set. Sensitive settings will be tied to SESSION_SECRET and may fail after secret rotation.",
+        "startup",
+      );
+    }
+
+    setupBodyParsers();
+    setupHealthRoutes();
+    setupSession(env.sessionSecret, isProduction);
+    setupApiRequestLogging();
+
+    await ensureIntegrationTables();
+
+    await getPool()
+      .query(
+        `
+          insert into system_settings (key, value, description, updated_at)
+          values ($1, $2, $3, now())
+          on conflict (key) do update
+          set value = excluded.value,
+              description = excluded.description,
+              updated_at = now()
+        `,
+        ["app_version", APP_VERSION, "رقم إصدار التطبيق"],
+      )
+      .catch((error) => {
+        log(
+          `failed to sync app version setting: ${error instanceof Error ? error.message : String(error)}`,
+          "startup",
+        );
+      });
+
+    await registerRoutes(httpServer, app);
+    setupErrorHandler();
+
+    if (isProduction) {
+      serveStatic(app);
+    } else {
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
+    }
+
+    httpServer.listen(
+      {
+        port: env.port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${env.port}`);
+        startScheduler();
+      },
+    );
+  } catch (error) {
+    handleStartupFailure(error);
+  }
+}
+
+void bootstrap();
