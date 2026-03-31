@@ -41,6 +41,7 @@ const forceExternal = [
   "./vite",
   "./vite.js",
   "./vite.ts",
+  "pg-native",
 ];
 
 async function buildAll() {
