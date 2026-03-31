@@ -9,7 +9,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { initAppleEmoji } from "@/lib/apple-emoji";
-import type { AdSettings } from "@/hooks/use-ad-settings";
 import Dashboard from "@/pages/dashboard";
 import FolderDetail from "@/pages/folder-detail";
 import Ideas from "@/pages/ideas";
@@ -62,41 +61,13 @@ function AppContent() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch ad settings to know whether AdSense script is needed
-  const { data: adSettings } = useQuery<AdSettings>({
-    queryKey: ["/api/system-settings/ads"],
-    queryFn: () => fetch("/api/system-settings/ads").then((r) => r.json()),
-    staleTime: 5 * 60 * 1000,
-  });
-
   useEffect(() => {
     initAppleEmoji();
   }, []);
-
-  // Inject AdSense <script> once — only when at least one slot is in AdSense mode
-  useEffect(() => {
-    if (!adSettings?.configs) return;
-
-    const needsAdSense = Object.values(adSettings.configs).some(
-      (cfg) => cfg?.mode === "adsense" && cfg.adsenseClientId,
-    );
-    if (!needsAdSense) return;
-
-    // Guard: don't inject twice
-    if (document.querySelector('script[src*="adsbygoogle.js"]')) return;
-
-    // Use the clientId from the first AdSense-mode slot found
-    const firstAdSenseConfig = Object.values(adSettings.configs).find(
-      (cfg) => cfg?.mode === "adsense" && cfg.adsenseClientId,
-    );
-    if (!firstAdSenseConfig?.adsenseClientId) return;
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${firstAdSenseConfig.adsenseClientId}`;
-    script.crossOrigin = "anonymous";
-    document.head.appendChild(script);
-  }, [adSettings?.configs]);
+  // NOTE: The AdSense <script> tag is injected server-side into the HTML
+  // document (see server/adsense-injector.ts + server/static.ts) so that
+  // Google's verification crawler can detect it in "View Page Source".
+  // No client-side script injection is needed here.
 
   useEffect(() => {
     const prevStyle = document.getElementById("dynamic-site-font");
