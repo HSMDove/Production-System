@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, Send, Check, Eye } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
@@ -16,6 +16,8 @@ import { LiveTimeAgo } from "@/components/ui/live-time-ago";
 import { useToast } from "@/hooks/use-toast";
 import type { ContentWithSource } from "@/lib/types";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { FeedAdCard } from "@/components/ads/feed-ad-card";
+import { useAdSettings } from "@/hooks/use-ad-settings";
 
 interface ContentFeedProps {
   content: ContentWithSource[];
@@ -406,6 +408,7 @@ function ContentSkeleton() {
 }
 
 export function ContentFeed({ content, isLoading, showSmartView, folderId, unifiedTimeline }: ContentFeedProps) {
+  const { feedAds } = useAdSettings();
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -441,17 +444,22 @@ export function ContentFeed({ content, isLoading, showSmartView, folderId, unifi
   const hasNews = newsContent.length > 0;
   const hasVideos = videoContent.length > 0;
 
-  const renderCards = (items: ContentWithSource[]) => (
-    <div className="space-y-4">
-      {items.map((item) => (
+  const renderCards = (items: ContentWithSource[]) => {
+    const elements: React.ReactNode[] = [];
+    items.forEach((item, idx) => {
+      elements.push(
         <ContentCard
           key={item.id}
           item={item}
           showSmartView={showSmartView}
         />
-      ))}
-    </div>
-  );
+      );
+      if (feedAds && (idx + 1) % 3 === 0 && idx < items.length - 1) {
+        elements.push(<FeedAdCard key={`feed-ad-${idx}`} />);
+      }
+    });
+    return <div className="space-y-4">{elements}</div>;
+  };
 
   if (unifiedTimeline) {
     return renderCards(content);

@@ -1607,6 +1607,109 @@ body {
   color: rgb(239, 68, 68) !important;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   AD COMPONENTS — Golden Liquid Glass v2.6.0
+   ═══════════════════════════════════════════════════════════ */
+
+/* Golden Liquid Glass — for sponsored news feed cards */
+.ad-golden-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(247, 203, 70, 0.14) 0%,
+    rgba(255, 170, 0, 0.06) 100%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(200%) !important;
+  border: 1px solid rgba(247, 203, 70, 0.50) !important;
+  border-radius: 16px !important;
+  box-shadow:
+    0 8px 32px rgba(247, 203, 70, 0.14),
+    0 0 0 1px rgba(247, 203, 70, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30) !important;
+  background-image: none !important;
+}
+
+.dark .ad-golden-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(247, 203, 70, 0.10) 0%,
+    rgba(255, 170, 0, 0.04) 100%
+  ) !important;
+  border: 1px solid rgba(247, 203, 70, 0.35) !important;
+  box-shadow:
+    0 8px 32px rgba(247, 203, 70, 0.18),
+    0 0 0 1px rgba(247, 203, 70, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+}
+
+/* Gold glow pulse for ad border */
+@keyframes ad-gold-glow {
+  0%, 100% { box-shadow: 0 8px 32px rgba(247, 203, 70, 0.14), 0 0 0 1px rgba(247, 203, 70, 0.10), inset 0 1px 0 rgba(255,255,255,0.30); }
+  50%       { box-shadow: 0 8px 40px rgba(247, 203, 70, 0.28), 0 0 0 2px rgba(247, 203, 70, 0.20), inset 0 1px 0 rgba(255,255,255,0.35); }
+}
+
+.ad-golden-glass {
+  animation: ad-gold-glow 3.5s ease-in-out infinite !important;
+}
+
+/* Folder Ad — same shape as folder card but with gold tint */
+.ad-folder-glass {
+  background: linear-gradient(
+    145deg,
+    rgba(247, 203, 70, 0.12) 0%,
+    rgba(255, 255, 255, 0.06) 100%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1.5px solid rgba(247, 203, 70, 0.45) !important;
+  border-radius: 1.618rem !important;
+  box-shadow:
+    0 8px 32px rgba(247, 203, 70, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  background-image: none !important;
+}
+
+.dark .ad-folder-glass {
+  background: linear-gradient(
+    145deg,
+    rgba(247, 203, 70, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  ) !important;
+  border: 1.5px solid rgba(247, 203, 70, 0.30) !important;
+  box-shadow:
+    0 8px 32px rgba(247, 203, 70, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Fikri Chat Ad Card — distinct Liquid Glass strip */
+.ad-chat-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(247, 203, 70, 0.08) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(247, 203, 70, 0.35) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
+  background-image: none !important;
+}
+
+.dark .ad-chat-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(247, 203, 70, 0.05) 100%
+  ) !important;
+  border: 1px solid rgba(247, 203, 70, 0.25) !important;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
 .refresh-btn-glow svg {
   color: rgb(239, 68, 68);
 }

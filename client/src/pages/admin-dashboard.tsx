@@ -5,7 +5,8 @@ import {
   BarChart3, Users, Megaphone, Bell, Settings, Shield, LogOut,
   Plus, Trash2, Edit, Save, X, Loader2, FileText, Eye, EyeOff,
   Lock, AlertTriangle, ChevronLeft, MessageSquare, Send, Clock,
-  Sparkles, RotateCcw, Network, ExternalLink, Newspaper, Globe, Type, Upload
+  Sparkles, RotateCcw, Network, ExternalLink, Newspaper, Globe, Type, Upload,
+  BadgeDollarSign
 } from "lucide-react";
 import {
   Dialog,
@@ -38,7 +39,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
 import { ADMIN_MODEL_CATALOG, getDefaultModel, type AdminAIProvider } from "@/lib/model-catalog";
 
-type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections" | "release-notes";
+type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections" | "release-notes" | "ads";
 
 const tabDescriptions: Record<Tab, string> = {
   analytics: "ملخص تنفيذي سريع لحركة النظام والمستخدمين والمحتوى داخل المنصة.",
@@ -53,6 +54,7 @@ const tabDescriptions: Record<Tab, string> = {
   audit: "سجل قرارات الإدارة والعمليات الحساسة لمراجعة التغييرات بدقة.",
   connections: "إدارة روابط التكامل الخارجية للمنصة: النطاقات، DNS، قواعد البيانات، وغيرها.",
   "release-notes": "نشر وإدارة ملاحظات الإصدارات التي تظهر للمستخدمين عبر جرس الإشعارات في الرأسية.",
+  ads: "تحكم في تشغيل وإيقاف مواضع الإعلانات والرعايات داخل التطبيق بشكل مستقل لكل موضع.",
 };
 
 export default function AdminDashboard() {
@@ -73,6 +75,7 @@ export default function AdminDashboard() {
     { id: "audit", label: "سجل التدقيق", icon: FileText },
     { id: "connections", label: "الاتصالات", icon: Network },
     { id: "release-notes", label: "ملاحظات الإصدار", icon: Newspaper },
+    { id: "ads", label: "الإعلانات والرعايات", icon: BadgeDollarSign },
   ];
   const activeTabMeta = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
   const ActiveIcon = activeTabMeta.icon;
@@ -176,6 +179,7 @@ export default function AdminDashboard() {
           {activeTab === "audit" && <AuditPanel />}
           {activeTab === "connections" && <ConnectionsPanel />}
           {activeTab === "release-notes" && <ReleaseNotesPanel />}
+          {activeTab === "ads" && <AdsPanel />}
         </section>
       </main>
       </div>
@@ -2394,6 +2398,120 @@ function ReleaseNotesPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function AdsPanel() {
+  const { toast } = useToast();
+
+  const AD_SLOTS = [
+    {
+      key: "ads_folder_enabled",
+      label: "إعلان المجلدات",
+      desc: "بطاقة إعلانية تظهر في شبكة المجلدات على الصفحة الرئيسية. تُخفى ذكياً بعد الإغلاق وتعود في الزيارة الثالثة.",
+      icon: "🗂️",
+    },
+    {
+      key: "ads_feed_enabled",
+      label: "إعلانات قائمة الأخبار",
+      desc: "بطاقة ذهبية Liquid Glass تُحقن بعد كل 3 أخبار داخل الفيد. تتبع لغة تصميم نَسَق الفاخرة.",
+      icon: "📰",
+    },
+    {
+      key: "ads_fikri_enabled",
+      label: "إعلانات فكري (المحادثة)",
+      desc: "بطاقة UI مستقلة تظهر في دفق المحادثة بعد كل 3 ردود من فكري. لا يتحدث عنها الذكاء الاصطناعي أبداً.",
+      icon: "🤖",
+    },
+  ] as const;
+
+  const { data: settings, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/system-settings"],
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: (data: { key: string; value: string; description?: string }) =>
+      apiRequest("PUT", "/api/admin/system-settings", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/system-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-settings/ads"] });
+      toast({ title: "تم حفظ إعداد الإعلان" });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حفظ الإعداد", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <PanelLoader />;
+
+  const getValue = (key: string): boolean => {
+    const setting = settings?.find((s: any) => s.key === key);
+    return setting ? setting.value !== "false" : true;
+  };
+
+  const handleToggle = (key: string, currentValue: boolean) => {
+    upsertMutation.mutate({
+      key,
+      value: String(!currentValue),
+      description: AD_SLOTS.find(s => s.key === key)?.desc,
+    });
+  };
+
+  return (
+    <div className="space-y-6" data-testid="panel-ads">
+      <div>
+        <h2 className="text-xl font-bold mb-1">الإعلانات والرعايات</h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          تحكم في تشغيل وإيقاف كل موضع إعلاني بشكل مستقل. التغييرات تسري فوراً دون إعادة تحميل.
+        </p>
+
+        <div className="space-y-4">
+          {AD_SLOTS.map((slot) => {
+            const enabled = getValue(slot.key);
+            return (
+              <div
+                key={slot.key}
+                className="card bg-card p-5 flex items-start justify-between gap-4"
+                data-testid={`ads-slot-${slot.key}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl mt-0.5 select-none">{slot.icon}</div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-base">{slot.label}</span>
+                      <Badge variant={enabled ? "default" : "secondary"} className="text-[10px]">
+                        {enabled ? "مفعّل" : "موقف"}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{slot.desc}</p>
+                  </div>
+                </div>
+                <div className="shrink-0 pt-1">
+                  <Switch
+                    checked={enabled}
+                    onCheckedChange={() => handleToggle(slot.key, enabled)}
+                    disabled={upsertMutation.isPending}
+                    data-testid={`switch-${slot.key}`}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card bg-card p-5 border-amber-400/30">
+        <h3 className="font-bold mb-2 flex items-center gap-2">
+          <BadgeDollarSign className="h-4 w-4 text-amber-500" />
+          ملاحظة الإعلانات الحالية
+        </h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          المحتوى الإعلاني الحالي هو <strong>placeholder تجريبي</strong>. لتفعيل إعلانات حقيقية،
+          استبدل محتوى بطاقات الإعلانات في المكونات بكود AdSense أو رابط الراعي المباشر.
+          جميع المواضع جاهزة تقنياً لاستقبال أي شبكة إعلانية.
+        </p>
+      </div>
     </div>
   );
 }

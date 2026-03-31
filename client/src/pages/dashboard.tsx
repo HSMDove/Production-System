@@ -5,6 +5,7 @@ import { Columns2, FolderOpen } from "lucide-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { FolderCard } from "@/components/folders/folder-card";
 import { AddFolderCard } from "@/components/folders/add-folder-card";
+import { FolderAdCard } from "@/components/ads/folder-ad-card";
 import { FolderDialog } from "@/components/folders/folder-dialog";
 import { DeleteDialog } from "@/components/common/delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -12,11 +13,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useAdSettings } from "@/hooks/use-ad-settings";
 import type { Folder } from "@/lib/types";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { folderAds } = useAdSettings();
   
   const welcomeMessages = [
     "مرحباً",
@@ -147,14 +150,18 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {folders?.map((folder) => (
-                <FolderCard
-                  key={folder.id}
-                  folder={folder}
-                  onEdit={handleEditFolder}
-                  onDelete={handleDeleteFolder}
-                />
+              {folders?.map((folder, idx) => (
+                <>
+                  <FolderCard
+                    key={folder.id}
+                    folder={folder}
+                    onEdit={handleEditFolder}
+                    onDelete={handleDeleteFolder}
+                  />
+                  {folderAds && idx === 2 && <FolderAdCard key="folder-ad" />}
+                </>
               ))}
+              {folderAds && (folders?.length ?? 0) < 3 && <FolderAdCard key="folder-ad-end" />}
               <AddFolderCard onClick={handleAddFolder} />
             </div>
           )}
