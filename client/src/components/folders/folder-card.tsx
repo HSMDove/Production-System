@@ -148,11 +148,12 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
         <div className="flex items-start justify-between gap-3">
           <Link href={`/folder/${folder.id}`} className="flex min-w-0 flex-1 items-center gap-3">
             <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl leading-none"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl"
               style={{
                 background: `${folderColor}45`,
                 border: `1.5px solid ${folderColor}80`,
                 boxShadow: `inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 8px ${folderColor}30`,
+                lineHeight: "1",
               }}
             >
               {folder.emoji || "📁"}

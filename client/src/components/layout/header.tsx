@@ -64,7 +64,7 @@ function ReleaseNotesDropdown() {
   const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
   // Fixed positioning — escapes the header stacking context created by backdrop-filter
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 340 });
+  const [pos, setPos] = useState({ top: 0, left: 0, right: 0, width: 340 });
 
   const { data: notes = [] } = useQuery<ReleaseNote[]>({
     queryKey: ["/api/release-notes"],
@@ -88,10 +88,11 @@ function ReleaseNotesDropdown() {
       const vw = window.innerWidth;
       // Responsive width: full-width on very small screens with 16px margins
       const dropdownWidth = vw < 640 ? Math.min(340, vw - 16) : 390;
-      // Left-anchor to the button's left edge (bell is on the LEFT in RTL layout)
-      // Clamp so the right edge never overflows the viewport
-      const safeLeft = Math.max(8, Math.min(rect.left, vw - dropdownWidth - 8));
-      setPos({ top: rect.bottom + 8, left: safeLeft, width: dropdownWidth });
+      // RTL: use right edge of button as anchor (bell is on RIGHT in mobile, LEFT in desktop)
+      // Align dropdown's right edge to button's right edge
+      const buttonRight = vw - rect.right;
+      const safeRight = Math.max(8, Math.min(buttonRight, vw - dropdownWidth - 8));
+      setPos({ top: rect.bottom + 8, left: 0, right: safeRight, width: dropdownWidth });
     }
     setOpen(true);
     if (notes.length > 0) {
@@ -131,7 +132,7 @@ function ReleaseNotesDropdown() {
           {/* Dropdown rendered with position:fixed — not clipped by any stacking context */}
           <div
             dir="rtl"
-            style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
+            style={{ position: "fixed", top: pos.top, right: pos.right, left: "auto", width: pos.width, zIndex: 9999 }}
             className="rounded-[20px] liquid-glass-modal shadow-2xl overflow-hidden"
             data-testid="release-notes-dropdown"
           >
