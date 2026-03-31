@@ -13,7 +13,6 @@ import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnectio
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
-import { invalidateAdSenseCache } from "./adsense-injector";
 import { FIKRI_GATEWAY_SETTING_KEY, defaultFikriGatewayConfig, fikriGatewayConfigSchema, getFikriGatewayConfig, saveFikriGatewayConfig } from "./fikri-gateway";
 import { z } from "zod";
 import {
@@ -4263,13 +4262,6 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const { key, value, description } = parsed.data;
       const setting = await storage.upsertSystemSetting(key, value, description);
       await storage.createAuditLog(req.session.userId!, "system_setting_updated", `تعديل إعداد النظام: ${key}`, req.ip || undefined);
-
-      // Invalidate the server-side AdSense cache so the next page request
-      // re-reads the publisher ID from the database and injects the correct
-      // script tag into the HTML.
-      if (key.startsWith("ad_config_")) {
-        invalidateAdSenseCache();
-      }
 
       res.json(setting);
     } catch (error) {
