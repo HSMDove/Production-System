@@ -5,7 +5,6 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
-import { getAdSensePublisherId, injectAdSenseScript } from "./adsense-injector";
 
 const viteLogger = createLogger();
 
@@ -49,14 +48,7 @@ export async function setupVite(server: Server, app: Express) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
-      let page = await vite.transformIndexHtml(url, template);
-
-      // Inject AdSense script server-side so it appears in raw HTML source
-      const publisherId = await getAdSensePublisherId();
-      if (publisherId) {
-        page = injectAdSenseScript(page, publisherId);
-      }
-
+      const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);
