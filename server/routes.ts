@@ -735,15 +735,32 @@ export async function registerRoutes(
 
   app.get("/api/system-settings/ads", async (_req, res) => {
     try {
-      const [folderSetting, feedSetting, fikriSetting] = await Promise.all([
+      const [
+        folderSetting, feedSetting, fikriSetting,
+        folderConfig, feedConfig, fikriConfig,
+      ] = await Promise.all([
         storage.getSystemSetting("ads_folder_enabled"),
         storage.getSystemSetting("ads_feed_enabled"),
         storage.getSystemSetting("ads_fikri_enabled"),
+        storage.getSystemSetting("ad_config_folder"),
+        storage.getSystemSetting("ad_config_feed"),
+        storage.getSystemSetting("ad_config_fikri"),
       ]);
+
+      const parseAdConfig = (s: { value: string | null } | undefined) => {
+        try { return s?.value ? JSON.parse(s.value) : { mode: "placeholder" }; }
+        catch { return { mode: "placeholder" }; }
+      };
+
       res.json({
         folderAds: folderSetting ? folderSetting.value !== "false" : true,
         feedAds:   feedSetting   ? feedSetting.value   !== "false" : true,
         fikriAds:  fikriSetting  ? fikriSetting.value  !== "false" : true,
+        configs: {
+          folder: parseAdConfig(folderConfig),
+          feed:   parseAdConfig(feedConfig),
+          fikri:  parseAdConfig(fikriConfig),
+        },
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to get ad settings" });

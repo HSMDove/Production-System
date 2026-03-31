@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -2402,59 +2403,129 @@ function ReleaseNotesPanel() {
   );
 }
 
+type AdMode = "placeholder" | "adsense" | "sponsor";
+
+interface AdSlotLocalConfig {
+  mode: AdMode;
+  adsenseClientId: string;
+  adsenseSlotId: string;
+  sponsorTitle: string;
+  sponsorDesc: string;
+  sponsorUrl: string;
+  sponsorImageUrl: string;
+}
+
+const DEFAULT_SLOT_CONFIG: AdSlotLocalConfig = {
+  mode: "placeholder",
+  adsenseClientId: "",
+  adsenseSlotId: "",
+  sponsorTitle: "",
+  sponsorDesc: "",
+  sponsorUrl: "",
+  sponsorImageUrl: "",
+};
+
+type AdSlotName = "folder" | "feed" | "fikri";
+
+const AD_SLOT_META: { name: AdSlotName; toggleKey: string; configKey: string; label: string; desc: string; icon: string }[] = [
+  {
+    name: "folder",
+    toggleKey: "ads_folder_enabled",
+    configKey: "ad_config_folder",
+    label: "إعلان المجلدات",
+    desc: "بطاقة إعلانية في شبكة المجلدات على الصفحة الرئيسية.",
+    icon: "🗂️",
+  },
+  {
+    name: "feed",
+    toggleKey: "ads_feed_enabled",
+    configKey: "ad_config_feed",
+    label: "إعلانات قائمة الأخبار",
+    desc: "بطاقة ذهبية Liquid Glass تُحقن بعد كل 3 أخبار.",
+    icon: "📰",
+  },
+  {
+    name: "fikri",
+    toggleKey: "ads_fikri_enabled",
+    configKey: "ad_config_fikri",
+    label: "إعلانات فكري (المحادثة)",
+    desc: "بطاقة UI مستقلة تظهر بعد كل 3 ردود من فكري.",
+    icon: "🤖",
+  },
+];
+
 function AdsPanel() {
   const { toast } = useToast();
-
-  const AD_SLOTS = [
-    {
-      key: "ads_folder_enabled",
-      label: "إعلان المجلدات",
-      desc: "بطاقة إعلانية تظهر في شبكة المجلدات على الصفحة الرئيسية. تُخفى ذكياً بعد الإغلاق وتعود في الزيارة الثالثة.",
-      icon: "🗂️",
-    },
-    {
-      key: "ads_feed_enabled",
-      label: "إعلانات قائمة الأخبار",
-      desc: "بطاقة ذهبية Liquid Glass تُحقن بعد كل 3 أخبار داخل الفيد. تتبع لغة تصميم نَسَق الفاخرة.",
-      icon: "📰",
-    },
-    {
-      key: "ads_fikri_enabled",
-      label: "إعلانات فكري (المحادثة)",
-      desc: "بطاقة UI مستقلة تظهر في دفق المحادثة بعد كل 3 ردود من فكري. لا يتحدث عنها الذكاء الاصطناعي أبداً.",
-      icon: "🤖",
-    },
-  ] as const;
 
   const { data: settings, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/system-settings"],
   });
 
-  const upsertMutation = useMutation({
-    mutationFn: (data: { key: string; value: string; description?: string }) =>
+  // Per-slot local config state
+  const [localConfigs, setLocalConfigs] = useState<Record<AdSlotName, AdSlotLocalConfig>>({
+    folder: { ...DEFAULT_SLOT_CONFIG },
+    feed:   { ...DEFAULT_SLOT_CONFIG },
+    fikri:  { ...DEFAULT_SLOT_CONFIG },
+  });
+
+  // Sync from server settings when data arrives
+  useEffect(() => {
+    if (!settings) return;
+    const parse = (configKey: string): AdSlotLocalConfig => {
+      const row = settings.find((s: any) => s.key === configKey);
+      if (!row?.value) return { ...DEFAULT_SLOT_CONFIG };
+      try {
+        const parsed = JSON.parse(row.value);
+        return { ...DEFAULT_SLOT_CONFIG, ...parsed };
+      } catch {
+        return { ...DEFAULT_SLOT_CONFIG };
+      }
+    };
+    setLocalConfigs({
+      folder: parse("ad_config_folder"),
+      feed:   parse("ad_config_feed"),
+      fikri:  parse("ad_config_fikri"),
+    });
+  }, [settings]);
+
+  const toggleMutation = useMutation({
+    mutationFn: (data: { key: string; value: string }) =>
       apiRequest("PUT", "/api/admin/system-settings", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/system-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/system-settings/ads"] });
-      toast({ title: "تم حفظ إعداد الإعلان" });
     },
-    onError: () => {
-      toast({ title: "خطأ", description: "فشل حفظ الإعداد", variant: "destructive" });
+    onError: () => toast({ title: "خطأ", description: "فشل حفظ الإعداد", variant: "destructive" }),
+  });
+
+  const configMutation = useMutation({
+    mutationFn: (data: { key: string; value: string; description: string }) =>
+      apiRequest("PUT", "/api/admin/system-settings", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/system-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/system-settings/ads"] });
+      toast({ title: "✅ تم حفظ إعداد الإعلان بنجاح" });
     },
+    onError: () => toast({ title: "خطأ", description: "فشل حفظ الإعداد", variant: "destructive" }),
   });
 
   if (isLoading) return <PanelLoader />;
 
-  const getValue = (key: string): boolean => {
-    const setting = settings?.find((s: any) => s.key === key);
-    return setting ? setting.value !== "false" : true;
+  const getToggleValue = (key: string): boolean => {
+    const s = settings?.find((r: any) => r.key === key);
+    return s ? s.value !== "false" : true;
   };
 
-  const handleToggle = (key: string, currentValue: boolean) => {
-    upsertMutation.mutate({
-      key,
-      value: String(!currentValue),
-      description: AD_SLOTS.find(s => s.key === key)?.desc,
+  const updateLocalConfig = (name: AdSlotName, patch: Partial<AdSlotLocalConfig>) => {
+    setLocalConfigs(prev => ({ ...prev, [name]: { ...prev[name], ...patch } }));
+  };
+
+  const handleSaveConfig = (slotMeta: typeof AD_SLOT_META[number]) => {
+    const cfg = localConfigs[slotMeta.name];
+    configMutation.mutate({
+      key: slotMeta.configKey,
+      value: JSON.stringify(cfg),
+      description: `إعداد الإعلان — ${slotMeta.label}`,
     });
   };
 
@@ -2463,37 +2534,152 @@ function AdsPanel() {
       <div>
         <h2 className="text-xl font-bold mb-1">الإعلانات والرعايات</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          تحكم في تشغيل وإيقاف كل موضع إعلاني بشكل مستقل. التغييرات تسري فوراً دون إعادة تحميل.
+          شغّل / أوقف كل موضع وحدد نوع الإعلان (AdSense أو راعٍ مباشر). التغييرات فورية.
         </p>
 
-        <div className="space-y-4">
-          {AD_SLOTS.map((slot) => {
-            const enabled = getValue(slot.key);
+        <div className="space-y-6">
+          {AD_SLOT_META.map((slot) => {
+            const enabled = getToggleValue(slot.toggleKey);
+            const cfg = localConfigs[slot.name];
+
             return (
               <div
-                key={slot.key}
-                className="card bg-card p-5 flex items-start justify-between gap-4"
-                data-testid={`ads-slot-${slot.key}`}
+                key={slot.name}
+                className="card bg-card p-5 space-y-4"
+                data-testid={`ads-slot-${slot.name}`}
               >
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl mt-0.5 select-none">{slot.icon}</div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-base">{slot.label}</span>
-                      <Badge variant={enabled ? "default" : "secondary"} className="text-[10px]">
-                        {enabled ? "مفعّل" : "موقف"}
-                      </Badge>
+                {/* ── Header row: icon + label + toggle ── */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl mt-0.5 select-none">{slot.icon}</span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-base">{slot.label}</span>
+                        <Badge variant={enabled ? "default" : "secondary"} className="text-[10px]">
+                          {enabled ? "مفعّل" : "موقف"}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{slot.desc}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{slot.desc}</p>
                   </div>
-                </div>
-                <div className="shrink-0 pt-1">
                   <Switch
                     checked={enabled}
-                    onCheckedChange={() => handleToggle(slot.key, enabled)}
-                    disabled={upsertMutation.isPending}
-                    data-testid={`switch-${slot.key}`}
+                    onCheckedChange={() =>
+                      toggleMutation.mutate({ key: slot.toggleKey, value: String(!enabled) })
+                    }
+                    disabled={toggleMutation.isPending}
+                    data-testid={`switch-${slot.name}`}
                   />
+                </div>
+
+                {/* ── Mode selector ── */}
+                <div className="border-t border-border/60 pt-4 space-y-4">
+                  <div>
+                    <Label className="text-sm font-bold mb-2 block">نوع الإعلان</Label>
+                    <RadioGroup
+                      value={cfg.mode}
+                      onValueChange={(v) => updateLocalConfig(slot.name, { mode: v as AdMode })}
+                      className="flex flex-wrap gap-4"
+                      dir="rtl"
+                    >
+                      {(["placeholder", "adsense", "sponsor"] as AdMode[]).map((m) => (
+                        <div key={m} className="flex items-center gap-2">
+                          <RadioGroupItem value={m} id={`${slot.name}-mode-${m}`} />
+                          <Label htmlFor={`${slot.name}-mode-${m}`} className="font-semibold cursor-pointer">
+                            {m === "placeholder" ? "Placeholder (افتراضي)" : m === "adsense" ? "Google AdSense" : "راعٍ مباشر"}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+
+                  {/* ── AdSense fields ── */}
+                  {cfg.mode === "adsense" && (
+                    <div className="grid gap-3 sm:grid-cols-2 rounded-xl border border-border/60 bg-muted/20 p-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold">Publisher ID (ca-pub-xxxxxx)</Label>
+                        <Input
+                          placeholder="ca-pub-0000000000000000"
+                          value={cfg.adsenseClientId}
+                          onChange={(e) => updateLocalConfig(slot.name, { adsenseClientId: e.target.value })}
+                          dir="ltr"
+                          data-testid={`input-adsense-client-${slot.name}`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold">Ad Slot ID</Label>
+                        <Input
+                          placeholder="1234567890"
+                          value={cfg.adsenseSlotId}
+                          onChange={(e) => updateLocalConfig(slot.name, { adsenseSlotId: e.target.value })}
+                          dir="ltr"
+                          data-testid={`input-adsense-slot-${slot.name}`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Direct Sponsor fields ── */}
+                  {cfg.mode === "sponsor" && (
+                    <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold">عنوان الراعي</Label>
+                          <Input
+                            placeholder="اسم الشركة أو الحملة"
+                            value={cfg.sponsorTitle}
+                            onChange={(e) => updateLocalConfig(slot.name, { sponsorTitle: e.target.value })}
+                            data-testid={`input-sponsor-title-${slot.name}`}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold">رابط الصفحة (URL)</Label>
+                          <Input
+                            placeholder="https://example.com"
+                            value={cfg.sponsorUrl}
+                            onChange={(e) => updateLocalConfig(slot.name, { sponsorUrl: e.target.value })}
+                            dir="ltr"
+                            data-testid={`input-sponsor-url-${slot.name}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold">وصف الإعلان</Label>
+                        <Input
+                          placeholder="جملة تسويقية قصيرة..."
+                          value={cfg.sponsorDesc}
+                          onChange={(e) => updateLocalConfig(slot.name, { sponsorDesc: e.target.value })}
+                          data-testid={`input-sponsor-desc-${slot.name}`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold">رابط الصورة / الشعار (اختياري)</Label>
+                        <Input
+                          placeholder="https://example.com/logo.png"
+                          value={cfg.sponsorImageUrl}
+                          onChange={(e) => updateLocalConfig(slot.name, { sponsorImageUrl: e.target.value })}
+                          dir="ltr"
+                          data-testid={`input-sponsor-image-${slot.name}`}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Save button ── */}
+                  <div className="flex justify-start">
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveConfig(slot)}
+                      disabled={configMutation.isPending}
+                      data-testid={`button-save-ad-config-${slot.name}`}
+                    >
+                      {configMutation.isPending ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin ml-2" />جاري الحفظ...</>
+                      ) : (
+                        <><Save className="h-3.5 w-3.5 ml-2" />حفظ إعداد {slot.label}</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -2501,16 +2687,17 @@ function AdsPanel() {
         </div>
       </div>
 
-      <div className="card bg-card p-5 border-amber-400/30">
+      {/* Info card */}
+      <div className="card bg-card p-5">
         <h3 className="font-bold mb-2 flex items-center gap-2">
           <BadgeDollarSign className="h-4 w-4 text-amber-500" />
-          ملاحظة الإعلانات الحالية
+          كيف يعمل النظام؟
         </h3>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          المحتوى الإعلاني الحالي هو <strong>placeholder تجريبي</strong>. لتفعيل إعلانات حقيقية،
-          استبدل محتوى بطاقات الإعلانات في المكونات بكود AdSense أو رابط الراعي المباشر.
-          جميع المواضع جاهزة تقنياً لاستقبال أي شبكة إعلانية.
-        </p>
+        <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside leading-relaxed">
+          <li><strong>Placeholder:</strong> يعرض البطاقة الذهبية الافتراضية مع نص تجريبي.</li>
+          <li><strong>AdSense:</strong> يُحقن كود Google AdSense داخل القالب الذهبي تلقائياً عند أول ظهور.</li>
+          <li><strong>راعٍ مباشر:</strong> يعرض شعار + عنوان + رابط الراعي بتصميم Liquid Glass.</li>
+        </ul>
       </div>
     </div>
   );
