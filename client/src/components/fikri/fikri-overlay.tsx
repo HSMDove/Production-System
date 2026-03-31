@@ -5,6 +5,8 @@ import { Bot, Check, Edit2, Loader2, MessageSquarePlus, Plus, Send, Trash2, X } 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { FikriAdCard } from "@/components/ads/fikri-ad-card";
+import { useAdSettings } from "@/hooks/use-ad-settings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +72,11 @@ export function FikriOverlay() {
   const [editTitle, setEditTitle]     = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [chatError, setChatError]     = useState<string | null>(null);
+
+  // ── Ad tracking ──────────────────────────────────────────────────────────
+  const { fikriAds } = useAdSettings();
+  const aiResponseCountRef = useRef(0);
+  const [dismissedAdIndexes, setDismissedAdIndexes] = useState<Set<number>>(new Set());
 
   // ── Single-source-of-truth message list ─────────────────────────────────
   // This is the ONLY array rendered. It is synced from the server query
@@ -185,6 +192,7 @@ export function FikriOverlay() {
     setChatError(null);
     setStreamingText("");
     setIsStreaming(true);
+    let streamSucceeded = false;
 
     const convId = activeConversationId || "";
 
@@ -256,6 +264,7 @@ export function FikriOverlay() {
           } else if (eventType === "token" && typeof data.text === "string") {
             setStreamingText(prev => prev + data.text);
           } else if (eventType === "done") {
+            streamSucceeded = true;
             const finalConvId = data.conversationId || doneConvId || activeConversationId;
             // Fire both invalidations WITHOUT awaiting.
             // We don't need to await here — the sync effect is gated on isFetching,
@@ -281,6 +290,9 @@ export function FikriOverlay() {
         setStreamingText("");
       }
     } finally {
+      if (streamSucceeded) {
+        aiResponseCountRef.current += 1;
+      }
       setIsStreaming(false);
       abortRef.current = null;
       // localMessages is NOT touched here.
@@ -433,19 +445,37 @@ export function FikriOverlay() {
                 )}
 
                 {/* Single source: localMessages (includes optimistic entries during streaming) */}
-                {localMessages.map((m) => (
-                  <div
-                    key={m.id}
-                    dir={m.role === "assistant" ? "rtl" : undefined}
-                    className={`rounded-2xl px-3 py-2 text-sm leading-relaxed text-right ${
-                      m.role === "assistant"
-                        ? "bg-muted text-foreground"
-                        : "bg-primary text-primary-foreground mr-6 text-left"
-                    }`}
-                  >
-                    {m.role === "assistant" ? <MarkdownMessage content={m.content} /> : m.content}
-                  </div>
-                ))}
+                {(() => {
+                  let assistantCount = 0;
+                  return localMessages.map((m) => {
+                    const isAssistant = m.role === "assistant" && !m.isOptimistic;
+                    if (isAssistant) assistantCount += 1;
+                    const showAd = fikriAds && isAssistant && assistantCount % 3 === 0 && !dismissedAdIndexes.has(assistantCount);
+                    return (
+                      <div key={m.id}>
+                        <div
+                          dir={m.role === "assistant" ? "rtl" : undefined}
+                          className={`rounded-2xl px-3 py-2 text-sm leading-relaxed text-right ${
+                            m.role === "assistant"
+                              ? "bg-muted text-foreground"
+                              : "bg-primary text-primary-foreground mr-6 text-left"
+                          }`}
+                        >
+                          {m.role === "assistant" ? <MarkdownMessage content={m.content} /> : m.content}
+                        </div>
+                        {showAd && (
+                          <div className="mt-2">
+                            <FikriAdCard
+                              onDismiss={() =>
+                                setDismissedAdIndexes(prev => new Set([...prev, assistantCount]))
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
 
                 {/*
                   Streaming / loading bubble.
