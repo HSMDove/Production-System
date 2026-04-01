@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useAdSettings } from "@/hooks/use-ad-settings";
 import type { Folder } from "@/lib/types";
+import { ErrorButton } from "@/main";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -134,6 +135,7 @@ export default function Dashboard() {
               <FolderOpen className="h-4 w-4" />
               مجلد جديد
             </Button>
+            <ErrorButton />
           </div>
         </div>
 
