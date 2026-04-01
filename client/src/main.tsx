@@ -8,16 +8,4 @@ Sentry.init({
   sendDefaultPii: true,
 });
 
-export function ErrorButton() {
-  return (
-    <button
-      onClick={() => {
-        throw new Error("This is your first error!");
-      }}
-    >
-      Break the world
-    </button>
-  );
-}
-
 createRoot(document.getElementById("root")!).render(<App />);
