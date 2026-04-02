@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -178,6 +179,7 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
         url: item.url || item.link || "",
       }));
     } catch (err: any) {
+    Sentry.captureException(err);
       console.error("[BraveSearch] Exception:", err?.message);
       await logAIRequest(userId, "web_search", providerUsed, null, false, startTime, err?.message);
       return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
@@ -235,6 +237,7 @@ async function runExternalWebSearch(query: string, userId: string): Promise<any[
       }));
     }
   } catch (err: any) {
+    Sentry.captureException(err);
     await logAIRequest(userId, "web_search", providerUsed, "perplexity", false, startTime, err?.message);
     return [{ title: "خطأ في البحث", snippet: err?.message || "خطأ غير معروف", url: "" }];
   }
@@ -284,6 +287,7 @@ async function maybeSummarizeConversation(conversationId: string, userId: string
 
     await storage.deleteAssistantMessagesByIds(toSummarize.map((m) => m.id));
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[MemorySummarize] Failed:", err);
     // Non-critical — never block the main chat flow
   }
@@ -626,6 +630,7 @@ function checkFeatureFlag(flagName: string) {
       }
       next();
     } catch (err) {
+    Sentry.captureException(err);
       console.error(`[FeatureFlag] Error checking ${flagName}:`, err);
       next();
     }
@@ -714,6 +719,7 @@ export async function registerRoutes(
       }
       res.json(results);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get flags" });
     }
   });
@@ -729,6 +735,7 @@ export async function registerRoutes(
         fontSource: fontSource?.value || null,
       });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get branding settings" });
     }
   });
@@ -763,6 +770,7 @@ export async function registerRoutes(
         },
       });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get ad settings" });
     }
   });
@@ -776,6 +784,7 @@ export async function registerRoutes(
 
       res.json(await getManagedPageContent(pageKey));
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب محتوى الصفحة" });
     }
   });
@@ -805,6 +814,7 @@ export async function registerRoutes(
 
       res.json({ success: true, message: "تم إرسال رمز التحقق إلى بريدك الإلكتروني" });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Send OTP error:", error);
       res.status(500).json({ error: error?.message || "فشل إرسال رمز التحقق" });
     }
@@ -855,6 +865,7 @@ export async function registerRoutes(
       const requiresAdminAuth = user.isAdmin === true;
       res.json({ success: true, user: { ...user, adminPasswordHash: undefined }, isNew, requiresAdminAuth });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Verify OTP error:", error);
       res.status(500).json({ error: error?.message || "فشل التحقق" });
     }
@@ -873,6 +884,7 @@ export async function registerRoutes(
       const { adminPasswordHash, ...safeUser } = user;
       res.json({ ...safeUser, adminMode: !!(req.session as any).adminMode });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get user" });
     }
   });
@@ -898,6 +910,7 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: error?.message || "Failed to update profile" });
     }
   });
@@ -909,6 +922,7 @@ export async function registerRoutes(
       const updated = await storage.updateUser(req.session.userId!, { slackUserId });
       res.json(updated);
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: error?.message || "Failed to link Slack" });
     }
   });
@@ -920,6 +934,7 @@ export async function registerRoutes(
       const ids = await storage.getPlatformIds(req.session.userId!, platform as any);
       res.json(ids);
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: error?.message || "Failed to fetch platform IDs" });
     }
   });
@@ -943,6 +958,7 @@ export async function registerRoutes(
       }
       res.json(created);
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: error?.message || "Failed to add platform ID" });
     }
   });
@@ -960,6 +976,7 @@ export async function registerRoutes(
       }
       res.json({ success: true });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: error?.message || "Failed to remove platform ID" });
     }
   });
@@ -984,6 +1001,7 @@ export async function registerRoutes(
       const folders = await storage.getAllFolders(userId);
       res.json(folders);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch folders" });
     }
   });
@@ -997,6 +1015,7 @@ export async function registerRoutes(
       const folder = await storage.createFolder({ ...parsed.data, userId: req.session.userId! } as any);
       res.status(201).json(folder);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create folder" });
     }
   });
@@ -1015,6 +1034,7 @@ export async function registerRoutes(
       if (!folder) return;
       res.json(folder);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch folder" });
     }
   });
@@ -1030,6 +1050,7 @@ export async function registerRoutes(
       const folder = await storage.updateFolder(req.params.id, parsed.data);
       res.json(folder);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update folder" });
     }
   });
@@ -1041,6 +1062,7 @@ export async function registerRoutes(
       await storage.deleteFolder(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete folder" });
     }
   });
@@ -1052,6 +1074,7 @@ export async function registerRoutes(
       const sources = await storage.getSourcesByFolderId(req.params.id);
       res.json(sources);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch sources" });
     }
   });
@@ -1105,6 +1128,7 @@ export async function registerRoutes(
       }));
       res.json(contentWithSources);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch content" });
     }
   });
@@ -1174,6 +1198,7 @@ export async function registerRoutes(
         errors: timedResult.result.errors || [],
       });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch content from sources" });
     }
   });
@@ -1185,6 +1210,7 @@ export async function registerRoutes(
       const count = await storage.getUndisplayedContentCount(req.params.id);
       res.json({ count });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get new content count" });
     }
   });
@@ -1196,6 +1222,7 @@ export async function registerRoutes(
       await storage.markContentDisplayed(req.params.id);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to mark content as displayed" });
     }
   });
@@ -1230,6 +1257,7 @@ export async function registerRoutes(
 
       return res.json({ cards: buildFallbackSmartViewCards(contentToUse) });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Error generating smart view:", error);
       res.status(500).json({ error: error.message || "Failed to generate smart view" });
     }
@@ -1303,6 +1331,7 @@ export async function registerRoutes(
           const saved = await storage.createIdea({ ...parsed.data, userId });
           savedIdeas.push(saved);
         } catch (e) {
+    Sentry.captureException(e);
           console.error("Error saving idea:", e);
         }
       }
@@ -1317,6 +1346,7 @@ export async function registerRoutes(
         validationErrors: validationErrors.length > 0 ? validationErrors : undefined
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error generating ideas:", error);
       res.status(500).json({ error: "Failed to generate ideas" });
     }
@@ -1451,6 +1481,7 @@ export async function registerRoutes(
             const saved = await storage.createIdea({ ...ideaData, userId });
             allResults.push(saved);
           } catch (e) {
+    Sentry.captureException(e);
             console.error("Error saving smart idea:", e);
           }
         }
@@ -1467,6 +1498,7 @@ export async function registerRoutes(
         totalGenerated: allResults.length,
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error generating smart ideas:", error);
       res.status(500).json({ error: "Failed to generate smart ideas" });
     }
@@ -1564,6 +1596,7 @@ export async function registerRoutes(
           }
           if (!verified) error = "لم يتم العثور على قناة يوتيوب صالحة لهذا الرابط";
         } catch (e) {
+    Sentry.captureException(e);
           error = "فشل في التحقق من رابط يوتيوب";
         }
 
@@ -1643,6 +1676,7 @@ export async function registerRoutes(
             }
           }
         } catch (e) {
+    Sentry.captureException(e);
           error = "فشل في الوصول للموقع — تأكد من صحة الرابط";
         }
       }
@@ -1676,6 +1710,7 @@ export async function registerRoutes(
         error,
       });
     } catch (err) {
+    Sentry.captureException(err);
       console.error("[Source Analyze] Error:", err);
       res.status(500).json({ error: "فشل تحليل الرابط" });
     }
@@ -1715,6 +1750,7 @@ export async function registerRoutes(
       });
       res.status(201).json(source);
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Source Create] Error:", error);
       res.status(500).json({ error: "Failed to create source" });
     }
@@ -1726,6 +1762,7 @@ export async function registerRoutes(
       if (!source) return;
       res.json(source);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch source" });
     }
   });
@@ -1741,6 +1778,7 @@ export async function registerRoutes(
       const source = await storage.updateSource(req.params.id, parsed.data);
       res.json(source);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update source" });
     }
   });
@@ -1752,6 +1790,7 @@ export async function registerRoutes(
       await storage.deleteSource(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete source" });
     }
   });
@@ -1781,6 +1820,7 @@ export async function registerRoutes(
             skipped++;
           }
         } catch (e) {
+    Sentry.captureException(e);
           console.error("Error creating content:", e);
         }
       }
@@ -1799,6 +1839,7 @@ export async function registerRoutes(
               await processNewContentNotifications(processedContentIds, userId);
             }
           } catch (e) {
+    Sentry.captureException(e);
             console.error("Error processing source fetch pipeline:", e);
           }
         })();
@@ -1806,6 +1847,7 @@ export async function registerRoutes(
       
       res.json({ success: true, itemsAdded: addedCount, skipped });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch content from source" });
     }
   });
@@ -1826,6 +1868,7 @@ export async function registerRoutes(
       const content = await storage.markContentRead(req.params.id);
       res.json(content);
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error marking content read:", error);
       res.status(500).json({ error: "Failed to mark content as read" });
     }
@@ -1836,6 +1879,7 @@ export async function registerRoutes(
       const conversations = await storage.getAssistantConversations(req.session.userId!);
       res.json(conversations);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch conversations" });
     }
   });
@@ -1846,6 +1890,7 @@ export async function registerRoutes(
       const conversation = await storage.createAssistantConversation({ title, userId: req.session.userId! } as any);
       res.status(201).json(conversation);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create conversation" });
     }
   });
@@ -1865,6 +1910,7 @@ export async function registerRoutes(
       const messages = await storage.getAssistantMessagesByConversationId(req.params.id);
       res.json({ conversation, messages });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch conversation messages" });
     }
   });
@@ -1880,6 +1926,7 @@ export async function registerRoutes(
       const updated = await storage.updateAssistantConversation(req.params.id, { title });
       res.json(updated);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update conversation" });
     }
   });
@@ -1891,6 +1938,7 @@ export async function registerRoutes(
       await storage.deleteAssistantConversation(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete conversation" });
     }
   });
@@ -1948,6 +1996,7 @@ export async function registerRoutes(
 
       res.json({ conversationId, ...result });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Assistant chat error:", error);
       res.status(500).json({ error: error?.message || "Failed to process assistant chat" });
     }
@@ -2032,6 +2081,7 @@ export async function registerRoutes(
       sendEvent("done", { conversationId, action: phase.action });
       res.end();
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Assistant stream error:", error);
       sendEvent("error", { message: error?.message || "حدث خطأ في معالجة الطلب" });
       res.end();
@@ -2261,11 +2311,13 @@ export async function registerRoutes(
             console.log("[Slack] Reply sent successfully to channel:", event.channel);
           }
         } catch (bgError) {
+    Sentry.captureException(bgError);
           console.error("[Slack] Background processing error:", bgError);
         }
       })();
 
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Slack] Events endpoint error:", error);
       return res.status(500).json({ error: "Failed to process Slack event" });
     }
@@ -2297,6 +2349,7 @@ export async function registerRoutes(
       console.log(`[Slack OAuth] Start — redirectUri=${redirectUri}`);
       res.json({ url: slackUrl });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Slack OAuth] Start error:", error);
       res.status(500).json({ error: "فشل بدء عملية الربط" });
     }
@@ -2368,6 +2421,7 @@ export async function registerRoutes(
       }
       res.redirect("/settings?slack_oauth=success");
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Slack OAuth] Callback error:", error);
       res.redirect("/settings?slack_oauth=error");
     }
@@ -2406,6 +2460,7 @@ export async function registerRoutes(
           try {
             allSlackChannels = await fetchChannelsForToken(manualToken);
           } catch (err) {
+    Sentry.captureException(err);
             console.warn("[Slack] Failed to fetch channels from manual token:", err);
           }
         }
@@ -2417,6 +2472,7 @@ export async function registerRoutes(
             try {
               allSlackChannels = await fetchChannelsForToken(creds.bot_token);
             } catch (err) {
+    Sentry.captureException(err);
               console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
             }
           }
@@ -2433,6 +2489,7 @@ export async function registerRoutes(
                 if (!allSlackChannels.some(c => c.id === sc.id)) allSlackChannels.push(sc);
               }
             } catch (err) {
+    Sentry.captureException(err);
               console.warn("[Slack] Failed to fetch channels for integration:", ch.id, err);
             }
           }
@@ -2445,6 +2502,7 @@ export async function registerRoutes(
               if (!allSlackChannels.some(c => c.id === sc.id)) allSlackChannels.push(sc);
             }
           } catch (err) {
+    Sentry.captureException(err);
             console.warn("[Slack] Failed to fetch channels from manual token:", err);
           }
         }
@@ -2453,6 +2511,7 @@ export async function registerRoutes(
       allSlackChannels.sort((a, b) => a.name.localeCompare(b.name));
       res.json(allSlackChannels);
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Slack] Channels fetch error:", error);
       res.status(500).json({ error: "فشل جلب قنوات Slack" });
     }
@@ -2561,11 +2620,13 @@ export async function registerRoutes(
             console.log("[Telegram] Reply sent successfully to chat:", telegramChatId);
           }
         } catch (bgError) {
+    Sentry.captureException(bgError);
           console.error("[Telegram] Background processing error:", bgError);
         }
       })();
 
     } catch (error) {
+    Sentry.captureException(error);
       console.error("[Telegram] Webhook endpoint error:", error);
       return res.status(500).json({ error: "Failed to process Telegram update" });
     }
@@ -2596,6 +2657,7 @@ export async function registerRoutes(
       }
       res.json(ideas);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch ideas" });
     }
   });
@@ -2613,6 +2675,7 @@ export async function registerRoutes(
       const idea = await storage.createIdea({ ...parsed.data, userId: req.session.userId! });
       res.status(201).json(idea);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create idea" });
     }
   });
@@ -2623,6 +2686,7 @@ export async function registerRoutes(
       if (!idea) return;
       res.json(idea);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch idea" });
     }
   });
@@ -2642,6 +2706,7 @@ export async function registerRoutes(
       const idea = await storage.updateIdea(req.params.id, parsed.data);
       res.json(idea);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update idea" });
     }
   });
@@ -2653,6 +2718,7 @@ export async function registerRoutes(
       await storage.deleteIdea(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete idea" });
     }
   });
@@ -2663,6 +2729,7 @@ export async function registerRoutes(
       const templates = await storage.getAllPromptTemplates(req.session.userId!);
       res.json(templates);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch prompt templates" });
     }
   });
@@ -2672,6 +2739,7 @@ export async function registerRoutes(
       const template = await storage.getDefaultPromptTemplate(req.session.userId!);
       res.json(template || null);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch default template" });
     }
   });
@@ -2684,6 +2752,7 @@ export async function registerRoutes(
       }
       res.json(template);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch template" });
     }
   });
@@ -2697,6 +2766,7 @@ export async function registerRoutes(
       const template = await storage.createPromptTemplate({ ...parsed.data, userId: req.session.userId! });
       res.status(201).json(template);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create template" });
     }
   });
@@ -2713,6 +2783,7 @@ export async function registerRoutes(
       }
       res.json(template);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update template" });
     }
   });
@@ -2725,6 +2796,7 @@ export async function registerRoutes(
       }
       res.json(template);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to set default template" });
     }
   });
@@ -2737,6 +2809,7 @@ export async function registerRoutes(
       }
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete template" });
     }
   });
@@ -2749,6 +2822,7 @@ export async function registerRoutes(
       const comments = await storage.getCommentsByIdeaId(req.params.id);
       res.json(comments);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch comments" });
     }
   });
@@ -2767,6 +2841,7 @@ export async function registerRoutes(
       const comment = await storage.createComment(parsed.data);
       res.status(201).json(comment);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create comment" });
     }
   });
@@ -2782,6 +2857,7 @@ export async function registerRoutes(
       await storage.deleteComment(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete comment" });
     }
   });
@@ -2794,6 +2870,7 @@ export async function registerRoutes(
       const assignments = await storage.getAssignmentsByIdeaId(req.params.id);
       res.json(assignments);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch assignments" });
     }
   });
@@ -2812,6 +2889,7 @@ export async function registerRoutes(
       const assignment = await storage.createAssignment(parsed.data);
       res.status(201).json(assignment);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create assignment" });
     }
   });
@@ -2827,6 +2905,7 @@ export async function registerRoutes(
       await storage.deleteAssignment(req.params.id);
       res.status(204).send();
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete assignment" });
     }
   });
@@ -2936,6 +3015,7 @@ export async function registerRoutes(
         contentOverTime,
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Analytics error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
     }
@@ -2966,6 +3046,7 @@ export async function registerRoutes(
 
       res.json({ success: true, analyzed: analyzedCount });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Content analysis error:", error);
       res.status(500).json({ error: "Failed to analyze content" });
     }
@@ -2998,6 +3079,7 @@ export async function registerRoutes(
 
       res.json({ success: true, analyzed: analyzedCount });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Folder content analysis error:", error);
       res.status(500).json({ error: "Failed to analyze folder content" });
     }
@@ -3024,6 +3106,7 @@ export async function registerRoutes(
       
       res.json({ explanation });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error generating explanation:", error);
       res.status(500).json({ error: "Failed to generate explanation" });
     }
@@ -3088,6 +3171,7 @@ export async function registerRoutes(
         arabicFullSummary
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error generating translation:", error);
       res.status(500).json({ error: "Failed to generate translation" });
     }
@@ -3144,6 +3228,7 @@ export async function registerRoutes(
             
             translatedIds.push(contentItem.id);
           } catch (e) {
+    Sentry.captureException(e);
             console.error("Error translating content:", e);
           }
         }
@@ -3157,6 +3242,7 @@ export async function registerRoutes(
         startedTranslating: toTranslate.length
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Error starting backfill:", error);
       res.status(500).json({ error: "Failed to start translation backfill" });
     }
@@ -3180,6 +3266,7 @@ export async function registerRoutes(
       const topics = await detectTrendingTopics(recentContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Trending topics error:", error);
       res.status(500).json({ error: "Failed to detect trending topics" });
     }
@@ -3198,6 +3285,7 @@ export async function registerRoutes(
       const topics = await detectTrendingTopics(folderContent, req.session.userId!);
       res.json({ topics });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Folder trending topics error:", error);
       res.status(500).json({ error: "Failed to detect folder trending topics" });
     }
@@ -3234,6 +3322,7 @@ export async function registerRoutes(
         topKeywords,
       });
     } catch (error) {
+    Sentry.captureException(error);
       console.error("Sentiment stats error:", error);
       res.status(500).json({ error: "Failed to fetch sentiment stats" });
     }
@@ -3243,6 +3332,7 @@ export async function registerRoutes(
     try {
       res.json(getSchedulerStatus());
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get scheduler status" });
     }
   });
@@ -3257,6 +3347,7 @@ export async function registerRoutes(
       }
       res.json(settingsObj);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch settings" });
     }
   });
@@ -3275,6 +3366,7 @@ export async function registerRoutes(
       }
       res.json(settingsObj);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to update settings" });
     }
   });
@@ -3290,6 +3382,7 @@ export async function registerRoutes(
         res.status(400).json(result);
       }
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, channels: [], error: error.message || "فشل البث" });
     }
   });
@@ -3303,6 +3396,7 @@ export async function registerRoutes(
       const result = await testTelegramConnection(botToken, chatId);
       res.json(result);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: "Failed to test Telegram connection" });
     }
   });
@@ -3316,6 +3410,7 @@ export async function registerRoutes(
       const result = await testSlackConnection(webhookUrl);
       res.json(result);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: "Failed to test Slack connection" });
     }
   });
@@ -3340,6 +3435,7 @@ export async function registerRoutes(
         res.json({ success: false, error: data.error || "Invalid bot token" });
       }
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: error.message || "Failed to test bot token" });
     }
   });
@@ -3425,6 +3521,7 @@ export async function registerRoutes(
         );
         console.log(`[SmartFilter] Applied to existing content: ${blockedUrls.size} URLs blocked for user ${userId}`);
       } catch (e) {
+    Sentry.captureException(e);
         console.error("[SmartFilter] Error applying to existing content:", e);
       }
     })();
@@ -3553,6 +3650,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         const responseText = completion.choices[0].message.content || "{}";
         parsedResponse = JSON.parse(responseText);
       } catch (aiErr: any) {
+    Sentry.captureException(aiErr);
         console.error("[FikriKashshaf] AI error:", aiErr?.message);
         return res.status(500).json({ error: "فشل الذكاء الاصطناعي في تحليل النتائج: " + (aiErr?.message || "خطأ غير معروف") });
       }
@@ -3585,12 +3683,14 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
           });
           addedSources.push(created);
         } catch (createErr: any) {
+    Sentry.captureException(createErr);
           console.error("[FikriKashshaf] Failed to create source:", src.url, createErr?.message);
         }
       }
 
       res.json({ success: true, addedSources, totalDiscovered: discoveredSources.length });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("[FikriKashshaf] Error:", error);
       res.status(500).json({ error: error.message || "فشل البحث عن المصادر" });
     }
@@ -3628,6 +3728,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json(safe);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب قنوات الربط" });
     }
   });
@@ -3658,6 +3759,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       });
       res.json({ ...channel, credentials: Object.fromEntries(Object.keys(credentials).map((k: string) => [k, "••••••"])) });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء قناة الربط" });
     }
   });
@@ -3674,6 +3776,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const nonSensitiveKeys2 = ["connection_type", "team_name", "team_id"];
       res.json({ ...updated, credentials: Object.fromEntries(Object.entries((updated.credentials as Record<string, string>)).map(([k, v]) => [k, nonSensitiveKeys2.includes(k) ? v : "••••••"])) });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل قناة الربط" });
     }
   });
@@ -3684,6 +3787,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       if (deleted) res.json({ success: true });
       else res.status(404).json({ error: "القناة غير موجودة" });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف قناة الربط" });
     }
   });
@@ -3707,6 +3811,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       }
       res.status(400).json({ error: "منصة غير مدعومة" });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل اختبار قناة الربط" });
     }
   });
@@ -3717,6 +3822,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const mappings = await storage.getFolderChannelMappings(req.session.userId!);
       res.json(mappings);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب تخطيط المجلدات" });
     }
   });
@@ -3763,6 +3869,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       });
       res.json(mapping);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء تخطيط المجلد" });
     }
   });
@@ -3773,6 +3880,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       if (deleted) res.json({ success: true });
       else res.status(404).json({ error: "التخطيط غير موجود" });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف تخطيط المجلد" });
     }
   });
@@ -3783,6 +3891,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const examples = await storage.getAllStyleExamples(req.session.userId!);
       res.json(examples);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch style examples" });
     }
   });
@@ -3792,6 +3901,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const example = await storage.createStyleExample({ ...req.body, userId: req.session.userId! });
       res.json(example);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to create style example" });
     }
   });
@@ -3805,6 +3915,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         res.status(404).json({ error: "Style example not found" });
       }
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "Failed to delete style example" });
     }
   });
@@ -3816,6 +3927,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const samples = await storage.getTrainingSamples(req.session.userId!);
       res.json(samples);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب عينات التدريب" });
     }
   });
@@ -3850,6 +3962,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json(sample);
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Error submitting training sample:", error);
       res.status(500).json({ error: error.message || "فشل إضافة عينة التدريب" });
     }
@@ -3864,6 +3977,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         res.status(404).json({ error: "العينة غير موجودة" });
       }
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف العينة" });
     }
   });
@@ -3891,6 +4005,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json({ success: true, styleMatrix: matrix });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Error analyzing training samples:", error);
       res.status(500).json({ error: error.message || "فشل تحليل العينات" });
     }
@@ -3908,6 +4023,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.upsertSetting("style_profile", styleMatrix.trim(), req.session.userId!);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حفظ مصفوفة الأسلوب" });
     }
   });
@@ -3927,6 +4043,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       }
       res.json({ title: result.title, text: result.text });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Error fetching Google Doc:", error);
       const msg = error.message || "فشل جلب محتوى Google Doc";
       res.status(400).json({ error: msg });
@@ -3946,6 +4063,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const rewritten = await rewriteContent(title, summary || null, mergedPrompt, req.session.userId!);
       res.json({ success: true, rewrittenContent: rewritten });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: error.message || "Failed to test AI rewriting" });
     }
   });
@@ -3979,6 +4097,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(userId, "admin_login", "تسجيل دخول المدير", req.ip || undefined);
       res.json({ success: true });
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Admin verify password error:", error);
       res.status(500).json({ error: "فشل التحقق" });
     }
@@ -4000,6 +4119,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "admin_password_change", `تغيير كلمة مرور المدير: ${target}`, req.ip || undefined);
       res.json({ success: true });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تغيير كلمة المرور" });
     }
   });
@@ -4019,6 +4139,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const analytics = await storage.getAnalytics();
       res.json(analytics);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب الإحصائيات" });
     }
   });
@@ -4032,6 +4153,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       });
       res.json(safe);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب المستخدمين" });
     }
   });
@@ -4045,6 +4167,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       });
       res.json(safe);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب المدراء" });
     }
   });
@@ -4069,6 +4192,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "admin_added", `إضافة مدير: ${email}`, req.ip || undefined);
       res.json({ success: true });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إضافة المدير" });
     }
   });
@@ -4087,6 +4211,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "admin_removed", `إزالة مدير: ${req.params.id}`, req.ip || undefined);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إزالة المدير" });
     }
   });
@@ -4097,6 +4222,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     try {
       res.json(await storage.getAllAnnouncements());
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب الإعلانات" });
     }
   });
@@ -4126,6 +4252,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "announcement_created", `إنشاء إعلان: ${title}`, req.ip || undefined);
       res.json(announcement);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء الإعلان" });
     }
   });
@@ -4148,6 +4275,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "announcement_updated", `تعديل إعلان: ${req.params.id}`, req.ip || undefined);
       res.json(updated);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل الإعلان" });
     }
   });
@@ -4158,6 +4286,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "announcement_deleted", `حذف إعلان: ${req.params.id}`, req.ip || undefined);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف الإعلان" });
     }
   });
@@ -4168,6 +4297,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     try {
       res.json(await storage.getAllTopBanners());
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب الشريط العلوي" });
     }
   });
@@ -4193,6 +4323,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "banner_created", `إنشاء شريط: ${text}`, req.ip || undefined);
       res.json(banner);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء الشريط" });
     }
   });
@@ -4214,6 +4345,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "banner_updated", `تعديل شريط: ${req.params.id}`, req.ip || undefined);
       res.json(updated);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل الشريط" });
     }
   });
@@ -4224,6 +4356,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "banner_deleted", `حذف شريط: ${req.params.id}`, req.ip || undefined);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف الشريط" });
     }
   });
@@ -4235,6 +4368,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const limit = parseInt(req.query.limit as string) || 100;
       res.json(await storage.getAuditLogs(limit));
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب سجل التدقيق" });
     }
   });
@@ -4245,6 +4379,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     try {
       res.json(await storage.getAllSystemSettings());
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب إعدادات النظام" });
     }
   });
@@ -4265,6 +4400,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json(setting);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل الإعداد" });
     }
   });
@@ -4273,6 +4409,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     try {
       res.json(await getFikriGatewayConfig());
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب إعدادات محرك فكري" });
     }
   });
@@ -4291,6 +4428,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "system_setting_updated", `تحديث ${FIKRI_GATEWAY_SETTING_KEY}`, req.ip || undefined);
       res.json(parsed.data);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حفظ إعدادات محرك فكري" });
     }
   });
@@ -4313,6 +4451,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
         message: `تم الاتصال بنجاح مع ${result.provider} باستخدام النموذج ${result.model}`,
       });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: error?.message || "فشل اختبار مزود الذكاء الاصطناعي" });
     }
   });
@@ -4370,6 +4509,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json({ success: true, provider: "perplexity", message: "تم الاتصال بنجاح مع Perplexity" });
     } catch (error: any) {
+    Sentry.captureException(error);
       res.status(500).json({ success: false, error: error?.message || "فشل اختبار مزود البحث" });
     }
   });
@@ -4383,6 +4523,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json(await getManagedPageContent(pageKey));
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب محتوى الصفحة" });
     }
   });
@@ -4414,6 +4555,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
 
       res.json(normalized);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حفظ محتوى الصفحة" });
     }
   });
@@ -4425,6 +4567,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const unseen = await storage.getUnseenAnnouncements(req.session.userId!);
       res.json(unseen);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب الإعلانات" });
     }
   });
@@ -4434,6 +4577,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.recordAnnouncementView(req.session.userId!, req.params.id);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تسجيل المشاهدة" });
     }
   });
@@ -4443,6 +4587,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const banner = await storage.getActiveTopBanner();
       res.json(banner || null);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب الشريط" });
     }
   });
@@ -4464,6 +4609,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const cards = await storage.getActiveWelcomeCards();
       res.json({ cards, show: cards.length > 0 });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب بطاقات الترحيب" });
     }
   });
@@ -4473,6 +4619,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.markWelcomeSeen(req.session.userId!);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تسجيل المشاهدة" });
     }
   });
@@ -4485,6 +4632,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const displayMode = await storage.getSystemSetting("welcome_display_mode");
       res.json({ cards, displayMode: displayMode?.value || "once" });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب البطاقات" });
     }
   });
@@ -4507,6 +4655,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "welcome_card_created", "إنشاء بطاقة ترحيب: " + parsed.data.title, req.ip || undefined);
       res.json(card);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء البطاقة" });
     }
   });
@@ -4519,6 +4668,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "welcome_card_updated", "تعديل بطاقة ترحيب: " + req.params.id, req.ip || undefined);
       res.json(card);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل البطاقة" });
     }
   });
@@ -4529,6 +4679,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "welcome_card_deleted", "حذف بطاقة ترحيب: " + req.params.id, req.ip || undefined);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف البطاقة" });
     }
   });
@@ -4540,6 +4691,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "welcome_mode_updated", "تغيير وضع الترحيب: " + mode, req.ip || undefined);
       res.json(setting);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تغيير الوضع" });
     }
   });
@@ -4550,6 +4702,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "welcome_views_reset", "إعادة ضبط مشاهدات الترحيب", req.ip || undefined);
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إعادة الضبط" });
     }
   });
@@ -4587,6 +4740,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       });
       res.json(ticket);
     } catch (error: any) {
+    Sentry.captureException(error);
       console.error("Ticket creation error:", error?.message || error);
       res.status(500).json({ error: "فشل إنشاء التذكرة" });
     }
@@ -4597,6 +4751,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const tickets = await storage.getTicketsByUser(req.session.userId!);
       res.json(tickets);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب التذاكر" });
     }
   });
@@ -4611,6 +4766,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const replies = await storage.getTicketReplies(ticket.id);
       res.json({ ticket, replies });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب التذكرة" });
     }
   });
@@ -4624,6 +4780,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const reply = await storage.createTicketReply(ticket.id, req.session.userId!, message, false);
       res.json(reply);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إرسال الرد" });
     }
   });
@@ -4641,6 +4798,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       );
       res.json(ticketsWithUsers);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب التذاكر" });
     }
   });
@@ -4653,6 +4811,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const user = await storage.getUserById(ticket.userId);
       res.json({ ticket: { ...ticket, userEmail: user?.email, userName: user?.name }, replies });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب التذكرة" });
     }
   });
@@ -4669,6 +4828,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       await storage.createAuditLog(req.session.userId!, "ticket_status_updated", `تغيير حالة تذكرة ${req.params.id} إلى ${parsed.data.status}`, req.ip || undefined);
       res.json(ticket);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تحديث الحالة" });
     }
   });
@@ -4699,12 +4859,14 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
           }
         }
       } catch (emailErr) {
+    Sentry.captureException(emailErr);
         console.error("Failed to send ticket reply email:", emailErr);
       }
 
       await storage.createAuditLog(req.session.userId!, "ticket_replied", "رد على تذكرة " + req.params.id, req.ip || undefined);
       res.json(reply);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إرسال الرد" });
     }
   });
@@ -4717,6 +4879,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const notes = await storage.getPublishedReleaseNotes();
       res.json(notes);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب ملاحظات الإصدار" });
     }
   });
@@ -4727,6 +4890,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       const notes = await storage.getAllReleaseNotes();
       res.json(notes);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل جلب ملاحظات الإصدار" });
     }
   });
@@ -4747,6 +4911,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       );
       res.status(201).json(note);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل إنشاء ملاحظة الإصدار" });
     }
   });
@@ -4764,6 +4929,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       );
       res.json(note);
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل تعديل ملاحظة الإصدار" });
     }
   });
@@ -4781,6 +4947,7 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
       );
       res.json({ success: true });
     } catch (error) {
+    Sentry.captureException(error);
       res.status(500).json({ error: "فشل حذف ملاحظة الإصدار" });
     }
   });

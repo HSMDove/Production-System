@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import * as Sentry from "@sentry/react";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 
@@ -25,6 +27,19 @@ export function useAuth() {
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
+
+  // ربط هوية المستخدم بـ Sentry عند تسجيل الدخول أو الخروج
+  useEffect(() => {
+    if (user) {
+      Sentry.setUser({
+        id: user.id,
+        email: user.email,
+        username: user.name ?? undefined,
+      });
+    } else {
+      Sentry.setUser(null);
+    }
+  }, [user]);
 
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),

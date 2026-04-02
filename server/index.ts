@@ -17,7 +17,7 @@ import { resolveRuntimeEnv, StartupConfigError } from "./config/env";
 
 const app = express();
 const httpServer = createServer(app);
-const APP_VERSION = "2.6.9";
+const APP_VERSION = "2.7.0";
 
 declare module "http" {
   interface IncomingMessage {
@@ -200,6 +200,16 @@ async function bootstrap() {
           "startup",
         );
       });
+
+    // ربط هوية المستخدم بكل request في Sentry
+    app.use((req, _res, next) => {
+      if (req.session?.userId) {
+        Sentry.setUser({ id: req.session.userId });
+      } else {
+        Sentry.setUser(null);
+      }
+      next();
+    });
 
     await registerRoutes(httpServer, app);
 
