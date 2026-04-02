@@ -1,3 +1,5 @@
+import "./instrument";
+import * as Sentry from "@sentry/node";
 import express, { type NextFunction, type Request, type Response } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -15,7 +17,7 @@ import { resolveRuntimeEnv, StartupConfigError } from "./config/env";
 
 const app = express();
 const httpServer = createServer(app);
-const APP_VERSION = "2.6.5";
+const APP_VERSION = "2.6.9";
 
 declare module "http" {
   interface IncomingMessage {
@@ -200,7 +202,18 @@ async function bootstrap() {
       });
 
     await registerRoutes(httpServer, app);
+
+    app.get("/debug-sentry", function mainHandler(_req, res) {
+      throw new Error("My first Sentry error!");
+    });
+
+    Sentry.setupExpressErrorHandler(app);
     setupErrorHandler();
+
+    app.use(function onError(err: any, _req: Request, res: Response, _next: NextFunction) {
+      res.statusCode = 500;
+      res.end((res as any).sentry + "\n");
+    });
 
     if (isProduction) {
       serveStatic(app);
