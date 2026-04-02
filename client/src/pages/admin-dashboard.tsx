@@ -1114,7 +1114,7 @@ function PagesPanel() {
                       size="sm"
                       onClick={() => setLandingForm((p) => ({
                         ...p,
-                        features: [...p.features, { emoji: "✨", title: "", description: "" }],
+                        features: [...p.features, { emoji: "✨", title: "", description: "", imageUrl: "" }],
                       }))}
                     >
                       <Plus className="h-4 w-4 ml-1" />
@@ -1177,6 +1177,28 @@ function PagesPanel() {
                             placeholder="وصف قصير للميزة"
                           />
                         </div>
+                      </div>
+                      <div className="space-y-1 mt-3">
+                        <Label className="text-xs">🖼️ رابط الصورة</Label>
+                        <Input
+                          value={feature.imageUrl ?? ""}
+                          onChange={(e) => setLandingForm((p) => {
+                            const next = [...p.features];
+                            next[idx] = { ...next[idx], imageUrl: e.target.value };
+                            return { ...p, features: next };
+                          })}
+                          placeholder="https://images.unsplash.com/..."
+                          dir="ltr"
+                          className="text-xs font-mono"
+                        />
+                        {feature.imageUrl?.trim() && (
+                          <img
+                            src={feature.imageUrl}
+                            alt="معاينة"
+                            className="mt-2 w-full max-h-28 object-cover rounded-[12px] border-2 border-border"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        )}
                       </div>
                     </div>
                   ))}
