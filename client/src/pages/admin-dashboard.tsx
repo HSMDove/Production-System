@@ -38,6 +38,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { defaultLoginPageContent, parseLoginPageContent, type LoginPageContent } from "@shared/login-page-content";
+import { defaultLandingPageContent, parseLandingPageContent, type LandingPageContent } from "@shared/landing-page-content";
 import { ADMIN_MODEL_CATALOG, getDefaultModel, type AdminAIProvider } from "@/lib/model-catalog";
 
 type Tab = "analytics" | "users" | "announcements" | "banners" | "welcome" | "tickets" | "pages" | "settings" | "admins" | "audit" | "connections" | "release-notes" | "ads";
@@ -859,8 +860,12 @@ function PagesPanel() {
   const { data, isLoading } = useQuery<LoginPageContent>({
     queryKey: ["/api/admin/page-content/login"],
   });
-  const [selectedPage, setSelectedPage] = useState<"login">("login");
+  const { data: landingData, isLoading: isLandingLoading } = useQuery<LandingPageContent>({
+    queryKey: ["/api/admin/page-content/landing"],
+  });
+  const [selectedPage, setSelectedPage] = useState<"login" | "landing">("login");
   const [form, setForm] = useState<LoginPageContent>(defaultLoginPageContent);
+  const [landingForm, setLandingForm] = useState<LandingPageContent>(defaultLandingPageContent);
   const [fontFamily, setFontFamily] = useState("Tajawal");
   const [fontSource, setFontSource] = useState<string | null>(null);
   const { data: systemSettings } = useQuery<any[]>({ queryKey: ["/api/admin/system-settings"] });
@@ -870,6 +875,12 @@ function PagesPanel() {
       setForm(data);
     }
   }, [data]);
+
+  useEffect(() => {
+    if (landingData) {
+      setLandingForm(landingData);
+    }
+  }, [landingData]);
 
   useEffect(() => {
     if (!systemSettings) return;
@@ -924,6 +935,18 @@ function PagesPanel() {
     },
   });
 
+  const saveLandingMutation = useMutation({
+    mutationFn: (payload: LandingPageContent) => apiRequest("PUT", "/api/admin/page-content/landing", parseLandingPageContent(payload)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/page-content/landing"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/page-content/landing"] });
+      toast({ title: "تم حفظ محتوى صفحة الهبوط" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل حفظ محتوى صفحة الهبوط", variant: "destructive" });
+    },
+  });
+
   const saveFontMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PUT", "/api/admin/system-settings", {
@@ -962,12 +985,12 @@ function PagesPanel() {
     reader.readAsDataURL(file);
   };
 
-  if (isLoading) return <PanelLoader />;
+  if (isLoading || isLandingLoading) return <PanelLoader />;
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="card bg-card p-4">
+        <aside className="card bg-card p-4 space-y-2">
           <h2 className="mb-4 text-xl font-bold">صفحات التطبيق</h2>
           <button
             type="button"
@@ -984,10 +1007,220 @@ function PagesPanel() {
               تعديل محتوى شاشة الدخول والتحقق
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => setSelectedPage("landing")}
+            className={`w-full rounded-[20px] border-[3px] px-4 py-4 text-right transition-all ${
+              selectedPage === "landing"
+                ? "border-border bg-primary text-primary-foreground shadow-[5px_5px_0_0_rgba(0,0,0,0.88)]"
+                : "border-border bg-background text-foreground shadow-[4px_4px_0_0_rgba(0,0,0,0.82)]"
+            }`}
+            data-testid="admin-page-landing"
+          >
+            <span className="block text-sm font-black">صفحة الهبوط</span>
+            <span className={`mt-1 block text-xs ${selectedPage === "landing" ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+              الصفحة العامة لمحركات البحث وزوار الموقع
+            </span>
+          </button>
         </aside>
 
         <div className="space-y-4">
-          {/* ── Font Management Card ── */}
+          {/* ── Landing Page Editor ── */}
+          {selectedPage === "landing" && (
+            <div className="space-y-4">
+              {/* Hero Section */}
+              <div className="card bg-card p-5">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-black">قسم الهيرو</h3>
+                    <p className="text-sm text-muted-foreground">العنوان الرئيسي والوصف الظاهر أعلى الصفحة للزوار الجدد.</p>
+                  </div>
+                  <Button onClick={() => saveLandingMutation.mutate(landingForm)} disabled={saveLandingMutation.isPending} data-testid="button-save-landing">
+                    {saveLandingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+                    حفظ جميع التعديلات
+                  </Button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>الشريط العلوي (Eyebrow)</Label>
+                    <Input
+                      value={landingForm.hero.eyebrow}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, hero: { ...p.hero, eyebrow: e.target.value } }))}
+                      placeholder="مثال: منصة نَسَق"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>نص زر الدعوة للعمل (CTA)</Label>
+                    <Input
+                      value={landingForm.hero.ctaText}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, hero: { ...p.hero, ctaText: e.target.value } }))}
+                      placeholder="مثال: ابدأ الآن"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>العنوان الرئيسي</Label>
+                    <Input
+                      value={landingForm.hero.title}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, hero: { ...p.hero, title: e.target.value } }))}
+                      placeholder="عنوان قوي وجذاب للصفحة"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>الوصف التفصيلي</Label>
+                    <Textarea
+                      value={landingForm.hero.subtitle}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, hero: { ...p.hero, subtitle: e.target.value } }))}
+                      className="min-h-[100px]"
+                      placeholder="وصف مختصر وجذاب للمنصة يظهر أسفل العنوان الرئيسي"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* About Section */}
+              <div className="card bg-card p-5">
+                <h3 className="mb-4 text-lg font-black">قسم التعريف</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>عنوان القسم</Label>
+                    <Input
+                      value={landingForm.about.title}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, about: { ...p.about, title: e.target.value } }))}
+                      placeholder="مثال: ما هي نَسَق؟"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>النص التفصيلي</Label>
+                    <Textarea
+                      value={landingForm.about.body}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, about: { ...p.about, body: e.target.value } }))}
+                      className="min-h-[130px]"
+                      placeholder="اكتب وصفاً تفصيلياً للمنصة يستهدف المستخدم العربي الجديد"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Features Section */}
+              <div className="card bg-card p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-black">قسم المميزات</h3>
+                    <p className="text-sm text-muted-foreground">تُعرض كبطاقات في قسم المميزات. الحد الأقصى 6 بطاقات.</p>
+                  </div>
+                  {landingForm.features.length < 6 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLandingForm((p) => ({
+                        ...p,
+                        features: [...p.features, { emoji: "✨", title: "", description: "" }],
+                      }))}
+                    >
+                      <Plus className="h-4 w-4 ml-1" />
+                      إضافة ميزة
+                    </Button>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  {landingForm.features.map((feature, idx) => (
+                    <div key={idx} className="rounded-[16px] border-[2px] border-border p-4 shadow-[3px_3px_0_0_rgba(0,0,0,0.75)] space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-black text-muted-foreground">ميزة {idx + 1}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setLandingForm((p) => ({
+                            ...p,
+                            features: p.features.filter((_, i) => i !== idx),
+                          }))}
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-[80px_1fr_2fr]">
+                        <div className="space-y-1">
+                          <Label className="text-xs">الإيموجي</Label>
+                          <Input
+                            value={feature.emoji}
+                            maxLength={4}
+                            onChange={(e) => setLandingForm((p) => {
+                              const next = [...p.features];
+                              next[idx] = { ...next[idx], emoji: e.target.value };
+                              return { ...p, features: next };
+                            })}
+                            className="text-center text-xl"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">العنوان</Label>
+                          <Input
+                            value={feature.title}
+                            onChange={(e) => setLandingForm((p) => {
+                              const next = [...p.features];
+                              next[idx] = { ...next[idx], title: e.target.value };
+                              return { ...p, features: next };
+                            })}
+                            placeholder="اسم الميزة"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">الوصف</Label>
+                          <Input
+                            value={feature.description}
+                            onChange={(e) => setLandingForm((p) => {
+                              const next = [...p.features];
+                              next[idx] = { ...next[idx], description: e.target.value };
+                              return { ...p, features: next };
+                            })}
+                            placeholder="وصف قصير للميزة"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {landingForm.features.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">لا توجد مميزات بعد. اضغط "إضافة ميزة" للبدء.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* SEO Section */}
+              <div className="card bg-card p-5">
+                <h3 className="mb-4 text-lg font-black">إعدادات SEO</h3>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>عنوان الصفحة (Meta Title)</Label>
+                    <Input
+                      value={landingForm.seo.metaTitle}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, seo: { ...p.seo, metaTitle: e.target.value } }))}
+                      placeholder="يظهر في نتائج جوجل — 50-80 حرف"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>وصف الصفحة (Meta Description)</Label>
+                    <Textarea
+                      value={landingForm.seo.metaDescription}
+                      onChange={(e) => setLandingForm((p) => ({ ...p, seo: { ...p.seo, metaDescription: e.target.value } }))}
+                      className="min-h-[80px]"
+                      placeholder="يظهر أسفل العنوان في نتائج البحث — 120-300 حرف"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button onClick={() => saveLandingMutation.mutate(landingForm)} disabled={saveLandingMutation.isPending}>
+                    {saveLandingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 ml-2" />}
+                    حفظ جميع التعديلات
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Login / Font Management Cards ── */}
+          {selectedPage === "login" && (
+          <>
           <div className="card bg-card p-5">
             <div className="mb-4 flex items-center gap-3">
               <div className="rounded-[14px] border-[2px] border-black/85 bg-card p-2 shadow-[3px_3px_0_0_rgba(0,0,0,0.85)]">
@@ -1200,6 +1433,8 @@ function PagesPanel() {
               {fontSource && <p className="mt-2 text-xs text-emerald-600 font-bold">تم تحميل خط مخصص من جهازك وهو جاهز للحفظ.</p>}
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

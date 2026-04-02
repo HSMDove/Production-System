@@ -37,6 +37,13 @@ import {
   parseLoginPageContent,
   type LoginPageContent,
 } from "@shared/login-page-content";
+import {
+  defaultLandingPageContent,
+  landingPageContentAdminSchema,
+  parseLandingPageContent,
+  type LandingPageContent,
+} from "@shared/landing-page-content";
+import { generateLandingHtml } from "./landing-template";
 
 type AssistantChatRequest = {
   message: string;
@@ -86,6 +93,18 @@ async function getManagedPageContent(pageKey: ManagedPageKey): Promise<LoginPage
     return parseLoginPageContent(JSON.parse(setting.value));
   } catch {
     return defaultLoginPageContent;
+  }
+}
+
+const LANDING_PAGE_CONTENT_KEY = "page_content_landing";
+
+async function getLandingPageContent(): Promise<LandingPageContent> {
+  const setting = await storage.getSystemSetting(LANDING_PAGE_CONTENT_KEY);
+  if (!setting?.value) return defaultLandingPageContent;
+  try {
+    return parseLandingPageContent(JSON.parse(setting.value));
+  } catch {
+    return defaultLandingPageContent;
   }
 }
 
@@ -705,9 +724,24 @@ export async function registerRoutes(
     next();
   });
 
+  // ─── Landing Page (server-rendered HTML for SEO / AdSense) ──────────────
+  app.get("/", async (req: Request, res: Response, next: NextFunction) => {
+    if (req.session?.userId) {
+      return next();
+    }
+    try {
+      const content = await getLandingPageContent();
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(generateLandingHtml(content));
+    } catch (error) {
+      Sentry.captureException(error);
+      next();
+    }
+  });
+
   // ─── System Settings API ──────────────────────────────────────────────────
 
-  
+
 
   app.get("/api/system-settings/public-flags", async (_req, res) => {
     try {
@@ -772,6 +806,15 @@ export async function registerRoutes(
     } catch (error) {
     Sentry.captureException(error);
       res.status(500).json({ error: "Failed to get ad settings" });
+    }
+  });
+
+  app.get("/api/page-content/landing", async (_req, res) => {
+    try {
+      res.json(await getLandingPageContent());
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل جلب محتوى صفحة الهبوط" });
     }
   });
 
@@ -4511,6 +4554,42 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     } catch (error: any) {
     Sentry.captureException(error);
       res.status(500).json({ success: false, error: error?.message || "فشل اختبار مزود البحث" });
+    }
+  });
+
+  app.get("/api/admin/page-content/landing", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await getLandingPageContent());
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل جلب محتوى صفحة الهبوط" });
+    }
+  });
+
+  app.put("/api/admin/page-content/landing", requireAdmin, async (req, res) => {
+    try {
+      const parsed = landingPageContentAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "بيانات غير صالحة", details: parsed.error.flatten() });
+      }
+
+      const normalized = parseLandingPageContent(parsed.data);
+      await storage.upsertSystemSetting(
+        LANDING_PAGE_CONTENT_KEY,
+        JSON.stringify(normalized),
+        "محتوى صفحة الهبوط العامة",
+      );
+      await storage.createAuditLog(
+        req.session.userId!,
+        "page_content_updated",
+        "تحديث محتوى صفحة الهبوط",
+        req.ip || undefined,
+      );
+
+      res.json(normalized);
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل حفظ محتوى صفحة الهبوط" });
     }
   });
 
