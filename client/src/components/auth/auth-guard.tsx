@@ -30,13 +30,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const isStaticPublic = STATIC_PUBLIC_ROUTES.some((r) => location.startsWith(r));
     if (user && user.onboardingCompleted && isPublicRoute && !isStaticPublic) {
-      navigate("/");
+      navigate("/dashboard");
       return;
     }
 
     if (isAdminRoute && user) {
       if (!user.isAdmin) {
-        navigate("/");
+        navigate("/dashboard");
         return;
       }
       if (!adminMode && location !== "/admin/login") {

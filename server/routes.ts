@@ -725,10 +725,10 @@ export async function registerRoutes(
   });
 
   // ─── Landing Page (server-rendered HTML for SEO / AdSense) ──────────────
-  app.get("/", async (req: Request, res: Response, next: NextFunction) => {
-    if (req.session?.userId) {
-      return next();
-    }
+  // Always serves the landing page — no session branching so Googlebot and
+  // human reviewers always see the same content (required for AdSense policy).
+  // Authenticated users are redirected client-side via the nasaq-authed flag.
+  app.get("/", async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const content = await getLandingPageContent();
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -737,6 +737,85 @@ export async function registerRoutes(
       Sentry.captureException(error);
       next();
     }
+  });
+
+  // ─── Al-Kashaf Public Demo ─────────────────────────────────────────────
+  // In-memory rate limiter: 3 requests per IP per 24 hours
+  const _scoutRateMap = new Map<string, { count: number; resetAt: number }>();
+  function _checkScoutLimit(ip: string): boolean {
+    const MAX = 3, WINDOW = 24 * 60 * 60 * 1000, now = Date.now();
+    const rec = _scoutRateMap.get(ip);
+    if (!rec || now > rec.resetAt) { _scoutRateMap.set(ip, { count: 1, resetAt: now + WINDOW }); return true; }
+    if (rec.count >= MAX) return false;
+    rec.count++;
+    return true;
+  }
+
+  const SCOUT_SOURCES: Record<string, Array<{ name: string; type: string; description: string; url: string }>> = {
+    ai: [
+      { name: "MIT Technology Review", type: "RSS", description: "تغطية أكاديمية متعمقة للذكاء الاصطناعي والتقنيات الناشئة من معهد ماساتشوستس للتقنية.", url: "https://www.technologyreview.com/feed/" },
+      { name: "Andrej Karpathy", type: "YouTube", description: "شرح معمّق لنماذج LLM وتقنيات التعلم العميق من أحد مؤسسي OpenAI.", url: "https://www.youtube.com/@andrejkarpathy" },
+      { name: "The Verge — AI", type: "RSS", description: "أخبار الذكاء الاصطناعي من منظور تقني وثقافي معاصر.", url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" },
+      { name: "Lex Fridman Podcast", type: "YouTube", description: "حوارات مع قادة الذكاء الاصطناعي العالميين: Altman وBengio وغيرهم.", url: "https://www.youtube.com/@lexfridman" },
+      { name: "Hugging Face Blog", type: "RSS", description: "نماذج مفتوحة المصدر وأبحاث تقنية من أبرز منصات AI في العالم.", url: "https://huggingface.co/blog/feed.xml" },
+    ],
+    youtube: [
+      { name: "Creator Insider", type: "YouTube", description: "القناة الرسمية لفريق يوتيوب — تحديثات الخوارزمية وأدوات صانعي المحتوى.", url: "https://www.youtube.com/@CreatorInsider" },
+      { name: "Think Media", type: "YouTube", description: "استراتيجيات نمو قنوات يوتيوب والتسويق بالمحتوى.", url: "https://www.youtube.com/@ThinkMediaTV" },
+      { name: "Tubefilter", type: "RSS", description: "أخبار صناعة الفيديو الرقمي وإحصاءات صانعي المحتوى.", url: "https://www.tubefilter.com/feed/" },
+      { name: "VidIQ Blog", type: "RSS", description: "نصائح SEO ليوتيوب وتحليل الاتجاهات لتنمية قناتك.", url: "https://vidiq.com/blog/feed/" },
+      { name: "Colin & Samir", type: "YouTube", description: "تغطية معمّقة لاقتصاد صانعي المحتوى وتحولات صناعة الإبداع.", url: "https://www.youtube.com/@ColinandSamir" },
+    ],
+    tech: [
+      { name: "Ars Technica", type: "RSS", description: "تغطية تقنية معمّقة: أجهزة، برمجيات، علوم وسياسات.", url: "https://feeds.arstechnica.com/arstechnica/index" },
+      { name: "The Verge", type: "RSS", description: "أخبار التقنية والمنتجات الاستهلاكية من المنظور الثقافي.", url: "https://www.theverge.com/rss/index.xml" },
+      { name: "Marques Brownlee (MKBHD)", type: "YouTube", description: "أعمق مراجعات الأجهزة التقنية على يوتيوب.", url: "https://www.youtube.com/@mkbhd" },
+      { name: "TechCrunch", type: "RSS", description: "أخبار الشركات الناشئة والتمويل والابتكار التقني.", url: "https://techcrunch.com/feed/" },
+      { name: "Linus Tech Tips", type: "YouTube", description: "مراجعات واختبارات تقنية ومقارنات الأجهزة.", url: "https://www.youtube.com/@LinusTechTips" },
+    ],
+    crypto: [
+      { name: "CoinDesk", type: "RSS", description: "أخبار العملات الرقمية والبلوك تشين والتمويل اللامركزي.", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
+      { name: "Andreas Antonopoulos", type: "YouTube", description: "شرح تقني لتقنية البلوك تشين وفلسفة اللامركزية.", url: "https://www.youtube.com/@aantonop" },
+      { name: "The Block", type: "RSS", description: "صحافة استقصائية في قطاع العملات الرقمية والتمويل.", url: "https://www.theblock.co/rss.xml" },
+      { name: "Bankless", type: "YouTube", description: "دليل شامل لعالم DeFi والعملات الرقمية للمبتدئين والمحترفين.", url: "https://www.youtube.com/@Bankless" },
+      { name: "Decrypt", type: "RSS", description: "شرح مبسّط لأخبار بلوك تشين وNFT والعملات الرقمية.", url: "https://decrypt.co/feed" },
+    ],
+    marketing: [
+      { name: "Neil Patel", type: "YouTube", description: "استراتيجيات السيو والتسويق الرقمي لزيادة حركة المرور.", url: "https://www.youtube.com/@neilpatel" },
+      { name: "Marketing School", type: "RSS", description: "دروس يومية قصيرة في التسويق الرقمي من Neil Patel وEric Siu.", url: "https://marketingschool.io/feed" },
+      { name: "HubSpot Blog", type: "RSS", description: "أدلة التسويق الداخلي وإدارة علاقات العملاء وتوليد الزبائن.", url: "https://blog.hubspot.com/marketing/rss.xml" },
+      { name: "Seth Godin's Blog", type: "RSS", description: "أفكار استراتيجية في التسويق والريادة وبناء العلامات التجارية.", url: "https://seths.blog/feed.xml" },
+      { name: "Social Media Examiner", type: "RSS", description: "استراتيجيات وسائل التواصل الاجتماعي للشركات والمبدعين.", url: "https://www.socialmediaexaminer.com/feed/" },
+    ],
+    default: [
+      { name: "TechCrunch", type: "RSS", description: "أخبار التقنية والشركات الناشئة والتمويل من أبرز المصادر العالمية.", url: "https://techcrunch.com/feed/" },
+      { name: "Wired", type: "RSS", description: "التقنية والثقافة والمجتمع الرقمي من منظور استشرافي عميق.", url: "https://www.wired.com/feed/rss" },
+      { name: "The Verge", type: "RSS", description: "أخبار التقنية والمنتجات الاستهلاكية والتأثير الثقافي.", url: "https://www.theverge.com/rss/index.xml" },
+      { name: "Ars Technica", type: "RSS", description: "تغطية تقنية معمّقة تجمع العلوم والبرمجيات والأجهزة.", url: "https://feeds.arstechnica.com/arstechnica/index" },
+      { name: "Hacker News (YC)", type: "RSS", description: "أبرز نقاشات الشركات الناشئة والبرمجة والتقنية من مجتمع YCombinator.", url: "https://news.ycombinator.com/rss" },
+    ],
+  };
+
+  function _resolveNiche(query: string): string {
+    const q = query.toLowerCase().trim();
+    if (/\bai\b|artificial|ذكاء|machine learn|gpt|llm|deep learn/.test(q)) return "ai";
+    if (/youtube|content creat|صانع|فيديو|channel|قناة/.test(q)) return "youtube";
+    if (/crypto|bitcoin|blockchain|عملة|بلوك/.test(q)) return "crypto";
+    if (/market|تسويق|seo|brand|عميل/.test(q)) return "marketing";
+    if (/tech|تقنية|gadget|review|apple|android|software/.test(q)) return "tech";
+    return "default";
+  }
+
+  app.post("/api/public/scout-demo", async (req: Request, res: Response) => {
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    if (!_checkScoutLimit(ip)) {
+      return res.status(429).json({ error: "لقد استنفدت طلباتك المجانية لليوم. عد غداً أو سجّل دخولك للاستخدام غير المحدود." });
+    }
+    const query = String(req.body?.niche || "").slice(0, 120).trim();
+    if (!query) return res.status(400).json({ error: "أدخل اهتمامك أو مجالك أولاً." });
+    const niche = _resolveNiche(query);
+    const sources = SCOUT_SOURCES[niche];
+    res.json({ sources, niche, query });
   });
 
   // ─── System Settings API ──────────────────────────────────────────────────

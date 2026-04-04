@@ -82,7 +82,7 @@ export function generateLandingHtml(content: LandingPageContent): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet" />
 
-  <!-- Runs before paint — prevents FOUC on theme restore -->
+  <!-- Runs before paint — prevents FOUC and handles smart auth redirect -->
   <script>
     (function () {
       var cm = localStorage.getItem('nasaq-color-mode') || 'light';
@@ -91,6 +91,10 @@ export function generateLandingHtml(content: LandingPageContent): string {
       html.setAttribute('data-color-mode', cm);
       html.setAttribute('data-app-theme', th);
       if (cm === 'dark') html.classList.add('dark-mode');
+      // Fast-path: authenticated users bypass the landing page instantly
+      if (localStorage.getItem('nasaq-authed') === '1') {
+        window.location.replace('/dashboard');
+      }
     })();
   </script>
 
@@ -612,6 +616,226 @@ export function generateLandingHtml(content: LandingPageContent): string {
     .footer-links a:hover { color: var(--hero-a); }
 
     /* ═══════════════════════════════════════════
+       AL-KASHAF DEMO SECTION
+       ═══════════════════════════════════════════ */
+    .scout-section {
+      background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 60%, var(--hero-c) 100%);
+      border-top: 4px solid var(--border-color);
+      border-bottom: 4px solid var(--border-color);
+      padding: 5.5rem 1.5rem;
+    }
+    html.dark-mode .scout-section {
+      background:
+        linear-gradient(rgba(9,9,9,0.72), rgba(9,9,9,0.72)),
+        linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 60%, var(--hero-c) 100%);
+    }
+    .scout-inner { max-width: 700px; margin: 0 auto; }
+    .scout-heading { text-align: center; margin-bottom: 2.5rem; }
+    .scout-heading h2 {
+      font-family: 'Cairo', serif;
+      font-size: clamp(1.8rem, 3.8vw, 2.6rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 0.8rem 0;
+    }
+    .scout-heading p { font-size: 1rem; opacity: 0.82; line-height: 1.7; }
+    .scout-form { display: flex; gap: 0.75rem; margin-bottom: 2rem; }
+    .scout-input {
+      flex: 1;
+      font-family: var(--font);
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 0.85rem 1.2rem;
+      border: 3px solid var(--border-color);
+      border-radius: var(--r-md);
+      background: var(--card-bg);
+      color: var(--fg);
+      box-shadow: var(--nb-shadow-sm);
+      outline: none;
+      transition: box-shadow 0.15s;
+    }
+    .scout-input:focus { box-shadow: var(--nb-shadow); }
+    html.dark-mode .scout-input { background: rgba(255,255,255,0.1); color: #fff; }
+    .scout-btn {
+      font-family: var(--font);
+      font-weight: 900;
+      font-size: 0.95rem;
+      padding: 0.85rem 1.8rem;
+      background: var(--border-color);
+      color: #fff;
+      border: 3px solid var(--border-color);
+      border-radius: var(--r-md);
+      box-shadow: var(--nb-shadow-sm);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .scout-btn:hover:not(:disabled) { transform: translate(-2px,-2px); box-shadow: var(--nb-shadow-md); }
+    .scout-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    html.dark-mode .scout-btn { background: rgba(0,0,0,0.55); border-color: rgba(255,255,255,0.3); }
+    .scout-results { display: none; }
+    .scout-results.show { display: block; }
+    .scout-result-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.2rem;
+      background: var(--card-bg);
+      border: 3px solid var(--border-color);
+      border-radius: var(--r-md);
+      box-shadow: var(--nb-shadow-sm);
+      margin-bottom: 0.75rem;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .scout-result-card:hover { transform: translate(-2px,-2px); box-shadow: var(--nb-shadow-md); }
+    html.dark-mode .scout-result-card { background: rgba(255,255,255,0.07); }
+    .scout-num {
+      flex-shrink: 0;
+      width: 32px; height: 32px;
+      background: var(--hero-a);
+      border: 2px solid var(--border-color);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.82rem;
+      font-weight: 900;
+      color: var(--fg);
+    }
+    .scout-result-body { flex: 1; min-width: 0; }
+    .scout-result-type {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 900;
+      padding: 0.1rem 0.5rem;
+      border: 2px solid var(--border-color);
+      border-radius: 4px;
+      margin-bottom: 0.3rem;
+      background: var(--hero-c);
+    }
+    html.dark-mode .scout-result-type { background: rgba(192,247,254,0.15); border-color: rgba(192,247,254,0.3); }
+    .scout-result-name { font-size: 0.95rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 0.2rem; }
+    .scout-result-desc { font-size: 0.85rem; color: var(--muted-fg); line-height: 1.6; }
+    html.dark-mode .scout-result-desc { color: hsl(0 0% 60%); }
+    .scout-error {
+      padding: 1rem 1.2rem;
+      background: var(--card-bg);
+      border: 3px solid var(--border-color);
+      border-radius: var(--r-md);
+      text-align: center;
+      font-weight: 900;
+      font-size: 0.9rem;
+    }
+    .scout-cta-note {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.85rem;
+      opacity: 0.75;
+    }
+    .scout-cta-note a { text-decoration: underline; font-weight: 900; }
+
+    /* ═══════════════════════════════════════════
+       SMART DISPLAY SECTION
+       ═══════════════════════════════════════════ */
+    .smart-display-section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 5.5rem 1.5rem;
+    }
+    .smart-display-header { text-align: center; margin-bottom: 3rem; }
+    .smart-display-header h2 {
+      font-family: 'Cairo', serif;
+      font-size: clamp(1.8rem, 3.8vw, 2.6rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 0.9rem 0 0.7rem;
+    }
+    .smart-display-header p { font-size: 1rem; color: var(--muted-fg); line-height: 1.75; }
+    html.dark-mode .smart-display-header p { color: hsl(0 0% 60%); }
+    .news-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 1.5rem;
+    }
+    .news-card {
+      border: 3px solid var(--border-color);
+      border-radius: var(--r-lg);
+      background: var(--card-bg);
+      box-shadow: var(--nb-shadow-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .news-card:hover { transform: translate(-3px,-3px); box-shadow: var(--nb-shadow); }
+    html.dark-mode .news-card { background: var(--card-bg); }
+    .news-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.65rem 1rem;
+      background: var(--hero-b);
+      border-bottom: 3px solid var(--border-color);
+    }
+    html.dark-mode .news-card-header { background: rgba(247,203,70,0.18); }
+    .news-source-name { font-size: 0.78rem; font-weight: 900; }
+    .news-tag {
+      font-size: 0.68rem;
+      font-weight: 900;
+      padding: 0.15rem 0.55rem;
+      background: var(--border-color);
+      color: #fff;
+      border-radius: 4px;
+    }
+    .news-card-body { padding: 1.2rem 1.3rem; flex: 1; }
+    .news-original {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted-fg);
+      direction: ltr;
+      text-align: left;
+      margin-bottom: 0.7rem;
+      padding: 0.35rem 0.7rem;
+      background: rgba(0,0,0,0.04);
+      border-right: 3px solid var(--hero-a);
+      border-radius: 4px;
+      font-style: italic;
+      line-height: 1.5;
+    }
+    html.dark-mode .news-original { background: rgba(255,255,255,0.05); border-right-color: var(--hero-a); color: hsl(0 0% 55%); }
+    .news-ar-title {
+      font-family: 'Cairo', serif;
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+    }
+    .news-summary { font-size: 0.9rem; color: var(--muted-fg); line-height: 1.9; }
+    html.dark-mode .news-summary { color: hsl(0 0% 60%); }
+    .news-card-footer {
+      padding: 0.75rem 1rem;
+      border-top: 2px solid rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+    }
+    html.dark-mode .news-card-footer { border-top-color: rgba(255,255,255,0.07); }
+    .nasaq-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--hero-a);
+      border: 2px solid var(--border-color);
+      border-radius: var(--r-pill);
+      padding: 0.2rem 0.7rem;
+      font-size: 0.7rem;
+      font-weight: 900;
+    }
+    .news-date { color: var(--muted-fg); font-weight: 700; }
+    html.dark-mode .news-date { color: hsl(0 0% 50%); }
+
+    /* ═══════════════════════════════════════════
        RESPONSIVE
        ═══════════════════════════════════════════ */
     @media (max-width: 640px) {
@@ -625,6 +849,11 @@ export function generateLandingHtml(content: LandingPageContent): string {
       .feature-text-glass { padding: 1.4rem 1.2rem; gap: 1rem; flex-direction: column; }
       .feature-emoji-large { font-size: 2.4rem; }
       .cta-banner { padding: 3.5rem 1.25rem; }
+      .scout-section { padding: 3.5rem 1.25rem; }
+      .scout-form { flex-direction: column; }
+      .scout-btn { width: 100%; }
+      .smart-display-section { padding: 3.5rem 1.25rem; }
+      .news-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -721,6 +950,116 @@ export function generateLandingHtml(content: LandingPageContent): string {
     <p class="about-body">${escapeHtml(about.body)}</p>
   </section>
 
+  <!-- ══ AL-KASHAF DEMO ══════════════════════════════════ -->
+  <section class="scout-section">
+    <div class="scout-inner">
+      <div class="scout-heading">
+        <span class="section-pill">🔭 جرّب الكاشف</span>
+        <h2>اكتشف أفضل المصادر الأجنبية لمجالك</h2>
+        <p>أدخل مجالك أو اهتمامك — سيقترح عليك الكاشف أبرز 5 مصادر RSS وقنوات يوتيوب الأجنبية المتخصصة التي يمكنك إضافتها فوراً لمتابعتك.</p>
+      </div>
+      <form class="scout-form" id="scoutForm" onsubmit="return false;">
+        <input
+          class="scout-input"
+          id="scoutInput"
+          type="text"
+          placeholder="مثال: ذكاء اصطناعي، تسويق، يوتيوب..."
+          maxlength="120"
+          autocomplete="off"
+          dir="rtl"
+        />
+        <button class="scout-btn" id="scoutBtn" type="submit">كشف المصادر</button>
+      </form>
+      <div class="scout-results" id="scoutResults"></div>
+      <p class="scout-cta-note">
+        محدود بـ 3 طلبات مجانية يومياً.
+        <a href="/login">سجّل دخولك</a> للاستخدام غير المحدود ومتابعة المصادر تلقائياً.
+      </p>
+    </div>
+  </section>
+
+  <!-- ══ SMART DISPLAY ═════════════════════════════════ -->
+  <section>
+    <div class="smart-display-section">
+      <div class="smart-display-header">
+        <span class="section-pill">📡 العرض الذكي</span>
+        <h2>أبرز الأخبار التقنية العالمية — مترجمة ومُلخَّصة</h2>
+        <p>هذا مثال حي على ما يُقدّمه العرض الذكي في نَسَق: مقالات أجنبية من مصادر عالمية، مُترجَمة ومُلخَّصة إلى العربية تلقائياً لتوفير وقتك.</p>
+      </div>
+      <div class="news-grid">
+
+        <!-- Card 1 -->
+        <article class="news-card">
+          <div class="news-card-header">
+            <span class="news-source-name">TechCrunch</span>
+            <span class="news-tag">ذكاء اصطناعي</span>
+          </div>
+          <div class="news-card-body">
+            <p class="news-original">OpenAI Unveils GPT-5 With Extended Reasoning and Real-Time Web Access</p>
+            <h3 class="news-ar-title">OpenAI تكشف النقاب عن GPT-5 بقدرات استدلال متقدمة ووصول فوري للإنترنت</h3>
+            <p class="news-summary">كشفت شركة OpenAI رسمياً عن نموذجها الجديد GPT-5، الجيل الخامس من نماذج اللغة الكبيرة التي أحدثت ثورة في عالم الذكاء الاصطناعي. يتميز النموذج الجديد بقدرات استدلال موسّعة تُمكّنه من حل مسائل رياضية ومنطقية بدقة تفوق أداء الجيل السابق بنسبة تزيد على 40%. والأبرز في هذا الإصدار هو دعم الوصول الفوري للإنترنت، مما يعني أن النموذج يستطيع الاطلاع على آخر الأخبار والبيانات الحية دون الحاجة إلى تحديثات دورية. بالنسبة لصانعي المحتوى العربي، يُمثّل هذا النموذج نقلة نوعية في أدوات كتابة السيناريوهات وتوليد أفكار الفيديوهات، خاصةً مع تحسينات ملحوظة في فهم اللغة العربية وأساليبها الأدبية المتنوعة.</p>
+          </div>
+          <div class="news-card-footer">
+            <span class="nasaq-badge">✦ ترجمة نَسَق</span>
+            <span class="news-date">منذ 3 ساعات</span>
+          </div>
+        </article>
+
+        <!-- Card 2 -->
+        <article class="news-card">
+          <div class="news-card-header">
+            <span class="news-source-name">The Verge</span>
+            <span class="news-tag">تقنية</span>
+          </div>
+          <div class="news-card-body">
+            <p class="news-original">Apple Intelligence Now Available in 12 More Languages Including Arabic</p>
+            <h3 class="news-ar-title">ذكاء آبل يدعم الآن 12 لغة إضافية بينها العربية للمرة الأولى</h3>
+            <p class="news-summary">أعلنت شركة آبل عن توسيع نطاق ميزات الذكاء الاصطناعي المدمجة في أجهزتها لتشمل 12 لغة إضافية، من بينها العربية التي كانت غائبة عن الدعم الأولي. هذا التحديث يُتيح لمستخدمي iPhone 16 وiPad Pro وأجهزة Mac الحديثة الاستفادة من ميزات الكتابة الذكية والتلخيص التلقائي والاقتراحات السياقية باللغة العربية. وما يُميّز هذا النهج أن معالجة البيانات تتم محلياً على الجهاز دون إرسالها للسحابة، مما يعني خصوصية أعلى وسرعة استجابة أفضل. لصانعي المحتوى العربي، هذا يعني إمكانية استخدام Siri لتدوين الأفكار وتلخيص المقالات الطويلة باللغة العربية مباشرةً من الجهاز.</p>
+          </div>
+          <div class="news-card-footer">
+            <span class="nasaq-badge">✦ ترجمة نَسَق</span>
+            <span class="news-date">منذ 6 ساعات</span>
+          </div>
+        </article>
+
+        <!-- Card 3 -->
+        <article class="news-card">
+          <div class="news-card-header">
+            <span class="news-source-name">Wired</span>
+            <span class="news-tag">صانعو المحتوى</span>
+          </div>
+          <div class="news-card-body">
+            <p class="news-original">YouTube Doubles Revenue Share for Shorts Creators in Major Policy Shift</p>
+            <h3 class="news-ar-title">يوتيوب يضاعف أرباح صانعي Shorts في تحوّل جذري بسياسة تقاسم الإيرادات</h3>
+            <p class="news-summary">أعلنت منصة يوتيوب مضاعفة نسبة الأرباح لصانعي مقاطع Shorts في برنامجها المحدّث لتقاسم الإيرادات، في خطوة تعكس التنافس المتصاعد مع منصة TikTok. بموجب الشروط الجديدة، يحق لصانعي المحتوى الذين تجاوزوا 1000 مشترك و10 ملايين مشاهدة في آخر 90 يوماً الانضمام للبرنامج المحدّث والحصول على نسبة أرباح تصل إلى 45% من عائدات الإعلانات. بالنسبة للمجتمع العربي، يُعدّ هذا تحولاً جوهرياً؛ إذ بدأ كثير من صانعي المحتوى العرب الذين اكتفوا بالمحتوى الطويل في التوجه نحو Shorts لتعزيز دخلهم الرقمي وتوسيع قاعدة متابعيهم عالمياً.</p>
+          </div>
+          <div class="news-card-footer">
+            <span class="nasaq-badge">✦ ترجمة نَسَق</span>
+            <span class="news-date">منذ 9 ساعات</span>
+          </div>
+        </article>
+
+        <!-- Card 4 -->
+        <article class="news-card">
+          <div class="news-card-header">
+            <span class="news-source-name">Ars Technica</span>
+            <span class="news-tag">سياسات تقنية</span>
+          </div>
+          <div class="news-card-body">
+            <p class="news-original">EU's AI Act Compliance Deadline Forces Tech Giants to Restructure AI Teams</p>
+            <h3 class="news-ar-title">قانون الذكاء الاصطناعي الأوروبي يدفع عمالقة التقنية لإعادة هيكلة فرقها</h3>
+            <p class="news-summary">دخل قانون الذكاء الاصطناعي الأوروبي "AI Act" مرحلة التطبيق الفعلي، مما دفع شركات كـGoogle وMicrosoft وMeta إلى إعادة هيكلة فرق الذكاء الاصطناعي لديها لضمان الامتثال للوائح الجديدة. يُصنّف القانون تطبيقات الذكاء الاصطناعي وفقاً لمستويات المخاطر، ويفرض متطلبات شفافية صارمة تشمل الكشف عن بيانات التدريب وآليات اتخاذ القرار. الأهم لصانعي المحتوى: يُلزم القانون أدوات توليد الصور والصوت والنصوص بالإفصاح الواضح عن طبيعتها الاصطناعية. يرى المحللون أن هذا سيُفرز سوقاً متعددة المستويات بين أدوات متوافقة للسوق الأوروبية وأخرى تُسوَّق في مناطق أقل تنظيماً.</p>
+          </div>
+          <div class="news-card-footer">
+            <span class="nasaq-badge">✦ ترجمة نَسَق</span>
+            <span class="news-date">منذ 12 ساعة</span>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
   <!-- ══ FEATURES ═══════════════════════════════════════ -->
   ${
     features.length > 0
@@ -811,6 +1150,88 @@ export function generateLandingHtml(content: LandingPageContent): string {
     // Sync UI state on load (localStorage may have a saved preference)
     applyMode(getMode());
     applyAccent(getAccent());
+  </script>
+
+  <!-- ══ AL-KASHAF DEMO JS ══════════════════════════════ -->
+  <script>
+    (function () {
+      var form    = document.getElementById('scoutForm');
+      var input   = document.getElementById('scoutInput');
+      var btn     = document.getElementById('scoutBtn');
+      var results = document.getElementById('scoutResults');
+      if (!form) return;
+
+      function escText(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var niche = input.value.trim();
+        if (!niche) { input.focus(); return; }
+        btn.disabled = true;
+        btn.textContent = '...جارٍ البحث';
+        results.innerHTML = '';
+        results.classList.remove('show');
+
+        fetch('/api/public/scout-demo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ niche: niche }),
+          credentials: 'include',
+        })
+        .then(function (r) {
+          return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+        })
+        .then(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'كشف المصادر';
+          results.classList.add('show');
+          if (!res.ok) {
+            results.innerHTML = '<div class="scout-error">' + escText(res.data.error || 'حدث خطأ، حاول مجدداً.') + '</div>';
+            return;
+          }
+          var sources = res.data.sources || [];
+          if (!sources.length) {
+            results.innerHTML = '<div class="scout-error">لم يُعثر على مصادر. جرّب مجالاً آخر.</div>';
+            return;
+          }
+          var html = '';
+          for (var i = 0; i < sources.length; i++) {
+            var s = sources[i];
+            html += '<div class="scout-result-card">'
+                  +   '<div class="scout-num">' + (i + 1) + '</div>'
+                  +   '<div class="scout-result-body">'
+                  +     '<div class="scout-result-type">' + escText(s.type) + '</div>'
+                  +     '<div class="scout-result-name">' + escText(s.name) + '</div>'
+                  +     '<div class="scout-result-desc">' + escText(s.description) + '</div>'
+                  +   '</div>'
+                  + '</div>';
+          }
+          results.innerHTML = html;
+        })
+        .catch(function () {
+          btn.disabled = false;
+          btn.textContent = 'كشف المصادر';
+          results.classList.add('show');
+          results.innerHTML = '<div class="scout-error">تعذّر الاتصال بالخادم. تحقق من اتصالك وأعد المحاولة.</div>';
+        });
+      });
+    })();
+
+    // Progressive auth check — for returning users whose localStorage flag was cleared
+    // Runs silently after the page is fully loaded; does not block rendering
+    window.addEventListener('load', function () {
+      if (localStorage.getItem('nasaq-authed') === '1') return;
+      fetch('/api/auth/me', { credentials: 'include' })
+        .then(function (r) {
+          if (r.ok) {
+            localStorage.setItem('nasaq-authed', '1');
+            window.location.replace('/dashboard');
+          }
+        })
+        .catch(function () {});
+    });
   </script>
 
 </body>

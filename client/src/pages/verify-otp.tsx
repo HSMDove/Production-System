@@ -49,10 +49,11 @@ export default function VerifyOTPPage() {
     onSuccess: (data) => {
       sessionStorage.removeItem("otp_email");
       queryClient.setQueryData(["/api/auth/me"], data.user);
+      localStorage.setItem("nasaq-authed", "1");
       if (data.isNew) {
         navigate("/onboarding");
       } else {
-        navigate("/");
+        navigate("/dashboard");
       }
     },
     onError: (error: any) => {

@@ -55,7 +55,7 @@ export function useAuth() {
     mutationFn: () => apiRequest("POST", "/api/admin/exit"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      navigate("/");
+      navigate("/dashboard");
     },
   });
 

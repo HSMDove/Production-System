@@ -40,6 +40,7 @@ function Router() {
       <Route path="/admin/login" component={AdminLoginPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/" component={Dashboard} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/folder/:id" component={FolderDetail} />
       <Route path="/ideas" component={Ideas} />
       <Route path="/calendar" component={ContentCalendar} />
