@@ -3,6 +3,7 @@ import { fetchFolderContent } from "./folder-fetcher";
 import { recoverOrphanedContent } from "./folder-fetcher";
 import { backfillReadyContentMissingArabic } from "./folder-fetcher";
 import { backfillContentMissingImages } from "./folder-fetcher";
+import { runFreeModelHealthCheck } from "./free-model-router";
 import { log } from "./index";
 
 const folderLastRun = new Map<string, number>();
@@ -13,10 +14,12 @@ const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
 const READY_BACKFILL_INTERVAL_MS = 30 * 1000;
 const DAILY_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const IMAGE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const FREE_MODEL_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 let lastOrphanReaperRun = 0;
 let lastReadyBackfillRun = 0;
 let lastDailyCleanupRun = 0;
 let lastImageBackfillRun = 0;
+let lastFreeModelHealthCheckRun = 0;
 
 async function runFolderFetch(folderId: string) {
   if (folderInFlight.has(folderId)) return;
@@ -71,15 +74,21 @@ async function tick() {
       );
     }
 
+    if (Date.now() - lastFreeModelHealthCheckRun >= FREE_MODEL_HEALTH_CHECK_INTERVAL_MS) {
+      lastFreeModelHealthCheckRun = Date.now();
+      runFreeModelHealthCheck().catch((e) => console.error("[FreeModelHealth] Error:", e));
+    }
+
     if (Date.now() - lastDailyCleanupRun >= DAILY_CLEANUP_INTERVAL_MS) {
       lastDailyCleanupRun = Date.now();
       Promise.all([
         storage.cleanupExpiredOtpCodes(),
         storage.cleanupOldApiUsageLogs(30),
         storage.cleanupStaleProcessingContent(24),
+        storage.cleanupOldFreeModelHealthLogs(30),
       ])
-        .then(([otpDeleted, logsDeleted, staleDeleted]) => {
-          log(`[Cleanup] OTP: ${otpDeleted} deleted, API logs: ${logsDeleted} deleted, Stale content: ${staleDeleted} deleted`, "scheduler");
+        .then(([otpDeleted, logsDeleted, staleDeleted, freeLogsDeleted]) => {
+          log(`[Cleanup] OTP: ${otpDeleted} deleted, API logs: ${logsDeleted} deleted, Stale content: ${staleDeleted} deleted, Free model logs: ${freeLogsDeleted} deleted`, "scheduler");
         })
         .catch((e) => console.error("[Cleanup] Error:", e));
     }

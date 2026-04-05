@@ -104,13 +104,25 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.5.2";
+  const appVersion = versionData?.version || "2.7.4";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
   const { data: folderMappings } = useQuery<FolderMappingEntry[]>({ queryKey: ["/api/integrations/folder-mappings"] });
   const { data: folders } = useQuery<FolderEntry[]>({ queryKey: ["/api/folders"] });
   const { data: smartFiltersData } = useQuery<SmartFiltersConfig>({ queryKey: ["/api/settings/smart-filters"] });
+
+  // Free model status — fetched only when user has openrouter/auto selected
+  const { data: freeModelStatus } = useQuery<{ activeModel: string; knownModels: string[] }>({
+    queryKey: ["/api/free-model-status"],
+    enabled:
+      localSettings.ai_provider === "custom" &&
+      localSettings.ai_custom_provider === "openrouter" &&
+      localSettings.ai_custom_model === "openrouter/auto",
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
+  });
+
   type SlackChannel = { id: string; name: string; topic?: string; memberCount?: number };
 
   const slackIds = useMemo(() => (platformIds || []).filter(p => p.platform === "slack"), [platformIds]);
@@ -371,7 +383,19 @@ export default function Settings() {
         toast({ title: "فشل", description: data.error || "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
       }
     },
-    onError: () => toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" }),
+    onError: (err: any) => {
+      const isFreeModel = localSettings.ai_custom_model === "openrouter/auto";
+      const msg: string = err?.message || "";
+      if (isFreeModel && (msg.includes("429") || msg.includes("503") || msg.includes("No models") || msg.includes("rate limit"))) {
+        toast({
+          title: "الخدمة المجانية غير متاحة",
+          description: "الخدمة المجانية غير متاحة مؤقتاً. يرجى المحاولة لاحقاً.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "خطأ", description: "فشل اختبار الذكاء الاصطناعي", variant: "destructive" });
+      }
+    },
   });
 
   const createChannelMutation = useMutation({
@@ -1420,6 +1444,24 @@ export default function Settings() {
                         </Select>
                         <p className="text-xs text-muted-foreground" dir="ltr">{selectedModel}</p>
                       </div>
+
+                      {/* Free model dynamic routing info banner */}
+                      {selectedModel === "openrouter/auto" && (
+                        <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-blue-400 shrink-0" />
+                            <p className="text-sm text-blue-300 font-medium">
+                              النماذج المجانية يتم تعيينها تلقائياً بناءً على التوفر العالمي
+                            </p>
+                          </div>
+                          {freeModelStatus?.activeModel && (
+                            <p className="text-xs text-muted-foreground pr-6" dir="ltr">
+                              النموذج النشط:{" "}
+                              <span className="font-mono text-blue-400">{freeModelStatus.activeModel}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

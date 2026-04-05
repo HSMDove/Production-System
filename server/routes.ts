@@ -15,6 +15,7 @@ import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
 import { FIKRI_GATEWAY_SETTING_KEY, defaultFikriGatewayConfig, fikriGatewayConfigSchema, getFikriGatewayConfig, saveFikriGatewayConfig } from "./fikri-gateway";
+import { resolveFreeModel, KNOWN_FREE_MODELS } from "./free-model-router";
 import { z } from "zod";
 import {
   insertFolderSchema,
@@ -4869,9 +4870,19 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.5.2" });
+      res.json({ version: setting?.value || "2.7.4" });
     } catch {
-      res.json({ version: "2.5.2" });
+      res.json({ version: "2.7.4" });
+    }
+  });
+
+  // ─── Free Model Status (public) ───────────────────────────────────────────
+  app.get("/api/free-model-status", async (_req, res) => {
+    try {
+      const activeModel = await resolveFreeModel();
+      res.json({ activeModel, knownModels: KNOWN_FREE_MODELS });
+    } catch {
+      res.status(500).json({ error: "فشل في قراءة حالة النموذج المجاني" });
     }
   });
 

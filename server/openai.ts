@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
 import { storage } from "./storage";
 import { getFikriGatewayConfig, type FikriGatewayConfig } from "./fikri-gateway";
+import { isFreeModelSentinel, resolveFreeModel, wrapWithFreeModelTracking } from "./free-model-router";
 
 type ChatCompletionMessage = {
   role: "system" | "user" | "assistant" | "developer" | "tool" | "function";
@@ -21,6 +22,7 @@ type ChatCompletionRequest = {
 type ChatCompletionResponse = {
   choices: Array<{ message: { content: string | null; tool_calls?: any[] } }>;
   usage?: { total_tokens?: number };
+  model?: string; // OpenRouter returns the actual model used here
 };
 
 type AIChatClient = {
@@ -310,8 +312,22 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
       };
     }
 
+    const rawClient = new OpenAI(clientOpts);
+
+    // FREE MODEL ROUTING: intercept the sentinel and resolve to an active :free model
+    if (isFreeModelSentinel(model)) {
+      const freeModel = await resolveFreeModel();
+      return {
+        client: createOpenAIChatClient(wrapWithFreeModelTracking(rawClient)),
+        model: freeModel,
+        miniModel: freeModel,
+        providerUsed: "user_custom_api",
+      };
+    }
+
+    // All other OpenRouter models — unchanged path
     return {
-      client: createOpenAIChatClient(new OpenAI(clientOpts)),
+      client: createOpenAIChatClient(rawClient),
       model,
       miniModel: model,
       providerUsed: "user_custom_api",

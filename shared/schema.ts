@@ -466,6 +466,21 @@ export const apiUsageLogs = pgTable("api_usage_logs", {
 export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
 export type InsertApiUsageLog = typeof apiUsageLogs.$inferInsert;
 
+// Free Model Health Logs — operational log for free-tier OpenRouter routing
+export const freeModelCheckResults = ["success", "failed", "switched", "reset"] as const;
+export type FreeModelCheckResult = typeof freeModelCheckResults[number];
+
+export const freeModelHealthLogs = pgTable("free_model_health_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  activeModel: text("active_model").notNull(),
+  checkResult: text("check_result").notNull().$type<FreeModelCheckResult>(),
+  reason: text("reason"),
+  checkedAt: timestamp("checked_at").defaultNow().notNull(),
+});
+
+export type FreeModelHealthLog = typeof freeModelHealthLogs.$inferSelect;
+export type InsertFreeModelHealthLog = typeof freeModelHealthLogs.$inferInsert;
+
 // Integration Channels — multiple Slack/Telegram bots per user
 export const integrationPlatforms = ["slack", "telegram"] as const;
 export type IntegrationPlatform = typeof integrationPlatforms[number];

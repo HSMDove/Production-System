@@ -18,6 +18,8 @@ export interface ModelOption {
   id: string;
   /** Human-friendly label shown in the dropdown */
   label: string;
+  /** Optional note shown as a tooltip or sub-label in the UI */
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +53,7 @@ export const ADMIN_MODEL_CATALOG: Record<AdminAIProvider, ModelOption[]> = {
     { id: "anthropic/claude-opus-4-6",            label: "Claude Opus 4.6" },
     { id: "google/gemini-3.1-pro-preview",        label: "Gemini 3.1 Pro (Preview)" },
     { id: "google/gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite (Preview)" },
-    { id: "openrouter/auto",                      label: "نماذج مجانية (متغيرة) - Free" },
+    { id: "openrouter/auto", label: "نماذج مجانية (تلقائي) - Free Auto", note: "يتم اختيار النموذج المجاني تلقائياً بناءً على التوفر العالمي" },
   ],
 };
 

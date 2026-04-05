@@ -107,6 +107,9 @@ import {
   releaseNotes,
   type ReleaseNote,
   type InsertReleaseNote,
+  freeModelHealthLogs,
+  type FreeModelHealthLog,
+  type InsertFreeModelHealthLog,
 } from "@shared/schema";
 
 const FULLY_PROCESSED_CONTENT_CONDITION = and(
@@ -313,6 +316,10 @@ export interface IStorage {
 
   // API Usage Logging
   logApiUsage(entry: Omit<InsertApiUsageLog, "id" | "createdAt">): Promise<ApiUsageLog>;
+
+  // Free Model Health Logging
+  logFreeModelHealthCheck(entry: Omit<InsertFreeModelHealthLog, "id" | "checkedAt">): Promise<FreeModelHealthLog>;
+  cleanupOldFreeModelHealthLogs(daysToKeep?: number): Promise<number>;
 
   // User Activity
   updateUserLastActive(userId: string): Promise<void>;
@@ -1432,6 +1439,20 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(content).where(
       and(eq(content.processingStatus, "processing"), lt(content.fetchedAt, cutoff))
     );
+    return result.rowCount ?? 0;
+  }
+
+  // ─── Free Model Health Logging ─────────────────────────────────────────────
+  async logFreeModelHealthCheck(
+    entry: Omit<InsertFreeModelHealthLog, "id" | "checkedAt">
+  ): Promise<FreeModelHealthLog> {
+    const [row] = await db.insert(freeModelHealthLogs).values(entry as any).returning();
+    return row;
+  }
+
+  async cleanupOldFreeModelHealthLogs(daysToKeep: number = 30): Promise<number> {
+    const cutoff = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
+    const result = await db.delete(freeModelHealthLogs).where(lt(freeModelHealthLogs.checkedAt, cutoff));
     return result.rowCount ?? 0;
   }
 }
