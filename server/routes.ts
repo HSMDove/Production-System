@@ -281,9 +281,9 @@ async function maybeSummarizeConversation(conversationId: string, userId: string
       .map((m) => `${m.role === "user" ? "المستخدم" : "فكري"}: ${m.content}`)
       .join("\n\n");
 
-    const { client } = await getAIClient(userId);
+    const { client, miniModel } = await getAIClient(userId);
     const result = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: miniModel,
       messages: [
         {
           role: "system",
@@ -351,11 +351,11 @@ async function runAssistantToolPhase(
 
   const compactContext = {
     folders: folders.map((f) => ({ id: f.id, name: f.name })),
-    latestContent: sortedContent.slice(0, 40).map((item) => ({
+    latestContent: sortedContent.slice(0, 20).map((item) => ({
       id: item.id,
       folderName: folderById.get(item.folderId)?.name || "غير معروف",
       title: item.title,
-      summary: truncate(item.summary || item.arabicSummary || item.arabicFullSummary || ""),
+      summary: truncate(item.summary || item.arabicSummary || item.arabicFullSummary || "", 100),
       publishedAt: item.publishedAt || item.fetchedAt,
       keywords: item.keywords || [],
       url: item.originalUrl,
@@ -363,7 +363,7 @@ async function runAssistantToolPhase(
     recentIdeas: allIdeas
       .slice()
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 20)
+      .slice(0, 10)
       .map((idea) => ({ id: idea.id, title: idea.title, status: idea.status })),
   };
 
@@ -438,7 +438,7 @@ async function runAssistantToolPhase(
       role: "system",
       content: `بيانات المستخدم المتاحة: ${JSON.stringify(compactContext)}`,
     },
-    ...history.slice(-16),
+    ...history.slice(-6),
     {
       role: "user",
       content: userMessage,
@@ -460,6 +460,7 @@ async function runAssistantToolPhase(
       tools,
       tool_choice: "auto",
       temperature: 0.2,
+      max_tokens: 800,
     });
 
     const message = completion.choices[0]?.message;
@@ -590,6 +591,7 @@ async function runAssistantEngine(userMessage: string, history: Array<{ role: "u
     model: phase.model,
     messages: phase.messages,
     temperature: 0.2,
+    max_tokens: 600,
   });
 
   return {
@@ -1475,6 +1477,18 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Idea Generation Rate Limiter ───────────────────────────────────────────
+  // Prevents single users from triggering unbounded AI calls (max 5/hour per user).
+  const _ideaGenRateMap = new Map<string, { count: number; resetAt: number }>();
+  function _checkIdeaGenLimit(userId: string): boolean {
+    const MAX = 5, WINDOW = 60 * 60 * 1000, now = Date.now();
+    const rec = _ideaGenRateMap.get(userId);
+    if (!rec || now > rec.resetAt) { _ideaGenRateMap.set(userId, { count: 1, resetAt: now + WINDOW }); return true; }
+    if (rec.count >= MAX) return false;
+    rec.count++;
+    return true;
+  }
+
   app.post("/api/generate-smart-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
       const { folderIds, days, templates: templateRequests } = req.body as {
@@ -1491,6 +1505,15 @@ export async function registerRoutes(
       const allUnusedContent: any[] = [];
 
       const userId = req.session.userId!;
+
+      // Rate limiting: max 5 idea-gen calls per hour per user
+      if (!_checkIdeaGenLimit(userId)) {
+        return res.status(429).json({ error: "لقد تجاوزت الحد المسموح به لتوليد الأفكار (5 مرات في الساعة). يرجى الانتظار قليلاً." });
+      }
+
+      // Template cap: max 3 templates per request to prevent runaway costs
+      const cappedTemplateRequests = templateRequests.slice(0, 3);
+
       for (const fId of folderIds) {
         const folder = await storage.getFolderById(fId);
         // Only allow folders owned by the current user
@@ -1546,7 +1569,7 @@ export async function registerRoutes(
 
       const allResults = [];
 
-      for (const templateReq of templateRequests) {
+      for (const templateReq of cappedTemplateRequests) {
         if (templateReq.count <= 0) continue;
 
         const template = await storage.getPromptTemplateById(templateReq.templateId, userId);

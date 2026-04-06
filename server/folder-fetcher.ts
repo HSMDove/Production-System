@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { fetchMultipleSources, fetchOGImage, shouldFilterContent } from "./fetcher";
 import type { FetchResult } from "./fetcher";
-import { generateArabicSummary, generateProfessionalTranslation, batchFilterContent } from "./openai";
+import { generateArabicSummary, generateProfessionalTranslation, batchFilterContent, batchTranslateContent } from "./openai";
 import { processNewContentNotifications, processNewContentNotificationsForFolder } from "./notifier";
 import { getUserComposedSystemPrompt } from "./ai-system-prompt";
 import type { Folder, InsertContent, Source } from "@shared/schema";
@@ -24,17 +24,23 @@ function isMostlyArabicText(...values: Array<string | null | undefined>): boolea
   return totalChars > 0 && arabicChars.length / totalChars > 0.5;
 }
 
+function truncateTo400Words(text: string): string {
+  const words = text.split(/\s+/);
+  if (words.length <= 400) return text;
+  return words.slice(0, 400).join(" ");
+}
+
 function buildPipelineSummary(sourceType: Source["type"] | undefined, title: string, summary: string | null): string {
   const cleanedSummary = (summary || "").trim();
   if (!cleanedSummary) {
-    return title;
+    return truncateTo400Words(title);
   }
 
   if (sourceType && SOCIAL_VIDEO_SOURCE_TYPES.has(sourceType) && cleanedSummary.length < 40) {
-    return `${title}\n\n${cleanedSummary}`;
+    return truncateTo400Words(`${title}\n\n${cleanedSummary}`);
   }
 
-  return cleanedSummary;
+  return truncateTo400Words(cleanedSummary);
 }
 
 function shouldSkipImageBackfill(sourceType: Source["type"] | undefined, imageUrl: string | null): boolean {
@@ -173,11 +179,57 @@ export async function processContentIdsThroughPipeline(
   if (contentIds.length === 0) return [];
   const prompt = userId ? await getUserComposedSystemPrompt(userId) : null;
   const processedContentIds: string[] = [];
-  for (const contentId of contentIds) {
-    if (await processContentThroughPipeline(contentId, prompt, userId || undefined)) {
-      processedContentIds.push(contentId);
+
+  // Lazy processing cap: only translate the first 15 items immediately.
+  // Items beyond this limit remain in "processing" status and are picked up
+  // by the existing orphan recovery scheduler (~30 min delay). This prevents
+  // a single large feed import from generating 30+ sequential AI calls.
+  const IMMEDIATE_LIMIT = 15;
+  const immediateIds = contentIds.slice(0, IMMEDIATE_LIMIT);
+  if (contentIds.length > IMMEDIATE_LIMIT) {
+    console.log(`[Pipeline] Deferring ${contentIds.length - IMMEDIATE_LIMIT} items beyond lazy limit (will recover in ~30m)`);
+  }
+
+  // Batch translation: process in chunks of 10 to reduce API call overhead.
+  // Each chunk makes 1 batch call instead of 2×N sequential calls.
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < immediateIds.length; i += BATCH_SIZE) {
+    const chunk = immediateIds.slice(i, i + BATCH_SIZE);
+
+    // Pre-load content items for this chunk
+    const chunkItems = await Promise.all(
+      chunk.map((id) => storage.getContentById(id).catch(() => null))
+    );
+
+    // Run batch translation for non-Arabic items that need it
+    const toTranslate = chunkItems
+      .filter((item): item is NonNullable<typeof item> => !!(item?.title))
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        summary: item.summary || null,
+      }));
+
+    const batchResults = toTranslate.length > 0
+      ? await batchTranslateContent(toTranslate, prompt, userId || undefined).catch(() => new Map())
+      : new Map();
+
+    // Apply batch results to DB then complete per-item pipeline (image, status)
+    for (const item of chunkItems) {
+      if (!item) continue;
+      const batchResult = batchResults.get(item.id);
+      if (batchResult) {
+        // Pre-populate translation so processContentThroughPipeline skips AI calls
+        await storage.updateContentTranslation(item.id, batchResult.arabicTitle, batchResult.arabicFullSummary).catch(() => null);
+        await storage.updateContentArabicSummary(item.id, batchResult.arabicSummary).catch(() => null);
+      }
+
+      if (await processContentThroughPipeline(item.id, prompt, userId || undefined)) {
+        processedContentIds.push(item.id);
+      }
     }
   }
+
   return processedContentIds;
 }
 
@@ -312,15 +364,46 @@ async function applySmartFilter(
     const hasDefaultFilter = activeFilters.some((f) => f.isDefault);
     const customFilters = activeFilters.filter((f) => !f.isDefault && f.description.trim());
 
+    // Tier 0: Zero-cost JS junk pattern pre-filter (runs before any AI call)
+    const JUNK_PATTERNS = [
+      /\b(crossword|wordle|spelling bee|connections puzzle|quordle|nyt games)\b/i,
+      /\b(best deals|deal roundup|today's deals|shopping guide|buying guide|gift guide)\b/i,
+      /\b(sponsored|promoted|advertisement|paid post|partner content)\b/i,
+    ];
+    const isJunk = (title: string) => JUNK_PATTERNS.some((p) => p.test(title));
+
+    // Tier 0.5: Title word-overlap dedup (drop near-duplicates before AI call)
+    const titleWordSets = new Map<string, Set<string>>();
+    const isTitleDuplicate = (url: string, title: string): boolean => {
+      const words = new Set(title.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+      if (words.size === 0) return false;
+      for (const [existingUrl, existingWords] of titleWordSets) {
+        if (existingUrl === url) continue;
+        const overlap = [...words].filter((w) => existingWords.has(w)).length;
+        if (overlap / words.size > 0.7) return true;
+      }
+      titleWordSets.set(url, words);
+      return false;
+    };
+
     // Tier 1: Instant keyword filter (default filter)
     let filtered = hasDefaultFilter
       ? results.map((result) => ({
           ...result,
           items: result.items.filter(
-            (item) => !shouldFilterContent(item.title, item.summary ?? null, true),
+            (item) => !shouldFilterContent(item.title, item.summary ?? null, true) && !isJunk(item.title),
           ),
         }))
-      : results;
+      : results.map((result) => ({
+          ...result,
+          items: result.items.filter((item) => !isJunk(item.title)),
+        }));
+
+    // Apply title dedup across all filtered results
+    filtered = filtered.map((result) => ({
+      ...result,
+      items: result.items.filter((item) => !isTitleDuplicate(item.originalUrl, item.title)),
+    }));
 
     // Tier 2: AI batch filter per custom filter
     for (const customFilter of customFilters) {

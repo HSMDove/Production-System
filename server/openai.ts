@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createHash } from "crypto";
 import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
 import { storage } from "./storage";
 import { getFikriGatewayConfig, type FikriGatewayConfig } from "./fikri-gateway";
@@ -8,6 +9,42 @@ import {
   wrapWithFallbackToFree,
   FREE_MODEL_ROUTE,
 } from "./free-model-router";
+
+// ─── In-memory L1 Translation Cache ─────────────────────────────────────────
+// Keyed by sha256(title|summary[:200]|promptHash). Max 5,000 entries, 6h TTL.
+// Prevents duplicate AI calls for the same article across users/sessions.
+const TRANSLATION_CACHE_MAX = 5000;
+const TRANSLATION_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+type TranslationCacheEntry<T> = { value: T; expiresAt: number };
+const arabicSummaryCache = new Map<string, TranslationCacheEntry<string | null>>();
+const professionalTranslationCache = new Map<string, TranslationCacheEntry<{ arabicTitle: string; arabicFullSummary: string } | null>>();
+
+function makeTranslationCacheKey(title: string, summary: string | null, promptHint?: string | null): string {
+  const raw = `${title}|${(summary || "").substring(0, 200)}|${promptHint || "default"}`;
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+function getCacheEntry<T>(cache: Map<string, TranslationCacheEntry<T>>, key: string): T | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) { cache.delete(key); return undefined; }
+  return entry.value;
+}
+
+function setCacheEntry<T>(cache: Map<string, TranslationCacheEntry<T>>, key: string, value: T): void {
+  if (cache.size >= TRANSLATION_CACHE_MAX) {
+    // Evict the oldest 10% when at capacity
+    const toDelete = Math.ceil(TRANSLATION_CACHE_MAX * 0.1);
+    let deleted = 0;
+    for (const k of cache.keys()) {
+      if (deleted >= toDelete) break;
+      cache.delete(k);
+      deleted++;
+    }
+  }
+  cache.set(key, { value, expiresAt: Date.now() + TRANSLATION_CACHE_TTL_MS });
+}
 
 type ChatCompletionMessage = {
   role: "system" | "user" | "assistant" | "developer" | "tool" | "function";
@@ -495,6 +532,7 @@ export async function analyzeTrainingSampleStyle(
       }
     ],
     temperature: 0.3,
+    max_tokens: 400,
   });
 
   if (userId) await logAIRequest(userId, "ai_chat", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
@@ -540,6 +578,7 @@ export async function generateStyleMatrix(
       }
     ],
     temperature: 0.3,
+    max_tokens: 500,
   });
 
   if (userId) await logAIRequest(userId, "ai_chat", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
@@ -574,9 +613,9 @@ export async function generateIdeasFromContent(
       const sourceType = (item as any).sourceType || "rss";
       const typeLabel = sourceTypeLabels[sourceType] || "📰 خبر";
       const title = item.title;
-      const summary = item.summary ? `: ${item.summary}` : "";
-      const url = item.originalUrl ? `\n   رابط: ${item.originalUrl}` : "";
-      return `${i + 1}. [${typeLabel}] ${title}${summary}${url}`;
+      const rawSummary = item.summary || "";
+      const summary = rawSummary ? `: ${rawSummary.substring(0, 120)}` : "";
+      return `${i + 1}. [${typeLabel}] ${title}${summary}`;
     })
     .join("\n");
 
@@ -618,6 +657,7 @@ ${contentSummary}
       ],
       response_format: { type: "json_object" },
       temperature: 0.8,
+      max_tokens: 500,
     });
 
     if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, stage1Response.usage?.total_tokens);
@@ -644,7 +684,7 @@ ${styleMatrix}`;
     }
 
     if (existingTitles && existingTitles.length > 0) {
-      const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const titlesList = existingTitles.slice(0, 30).map((t, i) => `${i + 1}. ${t}`).join("\n");
       stage2Prompt += `\n\n⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}`;
     }
 
@@ -657,6 +697,7 @@ ${styleMatrix}`;
       ],
       response_format: { type: "json_object" },
       temperature: 0.8,
+      max_tokens: 1200,
     });
 
     if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime2, undefined, response.usage?.total_tokens);
@@ -726,10 +767,10 @@ ${contentList}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
+    const { client, miniModel, providerUsed } = await getAIClient(userId);
     const startTime = Date.now();
     const response = await client.chat.completions.create({
-      model,
+      model: miniModel,
       messages: [
         {
           role: "system",
@@ -742,9 +783,10 @@ ${contentList}
       ],
       response_format: { type: "json_object" },
       temperature: 0.3,
+      max_tokens: 600,
     });
 
-    if (userId) await logAIRequest(userId, "ai_sentiment", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+    if (userId) await logAIRequest(userId, "ai_sentiment", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
 
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
@@ -790,16 +832,21 @@ export async function generateArabicSummary(
   userId?: string
 ): Promise<string | null> {
   if (!title && !summary) return null;
-  
+
   const textToSummarize = summary || title;
-  
+
   const arabicChars = textToSummarize.match(/[\u0600-\u06FF]/g) || [];
   const totalChars = textToSummarize.replace(/\s/g, '').length;
   const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
-  
+
   if (arabicRatio > 0.5) {
     return null;
   }
+
+  // L1 cache check — skip API call for already-translated content
+  const cacheKey = makeTranslationCacheKey(title, summary, customSystemPrompt);
+  const cached = getCacheEntry(arabicSummaryCache, cacheKey);
+  if (cached !== undefined) return cached;
 
   const defaultSystemMsg = "أنت مترجم ومُلخص محترف. قم بترجمة وتلخيص المحتوى التقني إلى العربية بشكل موجز ومفهوم. أجب بالملخص العربي فقط بدون أي شرح إضافي.";
   const systemMsg = customSystemPrompt
@@ -826,7 +873,9 @@ export async function generateArabicSummary(
     });
 
     if (userId) await logAIRequest(userId, "ai_summary", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
-    return response.choices[0]?.message?.content?.trim() || null;
+    const result = response.choices[0]?.message?.content?.trim() || null;
+    setCacheEntry(arabicSummaryCache, cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Error generating Arabic summary:", error);
     return null;
@@ -899,15 +948,20 @@ export async function generateProfessionalTranslation(
   userId?: string
 ): Promise<ProfessionalTranslation | null> {
   if (!title) return null;
-  
+
   const textToCheck = `${title} ${summary || ''}`;
   const arabicChars = textToCheck.match(/[\u0600-\u06FF]/g) || [];
   const totalChars = textToCheck.replace(/\s/g, '').length;
   const arabicRatio = totalChars > 0 ? arabicChars.length / totalChars : 0;
-  
+
   if (arabicRatio > 0.5) {
     return null;
   }
+
+  // L1 cache check — skip API call for already-translated content
+  const cacheKey = makeTranslationCacheKey(title, summary, customSystemPrompt);
+  const cached = getCacheEntry(professionalTranslationCache, cacheKey);
+  if (cached !== undefined) return cached;
 
   const defaultTranslationPrompt = `أنت مترجم صحفي تقني محترف. مهمتك ترجمة الأخبار التقنية إلى العربية بطريقة احترافية.
 
@@ -956,9 +1010,10 @@ ${summary ? `الملخص: ${summary}` : ''}
 
     if (userId) await logAIRequest(userId, "ai_translate", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     const content = response.choices[0]?.message?.content;
-    if (!content) return null;
+    if (!content) { setCacheEntry(professionalTranslationCache, cacheKey, null); return null; }
 
     const parsed = JSON.parse(content) as ProfessionalTranslation;
+    setCacheEntry(professionalTranslationCache, cacheKey, parsed);
     return parsed;
   } catch (error) {
     console.error("Error generating professional translation:", error);
@@ -1002,10 +1057,10 @@ ${contentSummary}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
+    const { client, miniModel, providerUsed } = await getAIClient(userId);
     const startTime = Date.now();
     const response = await client.chat.completions.create({
-      model,
+      model: miniModel,
       messages: [
         {
           role: "system",
@@ -1018,9 +1073,10 @@ ${contentSummary}
       ],
       response_format: { type: "json_object" },
       temperature: 0.4,
+      max_tokens: 400,
     });
 
-    if (userId) await logAIRequest(userId, "ai_trends", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+    if (userId) await logAIRequest(userId, "ai_trends", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) {
       return [];
@@ -1122,19 +1178,20 @@ ${numberedItems}
 }`;
 
   try {
-    const { client, model, providerUsed } = await getAIClient(userId);
+    const { client, miniModel, providerUsed } = await getAIClient(userId);
     const startTime = Date.now();
     const response = await client.chat.completions.create({
-      model,
+      model: miniModel,
       messages: [
         { role: "system", content: systemMessage },
         { role: "user", content: userPrompt }
       ],
       response_format: { type: "json_object" },
       temperature: 0.7,
+      max_tokens: 1200,
     });
 
-    if (userId) await logAIRequest(userId, "ai_smart_view", providerUsed, model, true, startTime, undefined, response.usage?.total_tokens);
+    if (userId) await logAIRequest(userId, "ai_smart_view", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     const responseContent = response.choices[0]?.message?.content;
     if (!responseContent) return [];
 
@@ -1184,13 +1241,14 @@ export async function generateSmartIdeasForTemplate(
   };
 
   const numberedContent = contentItems
-    .slice(0, 30)
+    .slice(0, 15)
     .map((item, i) => {
       const sourceType = (item as any).sourceType || "rss";
       const typeLabel = sourceTypeLabels[sourceType] || "📰 خبر";
       const title = item.arabicTitle || item.title;
-      const summary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
-      return `[${i + 1}] [${typeLabel}] ${title}${summary ? `\n    ${summary}` : ""}\n    رابط: ${item.originalUrl}`;
+      const rawSummary = item.arabicFullSummary || item.arabicSummary || item.summary || "";
+      const summary = rawSummary.substring(0, 120);
+      return `[${i + 1}] [${typeLabel}] ${title}${summary ? `\n    ${summary}` : ""}`;
     })
     .join("\n\n");
 
@@ -1211,6 +1269,10 @@ ${styleProfile}
   try {
     const { client, model, providerUsed } = await getAIClient(userId);
 
+    // ═══ Fast-path: single-stage for small requests (count ≤ 3) ═══
+    // Skips angle-discovery to save one full API round-trip.
+    let anglesContext = "";
+    if (count > 3) {
     // ═══ Stage 1: Angle Analysis ═══
     let stage1Prompt = `حلّل الأخبار والمحتوى التالي واكتشف ${count} زاوية/منظور فريد يصلح لفيديو في سلسلة "${templateName}".
 
@@ -1223,7 +1285,7 @@ ${numberedContent}
     }
 
     if (existingTitles && existingTitles.length > 0) {
-      const titlesList = existingTitles.slice(0, 50).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const titlesList = existingTitles.slice(0, 20).map((t, i) => `${i + 1}. ${t}`).join("\n");
       stage1Prompt += `\n⛔ زوايا يجب تجنبها (أفكار موجودة بالفعل):\n${titlesList}\n`;
     }
 
@@ -1255,12 +1317,12 @@ ${numberedContent}
       ],
       response_format: { type: "json_object" },
       temperature: 0.8,
+      max_tokens: 800,
     });
 
     if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime, undefined, stage1Response.usage?.total_tokens);
 
     const stage1Content = stage1Response.choices[0]?.message?.content;
-    let anglesContext = "";
     if (stage1Content) {
       try {
         const parsed = JSON.parse(stage1Content) as { angles: Array<{ concept: string; sourceIndices: number[]; uniqueness: string }> };
@@ -1269,6 +1331,7 @@ ${numberedContent}
         ).join("\n");
       } catch { anglesContext = stage1Content; }
     }
+    } // end if (count > 3)
 
     // ═══ Stage 2: Full Idea Generation with Style ═══
     let stage2Prompt = `أنت منتج محتوى تقني عربي لقناة "Tech Voice".
@@ -1277,11 +1340,7 @@ ${numberedContent}
 المجلدات: "${folderNames}"
 عدد الأفكار المطلوبة: ${count}
 
-🔍 المرحلة 1 - الزوايا الفريدة المكتشفة (استخدمها كأساس):
-${anglesContext}
-
-${styleSection}
-📰 الأخبار الحقيقية المتاحة (مرقمة):
+${anglesContext ? `🔍 الزوايا الفريدة المكتشفة (استخدمها كأساس):\n${anglesContext}\n\n` : ""}${styleSection}📰 الأخبار الحقيقية المتاحة (مرقمة):
 
 ${numberedContent}
 
@@ -1295,7 +1354,7 @@ ${templatePrompt}
     }
 
     if (existingTitles && existingTitles.length > 0) {
-      const titlesList = existingTitles.slice(0, 100).map((t, i) => `${i + 1}. ${t}`).join("\n");
+      const titlesList = existingTitles.slice(0, 30).map((t, i) => `${i + 1}. ${t}`).join("\n");
       stage2Prompt += `⛔ تجنب تكرار هذه الأفكار الموجودة بشكل صارم - لا تعيد صياغتها أو تغير كلمات فقط:\n${titlesList}\n\n`;
     }
 
@@ -1336,6 +1395,7 @@ ${templatePrompt}
       ],
       response_format: { type: "json_object" },
       temperature: 0.7,
+      max_tokens: 1500,
     });
 
     if (userId) await logAIRequest(userId, "ai_ideas", providerUsed, model, true, startTime2, undefined, response.usage?.total_tokens);
@@ -1482,7 +1542,7 @@ export async function* streamAITokens(
           role: m.role === "assistant" ? "assistant" : "user",
           content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
         })),
-        max_tokens: 4096,
+        max_tokens: 1200,
         temperature: 0.2,
         stream: true,
       }),
@@ -1527,7 +1587,7 @@ export async function* streamAITokens(
           role: "user",
           parts: [{ text: messages.filter((m) => m.role !== "system").map((m) => m.content).join("\n") }],
         }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1200 },
       }),
     },
   );
@@ -1630,4 +1690,109 @@ ${strictRules}${customRules}
     // AI client unavailable → fail-open, keep everything
     return allIds;
   }
+}
+
+// ─── Batch Translation ───────────────────────────────────────────────────────
+
+export interface BatchTranslationResult {
+  arabicTitle: string;
+  arabicSummary: string;
+  arabicFullSummary: string;
+}
+
+/**
+ * Translates up to 10 content items in a single AI call.
+ * Falls back to null for any items that fail parsing.
+ * This replaces 2N sequential calls with 1 call for N items.
+ */
+export async function batchTranslateContent(
+  items: Array<{ id: string; title: string; summary: string | null }>,
+  customSystemPrompt?: string | null,
+  userId?: string,
+): Promise<Map<string, BatchTranslationResult>> {
+  const results = new Map<string, BatchTranslationResult>();
+  if (items.length === 0) return results;
+
+  // Filter out already-Arabic items
+  const toTranslate = items.filter((item) => {
+    const text = `${item.title} ${item.summary || ""}`;
+    const arabicChars = text.match(/[\u0600-\u06FF]/g) || [];
+    const total = text.replace(/\s/g, "").length;
+    return total === 0 || arabicChars.length / total <= 0.5;
+  });
+  if (toTranslate.length === 0) return results;
+
+  // Check L1 cache first; only send uncached items to AI
+  const uncached: typeof toTranslate = [];
+  for (const item of toTranslate) {
+    const key = makeTranslationCacheKey(item.title, item.summary, customSystemPrompt);
+    const hit = getCacheEntry(professionalTranslationCache, key);
+    if (hit !== undefined && hit !== null) {
+      results.set(item.id, {
+        arabicTitle: hit.arabicTitle,
+        arabicSummary: hit.arabicFullSummary.substring(0, 200),
+        arabicFullSummary: hit.arabicFullSummary,
+      });
+    } else {
+      uncached.push(item);
+    }
+  }
+  if (uncached.length === 0) return results;
+
+  const defaultPrompt = `أنت مترجم صحفي تقني محترف. ترجم الأخبار التالية إلى العربية. أجب بصيغة JSON فقط.`;
+  const systemMsg = customSystemPrompt
+    ? `${customSystemPrompt}\n\nمهمتك: ترجم الأخبار التالية إلى العربية. أجب بصيغة JSON فقط.`
+    : defaultPrompt;
+
+  const payload = uncached.map((item, i) => ({
+    index: i,
+    id: item.id,
+    title: item.title,
+    summary: (item.summary || "").substring(0, 300),
+  }));
+
+  try {
+    const { client, miniModel, providerUsed } = await getAIClient(userId);
+    const startTime = Date.now();
+
+    const response = await client.chat.completions.create({
+      model: miniModel,
+      messages: [
+        { role: "system", content: systemMsg },
+        {
+          role: "user",
+          content: `ترجم الأخبار التالية بالكامل إلى العربية:\n\n${JSON.stringify(payload)}\n\nأجب بهذه الصيغة:\n{"translations": [{"index": 0, "id": "...", "arabicTitle": "...", "arabicFullSummary": "..."}]}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+      max_tokens: 200 * uncached.length,
+    });
+
+    if (userId) await logAIRequest(userId, "ai_translate", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
+
+    const raw = response.choices[0]?.message?.content;
+    if (raw) {
+      const parsed = JSON.parse(raw) as { translations?: Array<{ index: number; id: string; arabicTitle: string; arabicFullSummary: string }> };
+      for (const t of parsed.translations || []) {
+        if (!t.arabicTitle || !t.arabicFullSummary) continue;
+        const original = uncached[t.index];
+        if (!original) continue;
+        const entry: BatchTranslationResult = {
+          arabicTitle: t.arabicTitle,
+          arabicSummary: t.arabicFullSummary.substring(0, 200),
+          arabicFullSummary: t.arabicFullSummary,
+        };
+        results.set(t.id, entry);
+        // Populate L1 cache
+        const key = makeTranslationCacheKey(original.title, original.summary, customSystemPrompt);
+        setCacheEntry(professionalTranslationCache, key, { arabicTitle: t.arabicTitle, arabicFullSummary: t.arabicFullSummary });
+      }
+    }
+  } catch (error) {
+    console.error("[BatchTranslate] Failed:", error);
+    // Fail-open: return whatever we have from cache hits
+  }
+
+  return results;
 }
