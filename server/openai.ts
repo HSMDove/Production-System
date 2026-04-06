@@ -2,7 +2,12 @@ import OpenAI from "openai";
 import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
 import { storage } from "./storage";
 import { getFikriGatewayConfig, type FikriGatewayConfig } from "./fikri-gateway";
-import { isFreeModelSentinel, wrapWithFreeModelTracking, FREE_MODEL_ROUTE } from "./free-model-router";
+import {
+  isFreeModelSentinel,
+  wrapWithFreeModelTracking,
+  wrapWithFallbackToFree,
+  FREE_MODEL_ROUTE,
+} from "./free-model-router";
 
 type ChatCompletionMessage = {
   role: "system" | "user" | "assistant" | "developer" | "tool" | "function";
@@ -223,11 +228,25 @@ function createSystemGatewayClient(config: FikriGatewayConfig): { client: AIChat
       : {}),
   });
 
+  // Apply wrappers for OpenRouter system gateway calls
+  if (config.aiProvider === "openrouter") {
+    const wrappedForGateway =
+      model === FREE_MODEL_ROUTE
+        ? wrapWithFreeModelTracking(openAiClient)
+        : wrapWithFallbackToFree(openAiClient, model);
+    return {
+      client: createOpenAIChatClient(wrappedForGateway),
+      model,
+      miniModel: model,
+      providerUsed: "system_openrouter",
+    };
+  }
+
   return {
     client: createOpenAIChatClient(openAiClient),
     model,
     miniModel: model,
-    providerUsed: config.aiProvider === "openrouter" ? "system_openrouter" : "system_openai",
+    providerUsed: "system_openai",
   };
 }
 
@@ -314,23 +333,22 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
 
     const rawClient = new OpenAI(clientOpts);
 
-    // FREE MODEL ROUTING: intercept the sentinel and use OpenRouter's built-in
-    // free-tier routing ID. This guarantees zero credit consumption — OpenRouter
-    // selects the actual free model internally and returns it in response.model.
-    if (isFreeModelSentinel(model)) {
-      return {
-        client: createOpenAIChatClient(wrapWithFreeModelTracking(rawClient)),
-        model: FREE_MODEL_ROUTE,
-        miniModel: FREE_MODEL_ROUTE,
-        providerUsed: "user_custom_api",
-      };
-    }
+    // Resolve legacy sentinel for backward compatibility:
+    // users who have "openrouter/auto" saved in DB are mapped to "openrouter/free"
+    const resolvedModel = isFreeModelSentinel(model) ? FREE_MODEL_ROUTE : model;
 
-    // All other OpenRouter models — unchanged path
+    // Apply wrapper based on resolved model:
+    // - openrouter/free  → tracking wrapper (captures response.model for UI display)
+    // - any other model  → fallback wrapper (retries with openrouter/free if model is removed)
+    const wrappedClient =
+      resolvedModel === FREE_MODEL_ROUTE
+        ? wrapWithFreeModelTracking(rawClient)
+        : wrapWithFallbackToFree(rawClient, resolvedModel);
+
     return {
-      client: createOpenAIChatClient(rawClient),
-      model,
-      miniModel: model,
+      client: createOpenAIChatClient(wrappedClient),
+      model: resolvedModel,
+      miniModel: resolvedModel,
       providerUsed: "user_custom_api",
     };
   }

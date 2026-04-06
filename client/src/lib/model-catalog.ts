@@ -20,6 +20,8 @@ export interface ModelOption {
   label: string;
   /** Optional note shown as a tooltip or sub-label in the UI */
   note?: string;
+  /** Optional group name — used by the OpenRouter provider to render <SelectGroup> sections */
+  group?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,12 +50,23 @@ export const ADMIN_MODEL_CATALOG: Record<AdminAIProvider, ModelOption[]> = {
     { id: "gemini-2.5-flash-lite",         label: "Gemini 2.5 Flash Lite" },
   ],
   openrouter: [
-    { id: "openai/gpt-5.4",                       label: "GPT-5.4" },
-    { id: "openai/gpt-5.4-mini",                  label: "GPT-5.4 Mini" },
-    { id: "anthropic/claude-opus-4-6",            label: "Claude Opus 4.6" },
-    { id: "google/gemini-3.1-pro-preview",        label: "Gemini 3.1 Pro (Preview)" },
-    { id: "google/gemini-3.1-flash-lite-preview", label: "Gemini 3.1 Flash Lite (Preview)" },
-    { id: "openrouter/auto", label: "نماذج مجانية (تلقائي) - Free Auto", note: "يتم اختيار النموذج المجاني تلقائياً بناءً على التوفر العالمي" },
+    // ── Group 1: Auto Free ────────────────────────────────────────────────────
+    {
+      id: "openrouter/free",
+      label: "توجيه مجاني تلقائي",
+      group: "تلقائي مجاني",
+      note: "OpenRouter يختار أفضل نموذج مجاني متاح تلقائياً",
+    },
+    // ── Group 2: Specific Free ────────────────────────────────────────────────
+    { id: "qwen/qwen3.6-plus:free",       label: "Qwen 3.6 Plus",      group: "مجاني محدد" },
+    { id: "stepfun/step-3.5-flash:free",  label: "Step 3.5 Flash",     group: "مجاني محدد" },
+    { id: "nvidia/nemotron-3-super:free", label: "Nemotron 3 Super",   group: "مجاني محدد" },
+    { id: "arcee-ai/trinity-mini:free",   label: "Trinity Mini",       group: "مجاني محدد" },
+    // ── Group 3: Economic Paid ────────────────────────────────────────────────
+    { id: "openai/gpt-4.1-nano",                label: "GPT-4.1 Nano",      group: "مدفوع رخيص" },
+    { id: "google/gemma-3-27b-it:floor",        label: "Gemma 3 27B",       group: "مدفوع رخيص" },
+    { id: "mistralai/mistral-small-3.2:floor",  label: "Mistral Small 3.2", group: "مدفوع رخيص" },
+    { id: "deepseek/deepseek-r1:floor",         label: "DeepSeek R1",       group: "مدفوع رخيص" },
   ],
 };
 

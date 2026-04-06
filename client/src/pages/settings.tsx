@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -104,7 +104,7 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.7.5";
+  const appVersion = versionData?.version || "2.7.6";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
@@ -118,7 +118,7 @@ export default function Settings() {
     enabled:
       localSettings.ai_provider === "custom" &&
       localSettings.ai_custom_provider === "openrouter" &&
-      localSettings.ai_custom_model === "openrouter/auto",
+      localSettings.ai_custom_model === "openrouter/free",
     refetchInterval: 5 * 60 * 1000,
     staleTime: 2 * 60 * 1000,
   });
@@ -384,7 +384,7 @@ export default function Settings() {
       }
     },
     onError: (err: any) => {
-      const isFreeModel = localSettings.ai_custom_model === "openrouter/auto";
+      const isFreeModel = localSettings.ai_custom_model === "openrouter/free";
       const msg: string = err?.message || "";
       if (isFreeModel && (msg.includes("429") || msg.includes("503") || msg.includes("No models") || msg.includes("rate limit"))) {
         toast({
@@ -1435,18 +1435,31 @@ export default function Settings() {
                         >
                           <SelectTrigger><SelectValue placeholder="اختر نموذجاً…" /></SelectTrigger>
                           <SelectContent>
-                            {modelList.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.label}
-                              </SelectItem>
-                            ))}
+                            {modelList.some((m) => m.group)
+                              ? Object.entries(
+                                  modelList.reduce<Record<string, typeof modelList>>((acc, m) => {
+                                    const g = m.group ?? "أخرى";
+                                    (acc[g] ??= []).push(m);
+                                    return acc;
+                                  }, {}),
+                                ).map(([groupName, models]) => (
+                                  <SelectGroup key={groupName}>
+                                    <SelectLabel>{groupName}</SelectLabel>
+                                    {models.map((m) => (
+                                      <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                ))
+                              : modelList.map((m) => (
+                                  <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                                ))}
                           </SelectContent>
                         </Select>
                         <p className="text-xs text-muted-foreground" dir="ltr">{selectedModel}</p>
                       </div>
 
                       {/* Free model dynamic routing info banner */}
-                      {selectedModel === "openrouter/auto" && (
+                      {selectedModel === "openrouter/free" && (
                         <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-1.5">
                           <div className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4 text-blue-400 shrink-0" />

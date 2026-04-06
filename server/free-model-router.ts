@@ -113,3 +113,41 @@ export async function runFreeModelHealthCheck(): Promise<void> {
     .logFreeModelHealthCheck({ activeModel: FREE_MODEL_ROUTE, checkResult, reason })
     .catch((e) => log(`[FreeRouter] Failed to log health check result: ${e}`, "free-router"));
 }
+
+// ─── Model Unavailability Detection ──────────────────────────────────────────
+// Determines if an OpenRouter error means the model is gone/invalid (vs. a
+// transient error like rate-limiting or network failure).
+export function isModelUnavailableError(err: any): boolean {
+  const msg = (err?.message || String(err)).toLowerCase();
+  const status = err?.status ?? err?.statusCode ?? 0;
+  return (
+    (status === 400 || status === 404) &&
+    (msg.includes("model") || msg.includes("not found") || msg.includes("invalid"))
+  );
+}
+
+// ─── Fallback-to-Free Wrapper ─────────────────────────────────────────────────
+// Applied to OpenRouter calls using specific (non-free) models.
+// If OpenRouter rejects the model as unavailable, retries once with
+// FREE_MODEL_ROUTE ("openrouter/free") so the user still gets a response.
+// All other errors (rate limits, auth, etc.) are re-thrown unchanged.
+export function wrapWithFallbackToFree(rawClient: OpenAI, originalModel: string): OpenAI {
+  const original = rawClient.chat.completions.create.bind(rawClient.chat.completions);
+
+  rawClient.chat.completions.create = async function (body: any, options?: any): Promise<any> {
+    try {
+      return await original(body, options);
+    } catch (err: any) {
+      if (isModelUnavailableError(err)) {
+        log(
+          `[FreeRouter] Model "${originalModel}" unavailable — falling back to ${FREE_MODEL_ROUTE}`,
+          "free-router",
+        );
+        return await original({ ...body, model: FREE_MODEL_ROUTE }, options);
+      }
+      throw err;
+    }
+  } as any;
+
+  return rawClient;
+}

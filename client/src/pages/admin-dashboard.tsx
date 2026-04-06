@@ -32,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -685,11 +685,28 @@ function SystemSettingsPanel() {
               >
                 <SelectTrigger><SelectValue placeholder="اختر نموذجاً…" /></SelectTrigger>
                 <SelectContent>
-                  {(ADMIN_MODEL_CATALOG[localFikriConfig.aiProvider] ?? []).map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const list = ADMIN_MODEL_CATALOG[localFikriConfig.aiProvider] ?? [];
+                    if (list.some((m) => m.group)) {
+                      return Object.entries(
+                        list.reduce<Record<string, typeof list>>((acc, m) => {
+                          const g = m.group ?? "أخرى";
+                          (acc[g] ??= []).push(m);
+                          return acc;
+                        }, {}),
+                      ).map(([groupName, models]) => (
+                        <SelectGroup key={groupName}>
+                          <SelectLabel>{groupName}</SelectLabel>
+                          {models.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ));
+                    }
+                    return list.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground" dir="ltr">
