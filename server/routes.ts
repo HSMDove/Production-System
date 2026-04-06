@@ -15,7 +15,7 @@ import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-
 import { getSchedulerStatus } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
 import { FIKRI_GATEWAY_SETTING_KEY, defaultFikriGatewayConfig, fikriGatewayConfigSchema, getFikriGatewayConfig, saveFikriGatewayConfig } from "./fikri-gateway";
-import { resolveFreeModel, KNOWN_FREE_MODELS } from "./free-model-router";
+import { FREE_MODEL_ROUTE, ACTIVE_FREE_MODEL_KEY } from "./free-model-router";
 import { z } from "zod";
 import {
   insertFolderSchema,
@@ -4870,17 +4870,22 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
   app.get("/api/version", async (_req, res) => {
     try {
       const setting = await storage.getSystemSetting("app_version");
-      res.json({ version: setting?.value || "2.7.4" });
+      res.json({ version: setting?.value || "2.7.5" });
     } catch {
-      res.json({ version: "2.7.4" });
+      res.json({ version: "2.7.5" });
     }
   });
 
   // ─── Free Model Status (public) ───────────────────────────────────────────
+  // routingModel: always "openrouter/free" (what we send to OpenRouter)
+  // lastUsedModel: the actual model OpenRouter chose on the last successful call
   app.get("/api/free-model-status", async (_req, res) => {
     try {
-      const activeModel = await resolveFreeModel();
-      res.json({ activeModel, knownModels: KNOWN_FREE_MODELS });
+      const setting = await storage.getSystemSetting(ACTIVE_FREE_MODEL_KEY);
+      res.json({
+        routingModel: FREE_MODEL_ROUTE,
+        lastUsedModel: setting?.value?.trim() || null,
+      });
     } catch {
       res.status(500).json({ error: "فشل في قراءة حالة النموذج المجاني" });
     }

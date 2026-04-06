@@ -104,7 +104,7 @@ export default function Settings() {
 
   const { data: settings, isLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: versionData } = useQuery<{ version: string }>({ queryKey: ["/api/version"] });
-  const appVersion = versionData?.version || "2.7.4";
+  const appVersion = versionData?.version || "2.7.5";
   const { data: platformIds } = useQuery<PlatformIdEntry[]>({ queryKey: ["/api/auth/platform-ids"] });
   const { data: trainingSamples } = useQuery<any[]>({ queryKey: ["/api/training/samples"] });
   const { data: integrationChannels } = useQuery<IntegrationChannelEntry[]>({ queryKey: ["/api/integrations/channels"] });
@@ -113,7 +113,7 @@ export default function Settings() {
   const { data: smartFiltersData } = useQuery<SmartFiltersConfig>({ queryKey: ["/api/settings/smart-filters"] });
 
   // Free model status — fetched only when user has openrouter/auto selected
-  const { data: freeModelStatus } = useQuery<{ activeModel: string; knownModels: string[] }>({
+  const { data: freeModelStatus } = useQuery<{ routingModel: string; lastUsedModel: string | null }>({
     queryKey: ["/api/free-model-status"],
     enabled:
       localSettings.ai_provider === "custom" &&
@@ -1454,10 +1454,14 @@ export default function Settings() {
                               النماذج المجانية يتم تعيينها تلقائياً بناءً على التوفر العالمي
                             </p>
                           </div>
-                          {freeModelStatus?.activeModel && (
+                          <p className="text-xs text-muted-foreground pr-6" dir="ltr">
+                            يتم الإرسال دائماً عبر:{" "}
+                            <span className="font-mono text-blue-400">{freeModelStatus?.routingModel ?? "openrouter/free"}</span>
+                          </p>
+                          {freeModelStatus?.lastUsedModel && (
                             <p className="text-xs text-muted-foreground pr-6" dir="ltr">
-                              النموذج النشط:{" "}
-                              <span className="font-mono text-blue-400">{freeModelStatus.activeModel}</span>
+                              آخر نموذج استُخدم:{" "}
+                              <span className="font-mono text-blue-400">{freeModelStatus.lastUsedModel}</span>
                             </p>
                           )}
                         </div>

@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import type { Content, InsertIdea, PromptTemplate, SentimentType, ApiRequestType, ApiProviderType } from "@shared/schema";
 import { storage } from "./storage";
 import { getFikriGatewayConfig, type FikriGatewayConfig } from "./fikri-gateway";
-import { isFreeModelSentinel, resolveFreeModel, wrapWithFreeModelTracking } from "./free-model-router";
+import { isFreeModelSentinel, wrapWithFreeModelTracking, FREE_MODEL_ROUTE } from "./free-model-router";
 
 type ChatCompletionMessage = {
   role: "system" | "user" | "assistant" | "developer" | "tool" | "function";
@@ -314,13 +314,14 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
 
     const rawClient = new OpenAI(clientOpts);
 
-    // FREE MODEL ROUTING: intercept the sentinel and resolve to an active :free model
+    // FREE MODEL ROUTING: intercept the sentinel and use OpenRouter's built-in
+    // free-tier routing ID. This guarantees zero credit consumption — OpenRouter
+    // selects the actual free model internally and returns it in response.model.
     if (isFreeModelSentinel(model)) {
-      const freeModel = await resolveFreeModel();
       return {
         client: createOpenAIChatClient(wrapWithFreeModelTracking(rawClient)),
-        model: freeModel,
-        miniModel: freeModel,
+        model: FREE_MODEL_ROUTE,
+        miniModel: FREE_MODEL_ROUTE,
         providerUsed: "user_custom_api",
       };
     }
