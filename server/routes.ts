@@ -44,7 +44,8 @@ import {
   parseLandingPageContent,
   type LandingPageContent,
 } from "@shared/landing-page-content";
-import { generateLandingHtml } from "./landing-template";
+import { generateLandingHtml, generateSimplePageHtml, simpleMarkdownToHtml } from "./landing-template";
+import { getPublicNewsCache, refreshPublicNewsCache, type PublicNewsItem } from "./public-feed-cache";
 
 type AssistantChatRequest = {
   message: string;
@@ -728,18 +729,306 @@ export async function registerRoutes(
   });
 
   // ─── Landing Page (server-rendered HTML for SEO / AdSense) ──────────────
-  // Always serves the landing page — no session branching so Googlebot and
-  // human reviewers always see the same content (required for AdSense policy).
-  // Authenticated users are redirected client-side via the nasaq-authed flag.
   app.get("/", async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const content = await getLandingPageContent();
+      const [content, techNews, gamingNews, topNews] = await Promise.all([
+        getLandingPageContent(),
+        getPublicNewsCache("tech"),
+        getPublicNewsCache("gaming"),
+        getPublicNewsCache("top"),
+      ]);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(generateLandingHtml(content));
+      res.send(generateLandingHtml(content, { tech: techNews, gaming: gamingNews, top: topNews }));
     } catch (error) {
       Sentry.captureException(error);
       next();
     }
+  });
+
+  // ─── Public News Feed API ─────────────────────────────────────────────────
+  app.get("/api/public/news/:category", async (req: Request, res: Response) => {
+    const cat = req.params.category as "tech" | "gaming" | "top";
+    if (!["tech", "gaming", "top"].includes(cat))
+      return res.status(400).json({ error: "Invalid category. Use tech, gaming, or top." });
+    const items = await getPublicNewsCache(cat);
+    res.json({ items, category: cat, count: items.length });
+  });
+
+  app.post("/api/admin/public-news/refresh", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      await refreshPublicNewsCache();
+      res.json({ ok: true, message: "تم تحديث ذاكرة التخزين المؤقت للأخبار العامة." });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Refresh failed." });
+    }
+  });
+
+  // ─── Static Public Pages ──────────────────────────────────────────────────
+  app.get("/about", (_req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(generateSimplePageHtml({
+      title: "من نحن",
+      description: "تعرّف على منصة نَسَق — المنصة الذكية لمنشئي المحتوى العربي.",
+      bodyHtml: `
+        <h1>من نحن</h1>
+        <p>
+          <strong>نَسَق</strong> هي منصة متكاملة تُمكّن منشئي المحتوى العرب من متابعة المصادر الأجنبية
+          وترجمتها وتلخيصها تلقائياً بالذكاء الاصطناعي، مع توليد أفكار فيديوهات احترافية جاهزة للتنفيذ.
+        </p>
+        <h2>مهمتنا</h2>
+        <p>
+          نؤمن بأن المحتوى العربي يستحق أدوات تقنية من الطراز الأول. هدفنا هو تقليص الفجوة بين
+          منشئ المحتوى العربي والمصادر العالمية، بحيث يصل الإلهام إليك — مترجماً، مُلخَّصاً، وجاهزاً
+          للتحويل إلى محتوى يُدهش جمهورك.
+        </p>
+        <h2>ما تقدّمه نَسَق</h2>
+        <ul>
+          <li><strong>الكاشف (Al-Kashaf):</strong> يكتشف أفضل المصادر الأجنبية لأي مجال تختاره.</li>
+          <li><strong>العرض الذكي:</strong> يترجم ويُلخص المحتوى إلى العربية بجودة احترافية.</li>
+          <li><strong>فِكري:</strong> المساعد الذكي الذي يولّد أفكار الفيديوهات والسكريبتات.</li>
+          <li><strong>التقويم والتحليلات:</strong> تنظيم خطة المحتوى وتتبع الأداء.</li>
+        </ul>
+        <h2>التواصل معنا</h2>
+        <p>
+          نُسعد بسماع ملاحظاتك واقتراحاتك.
+          راسلنا عبر صفحة <a href="/contact" style="text-decoration:underline">تواصل معنا</a>.
+        </p>
+      `,
+    }));
+  });
+
+  app.get("/contact", (_req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(generateSimplePageHtml({
+      title: "تواصل معنا",
+      description: "تواصل مع فريق نَسَق — نحن هنا للمساعدة.",
+      bodyHtml: `
+        <h1>تواصل معنا</h1>
+        <p>يسعدنا تلقّي استفساراتك واقتراحاتك وتقاريرك عن الأخطاء. يمكنك التواصل معنا عبر:</p>
+        <h2>البريد الإلكتروني</h2>
+        <p>
+          <a href="mailto:hello@nasaqapp.net" style="font-weight:900;text-decoration:underline">
+            hello@nasaqapp.net
+          </a>
+        </p>
+        <h2>الدعم الفني</h2>
+        <p>للمشكلات التقنية أو اقتراحات الميزات الجديدة، راسلنا على البريد أعلاه مع وصف واضح للمشكلة.</p>
+        <h2>وقت الاستجابة</h2>
+        <p>نسعى للردّ على جميع الرسائل خلال 24-48 ساعة عمل.</p>
+      `,
+    }));
+  });
+
+  app.get("/terms", (_req, res) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(generateSimplePageHtml({
+      title: "الشروط والأحكام",
+      description: "شروط وأحكام استخدام منصة نَسَق.",
+      bodyHtml: `
+        <h1>الشروط والأحكام</h1>
+        <p>آخر تحديث: ${new Date().getFullYear()}</p>
+        <p>
+          باستخدامك لمنصة نَسَق ("المنصة") فأنت توافق على الالتزام بهذه الشروط والأحكام.
+          يُرجى قراءتها بعناية قبل الاستخدام.
+        </p>
+        <h2>١. قبول الشروط</h2>
+        <p>
+          يُشكّل استخدامك للمنصة موافقةً صريحة منك على الالتزام بهذه الشروط.
+          إن لم توافق، يُرجى التوقف عن استخدام المنصة.
+        </p>
+        <h2>٢. وصف الخدمة</h2>
+        <p>
+          تُقدّم نَسَق أدوات لإدارة مصادر المحتوى، وترجمة المحتوى الأجنبي، وتوليد أفكار المحتوى.
+          نحتفظ بالحق في تعديل الخدمات أو إيقافها في أي وقت.
+        </p>
+        <h2>٣. حساب المستخدم</h2>
+        <p>
+          أنت مسؤول عن الحفاظ على سرية معلومات حسابك وعن جميع الأنشطة التي تتم بموجبه.
+          تُخطرنا فوراً عند اكتشاف أي استخدام غير مصرّح به.
+        </p>
+        <h2>٤. المحتوى والاستخدام المقبول</h2>
+        <p>
+          يُحظر استخدام المنصة لأغراض غير مشروعة، أو لنشر محتوى مسيء أو مضلّل.
+          المنصة مخصصة للاستخدام الشخصي والمهني المشروع في إنتاج المحتوى.
+        </p>
+        <h2>٥. الخصوصية</h2>
+        <p>
+          نلتزم بحماية خصوصيتك وفق <a href="/privacy" style="text-decoration:underline">سياسة الخصوصية</a> الخاصة بنا.
+        </p>
+        <h2>٦. إخلاء المسؤولية</h2>
+        <p>
+          تُقدَّم المنصة "كما هي" دون ضمانات صريحة أو ضمنية. لا نتحمّل مسؤولية أي خسائر ناجمة
+          عن استخدام المنصة أو توقّفها.
+        </p>
+        <h2>٧. التعديلات</h2>
+        <p>
+          نحتفظ بالحق في تعديل هذه الشروط في أي وقت. سيُعدّ استمرارك في الاستخدام موافقةً على الشروط المحدّثة.
+        </p>
+        <h2>٨. التواصل</h2>
+        <p>
+          لأي استفسار بشأن هذه الشروط تواصل معنا على:
+          <a href="mailto:hello@nasaqapp.net" style="text-decoration:underline">hello@nasaqapp.net</a>
+        </p>
+      `,
+    }));
+  });
+
+  // ─── Articles (CMS) ───────────────────────────────────────────────────────
+
+  interface PublicArticle {
+    id: string;
+    slug: string;
+    title: string;
+    excerpt: string;
+    content: string; // markdown
+    category: string;
+    author: string;
+    publishedAt: string;
+    updatedAt: string;
+    published: boolean;
+  }
+
+  function escapeHtmlSafe(str: string): string {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  const ARTICLES_SETTING_KEY = "public_articles";
+
+  async function getArticles(): Promise<PublicArticle[]> {
+    try {
+      const s = await storage.getSystemSetting(ARTICLES_SETTING_KEY);
+      if (!s?.value) return [];
+      return (JSON.parse(s.value) as PublicArticle[]).filter((a) => a.published !== false);
+    } catch { return []; }
+  }
+
+  async function getAllArticlesAdmin(): Promise<PublicArticle[]> {
+    try {
+      const s = await storage.getSystemSetting(ARTICLES_SETTING_KEY);
+      if (!s?.value) return [];
+      return JSON.parse(s.value) as PublicArticle[];
+    } catch { return []; }
+  }
+
+  async function saveArticles(articles: PublicArticle[]): Promise<void> {
+    await storage.upsertSystemSetting(ARTICLES_SETTING_KEY, JSON.stringify(articles), "مقالات عامة لصفحة الهبوط");
+  }
+
+  app.get("/articles", async (_req, res) => {
+    const articles = await getArticles();
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    const cardsHtml = articles.length
+      ? articles.map((a) => `
+          <article class="art-card">
+            <span class="art-cat">${escapeHtmlSafe(a.category)}</span>
+            <h2 class="art-title"><a href="/articles/${escapeHtmlSafe(a.slug)}">${escapeHtmlSafe(a.title)}</a></h2>
+            <p class="art-excerpt">${escapeHtmlSafe(a.excerpt)}</p>
+            <div class="art-meta">
+              <span>${escapeHtmlSafe(a.author)}</span>
+              <span>·</span>
+              <span>${new Date(a.publishedAt).toLocaleDateString("ar-SA")}</span>
+            </div>
+            <a href="/articles/${escapeHtmlSafe(a.slug)}" class="art-readmore">اقرأ المقال ←</a>
+          </article>`).join("")
+      : `<p style="color:var(--muted,#666);text-align:center;padding:3rem 0">لا توجد مقالات حتى الآن — ترقّب المحتوى القادم قريباً.</p>`;
+    res.send(generateSimplePageHtml({
+      title: "المقالات",
+      description: "مقالات تقنية ومحتوى محرري متجدد من فريق نَسَق.",
+      bodyHtml: `
+        <style>
+          .art-card { border:3px solid #0d0d0d; border-radius:20px; padding:1.5rem; margin-bottom:1.5rem; background:#fff; box-shadow:6px 6px 0 0 rgba(0,0,0,0.85); transition:transform .15s,box-shadow .15s; }
+          .art-card:hover { transform:translate(-3px,-3px); box-shadow:9px 9px 0 0 rgba(0,0,0,0.88); }
+          .art-cat { display:inline-block; font-size:.72rem; font-weight:900; padding:.15rem .6rem; background:#f7cb46; border:2px solid #0d0d0d; border-radius:4px; margin-bottom:.7rem; }
+          .art-title { font-size:1.25rem; font-weight:900; letter-spacing:-.03em; margin-bottom:.6rem; }
+          .art-title a:hover { text-decoration:underline; }
+          .art-excerpt { color:#444; line-height:1.75; margin-bottom:.8rem; }
+          .art-meta { font-size:.8rem; color:#888; display:flex; gap:.5rem; margin-bottom:.8rem; }
+          .art-readmore { font-size:.88rem; font-weight:900; text-decoration:underline; }
+        </style>
+        <h1>المقالات</h1>
+        <p style="color:#666;margin-bottom:2rem">محتوى محرري متجدد حول التقنية وصناعة المحتوى من فريق نَسَق.</p>
+        ${cardsHtml}
+      `,
+    }));
+  });
+
+  app.get("/articles/:slug", async (req, res) => {
+    const articles = await getArticles();
+    const article = articles.find((a) => a.slug === req.params.slug);
+    if (!article) {
+      res.status(404);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(generateSimplePageHtml({ title: "المقال غير موجود", bodyHtml: "<h1>٤٠٤ — المقال غير موجود</h1><p><a href='/articles'>عودة إلى المقالات</a></p>" }));
+    }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(generateSimplePageHtml({
+      title: article.title,
+      description: article.excerpt,
+      bodyHtml: `
+        <style>
+          .article-body h2{font-family:Cairo,serif;font-size:1.4rem;font-weight:900;margin:1.8rem 0 .6rem;letter-spacing:-.03em}
+          .article-body h3{font-size:1.1rem;font-weight:900;margin:1.4rem 0 .4rem}
+          .article-body p{margin-bottom:1rem;line-height:1.9;color:#222}
+          .article-body ul,.article-body ol{padding-right:1.5rem;margin-bottom:1rem}
+          .article-body li{margin-bottom:.4rem;line-height:1.75;color:#222}
+          .article-body strong{font-weight:900;color:#0d0d0d}
+          .article-body a{text-decoration:underline;font-weight:700}
+          .article-meta{font-size:.8rem;color:#888;margin-bottom:2rem;display:flex;gap:1rem;flex-wrap:wrap}
+          .article-cat{display:inline-block;font-size:.72rem;font-weight:900;padding:.15rem .6rem;background:#f7cb46;border:2px solid #0d0d0d;border-radius:4px;margin-bottom:.8rem}
+        </style>
+        <a href="/articles" style="font-size:.85rem;font-weight:900;text-decoration:underline">← جميع المقالات</a>
+        <div style="margin-top:1.5rem">
+          <span class="article-cat">${escapeHtmlSafe(article.category)}</span>
+          <h1 style="margin-top:.5rem">${escapeHtmlSafe(article.title)}</h1>
+          <div class="article-meta">
+            <span>بقلم ${escapeHtmlSafe(article.author)}</span>
+            <span>·</span>
+            <span>${new Date(article.publishedAt).toLocaleDateString("ar-SA")}</span>
+          </div>
+          <div class="article-body">${simpleMarkdownToHtml(article.content)}</div>
+        </div>
+      `,
+    }));
+  });
+
+  // Article admin CRUD
+  app.get("/api/admin/articles", requireAdmin, async (_req, res) => {
+    res.json(await getAllArticlesAdmin());
+  });
+
+  app.post("/api/admin/articles", requireAdmin, async (req, res) => {
+    const { title, slug, excerpt, content, category, author, published = true } = req.body || {};
+    if (!title || !slug || !content) return res.status(400).json({ error: "title, slug, content are required" });
+    const articles = await getAllArticlesAdmin();
+    if (articles.find((a) => a.slug === slug)) return res.status(409).json({ error: "Slug already exists" });
+    const now = new Date().toISOString();
+    const article: PublicArticle = { id: `art_${Date.now()}`, slug, title, excerpt: excerpt || "", content, category: category || "عام", author: author || "فريق نَسَق", publishedAt: now, updatedAt: now, published };
+    articles.push(article);
+    await saveArticles(articles);
+    res.status(201).json(article);
+  });
+
+  app.put("/api/admin/articles/:id", requireAdmin, async (req, res) => {
+    const articles = await getAllArticlesAdmin();
+    const idx = articles.findIndex((a) => a.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: "Article not found" });
+    articles[idx] = { ...articles[idx], ...req.body, id: articles[idx].id, updatedAt: new Date().toISOString() };
+    await saveArticles(articles);
+    res.json(articles[idx]);
+  });
+
+  app.delete("/api/admin/articles/:id", requireAdmin, async (req, res) => {
+    const articles = await getAllArticlesAdmin();
+    const filtered = articles.filter((a) => a.id !== req.params.id);
+    if (filtered.length === articles.length) return res.status(404).json({ error: "Article not found" });
+    await saveArticles(filtered);
+    res.json({ ok: true });
   });
 
   // ─── Al-Kashaf Public Demo ─────────────────────────────────────────────
@@ -756,11 +1045,11 @@ export async function registerRoutes(
 
   const SCOUT_SOURCES: Record<string, Array<{ name: string; type: string; description: string; url: string }>> = {
     ai: [
-      { name: "MIT Technology Review", type: "RSS", description: "تغطية أكاديمية متعمقة للذكاء الاصطناعي والتقنيات الناشئة من معهد ماساتشوستس للتقنية.", url: "https://www.technologyreview.com/feed/" },
+      { name: "MIT Technology Review", type: "RSS", description: "تغطية أكاديمية متعمقة للذكاء الاصطناعي والتقنيات الناشئة.", url: "https://www.technologyreview.com/feed/" },
       { name: "Andrej Karpathy", type: "YouTube", description: "شرح معمّق لنماذج LLM وتقنيات التعلم العميق من أحد مؤسسي OpenAI.", url: "https://www.youtube.com/@andrejkarpathy" },
       { name: "The Verge — AI", type: "RSS", description: "أخبار الذكاء الاصطناعي من منظور تقني وثقافي معاصر.", url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml" },
-      { name: "Lex Fridman Podcast", type: "YouTube", description: "حوارات مع قادة الذكاء الاصطناعي العالميين: Altman وBengio وغيرهم.", url: "https://www.youtube.com/@lexfridman" },
-      { name: "Hugging Face Blog", type: "RSS", description: "نماذج مفتوحة المصدر وأبحاث تقنية من أبرز منصات AI في العالم.", url: "https://huggingface.co/blog/feed.xml" },
+      { name: "Lex Fridman Podcast", type: "YouTube", description: "حوارات مع قادة الذكاء الاصطناعي العالميين.", url: "https://www.youtube.com/@lexfridman" },
+      { name: "Hugging Face Blog", type: "RSS", description: "نماذج مفتوحة المصدر وأبحاث تقنية من أبرز منصات AI.", url: "https://huggingface.co/blog/feed.xml" },
     ],
     youtube: [
       { name: "Creator Insider", type: "YouTube", description: "القناة الرسمية لفريق يوتيوب — تحديثات الخوارزمية وأدوات صانعي المحتوى.", url: "https://www.youtube.com/@CreatorInsider" },
@@ -780,32 +1069,235 @@ export async function registerRoutes(
       { name: "CoinDesk", type: "RSS", description: "أخبار العملات الرقمية والبلوك تشين والتمويل اللامركزي.", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
       { name: "Andreas Antonopoulos", type: "YouTube", description: "شرح تقني لتقنية البلوك تشين وفلسفة اللامركزية.", url: "https://www.youtube.com/@aantonop" },
       { name: "The Block", type: "RSS", description: "صحافة استقصائية في قطاع العملات الرقمية والتمويل.", url: "https://www.theblock.co/rss.xml" },
-      { name: "Bankless", type: "YouTube", description: "دليل شامل لعالم DeFi والعملات الرقمية للمبتدئين والمحترفين.", url: "https://www.youtube.com/@Bankless" },
+      { name: "Bankless", type: "YouTube", description: "دليل شامل لعالم DeFi والعملات الرقمية.", url: "https://www.youtube.com/@Bankless" },
       { name: "Decrypt", type: "RSS", description: "شرح مبسّط لأخبار بلوك تشين وNFT والعملات الرقمية.", url: "https://decrypt.co/feed" },
     ],
     marketing: [
       { name: "Neil Patel", type: "YouTube", description: "استراتيجيات السيو والتسويق الرقمي لزيادة حركة المرور.", url: "https://www.youtube.com/@neilpatel" },
-      { name: "Marketing School", type: "RSS", description: "دروس يومية قصيرة في التسويق الرقمي من Neil Patel وEric Siu.", url: "https://marketingschool.io/feed" },
+      { name: "Marketing School", type: "RSS", description: "دروس يومية قصيرة في التسويق الرقمي.", url: "https://marketingschool.io/feed" },
       { name: "HubSpot Blog", type: "RSS", description: "أدلة التسويق الداخلي وإدارة علاقات العملاء وتوليد الزبائن.", url: "https://blog.hubspot.com/marketing/rss.xml" },
       { name: "Seth Godin's Blog", type: "RSS", description: "أفكار استراتيجية في التسويق والريادة وبناء العلامات التجارية.", url: "https://seths.blog/feed.xml" },
       { name: "Social Media Examiner", type: "RSS", description: "استراتيجيات وسائل التواصل الاجتماعي للشركات والمبدعين.", url: "https://www.socialmediaexaminer.com/feed/" },
+    ],
+    gaming: [
+      { name: "IGN", type: "RSS", description: "أخبار الألعاب والمراجعات والعروض من أكبر موقع ألعاب في العالم.", url: "https://feeds.ign.com/ign/all" },
+      { name: "PC Gamer", type: "RSS", description: "أخبار ومراجعات ألعاب الكمبيوتر الشخصي.", url: "https://www.pcgamer.com/rss/" },
+      { name: "Videogamedunkey", type: "YouTube", description: "مراجعات ألعاب كوميدية وانتقادية بأسلوب فريد.", url: "https://www.youtube.com/@videogamedunkey" },
+      { name: "Rock Paper Shotgun", type: "RSS", description: "صحافة ألعاب الكمبيوتر الأعمق والأكثر انتقادية.", url: "https://www.rockpapershotgun.com/feed/news" },
+      { name: "Skill Up", type: "YouTube", description: "مراجعات ألعاب معمّقة وتحليلات موضوعية.", url: "https://www.youtube.com/@SkillUp" },
+    ],
+    sports: [
+      { name: "ESPN", type: "RSS", description: "أخبار الرياضة العالمية من المصدر الأشهر في الإعلام الرياضي.", url: "https://www.espn.com/espn/rss/news" },
+      { name: "BBC Sport", type: "RSS", description: "تغطية رياضية شاملة من كرة القدم حتى الألعاب الأولمبية.", url: "https://feeds.bbci.co.uk/sport/rss.xml" },
+      { name: "The Athletic", type: "RSS", description: "صحافة رياضية معمّقة وتحقيقات استقصائية.", url: "https://theathletic.com/rss-feed/" },
+      { name: "Copa90", type: "YouTube", description: "محتوى كرة القدم العالمية من الشارع إلى الملاعب الكبرى.", url: "https://www.youtube.com/@Copa90" },
+      { name: "Sky Sports", type: "RSS", description: "أخبار الرياضة وآخر نتائج المباريات لحظة بلحظة.", url: "https://www.skysports.com/rss/12040" },
+    ],
+    health: [
+      { name: "Healthline", type: "RSS", description: "مقالات طبية موثّقة ونصائح صحية يومية.", url: "https://www.healthline.com/rss/health-news" },
+      { name: "Mayo Clinic News", type: "RSS", description: "تحديثات طبية من أحد أعرق مراكز الأبحاث الصحية.", url: "https://newsnetwork.mayoclinic.org/feed/" },
+      { name: "Doctor Mike", type: "YouTube", description: "طبيب يشرح الطب بأسلوب مبسّط وممتع.", url: "https://www.youtube.com/@DoctorMike" },
+      { name: "WebMD", type: "RSS", description: "معلومات صحية وطبية موثوقة للمستهلكين.", url: "https://rssfeeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC" },
+      { name: "Andrew Huberman", type: "YouTube", description: "علم الأعصاب والصحة والأداء البشري من ستانفورد.", url: "https://www.youtube.com/@hubermanlab" },
+    ],
+    science: [
+      { name: "Science Daily", type: "RSS", description: "أبرز الاكتشافات العلمية من جامعات ومراكز الأبحاث العالمية.", url: "https://www.sciencedaily.com/rss/all.xml" },
+      { name: "NASA News", type: "RSS", description: "آخر أخبار الفضاء والاكتشافات الكونية من وكالة ناسا.", url: "https://www.nasa.gov/news-release/feed/" },
+      { name: "Kurzgesagt", type: "YouTube", description: "شرح مرئي مذهل للعلوم والفيزياء والبيولوجيا.", url: "https://www.youtube.com/@kurzgesagt" },
+      { name: "New Scientist", type: "RSS", description: "أخبار العلوم والتقنية لمحبي الاستكشاف والمعرفة.", url: "https://www.newscientist.com/feed/home/" },
+      { name: "Veritasium", type: "YouTube", description: "تجارب علمية وأفكار تغيّر طريقة تفكيرك.", url: "https://www.youtube.com/@veritasium" },
+    ],
+    food: [
+      { name: "Serious Eats", type: "RSS", description: "علم الطهي والوصفات المعمّقة من أبرز مواقع الطعام.", url: "https://www.seriouseats.com/feeds/all" },
+      { name: "Bon Appétit", type: "RSS", description: "وصفات، مطاعم، وثقافة الطعام العالمية.", url: "https://www.bonappetit.com/feed/rss" },
+      { name: "Joshua Weissman", type: "YouTube", description: "وصفات احترافية بأسلوب ترفيهي وممتع.", url: "https://www.youtube.com/@JoshuaWeissman" },
+      { name: "Food52", type: "RSS", description: "وصفات وأفكار للطبخ المنزلي الإبداعي.", url: "https://food52.com/blog/feed" },
+      { name: "Ethan Chlebowski", type: "YouTube", description: "علم الطهي والتغذية بمنهج علمي دقيق.", url: "https://www.youtube.com/@EthanChlebowski" },
+    ],
+    travel: [
+      { name: "Lonely Planet", type: "RSS", description: "أدلة السفر والوجهات السياحية حول العالم.", url: "https://www.lonelyplanet.com/news/feed" },
+      { name: "Nomadic Matt", type: "RSS", description: "نصائح السفر بميزانية محدودة من مدوّن سفر شهير.", url: "https://www.nomadicmatt.com/travel-blog/feed/" },
+      { name: "Mark Wiens", type: "YouTube", description: "مغامرات الطعام والسفر حول العالم.", url: "https://www.youtube.com/@MarkWiens" },
+      { name: "Travel + Leisure", type: "RSS", description: "مجلة السفر الفاخر والوجهات الحصرية.", url: "https://www.travelandleisure.com/rss/all.xml" },
+      { name: "Lost LeBlanc", type: "YouTube", description: "فلوغات سفر عالية الجودة من وجهات نادرة.", url: "https://www.youtube.com/@LostLeBlanc" },
+    ],
+    entertainment: [
+      { name: "Variety", type: "RSS", description: "أخبار هوليوود والأفلام والمسلسلات والصناعة الترفيهية.", url: "https://variety.com/feed/" },
+      { name: "The Hollywood Reporter", type: "RSS", description: "صحافة ترفيهية متخصصة في الأفلام والتلفزيون.", url: "https://www.hollywoodreporter.com/feed/" },
+      { name: "Screen Rant", type: "RSS", description: "أخبار وتحليلات الأفلام والمسلسلات والكوميكس.", url: "https://screenrant.com/feed/" },
+      { name: "CinemaWins", type: "YouTube", description: "يسلّط الضوء على ما يميّز الأفلام بدلاً من انتقادها.", url: "https://www.youtube.com/@CinemaWins" },
+      { name: "IGN Entertainment", type: "RSS", description: "أخبار الترفيه الرقمي من الأفلام حتى المسلسلات.", url: "https://feeds.ign.com/ign/tv" },
+    ],
+    finance: [
+      { name: "Investopedia", type: "RSS", description: "شرح المفاهيم المالية والاستثمارية بأسلوب مبسّط.", url: "https://www.investopedia.com/feedbuilder/feed/getfeed?feedName=rss_headline" },
+      { name: "Bloomberg Markets", type: "RSS", description: "أخبار الأسواق المالية العالمية والاقتصاد الكلي.", url: "https://feeds.bloomberg.com/markets/news.rss" },
+      { name: "Andrei Jikh", type: "YouTube", description: "الاستثمار والمال الشخصي والحرية المالية.", url: "https://www.youtube.com/@AndreiJikh" },
+      { name: "The Motley Fool", type: "RSS", description: "توصيات استثمارية وتحليلات أسهم للمستثمر الفردي.", url: "https://www.fool.com/a/feeds/foolwatch/headlines-all.aspx" },
+      { name: "Graham Stephan", type: "YouTube", description: "المال الشخصي والعقارات والاستثمار للجيل الشاب.", url: "https://www.youtube.com/@GrahamStephan" },
+    ],
+    automotive: [
+      { name: "Car and Driver", type: "RSS", description: "مراجعات السيارات والأخبار والمقارنات التقنية.", url: "https://www.caranddriver.com/rss/all.xml/" },
+      { name: "Motor Trend", type: "RSS", description: "أحدث السيارات والاختبارات والتقارير التقنية.", url: "https://www.motortrend.com/feeds/newsrss.xml" },
+      { name: "Doug DeMuro", type: "YouTube", description: "مراجعات سيارات فريدة بتفاصيل غير مسبوقة.", url: "https://www.youtube.com/@DougDeMuro" },
+      { name: "Driving.ca", type: "RSS", description: "أخبار السيارات والتقنيات الحديثة في صناعة السيارات.", url: "https://driving.ca/feed" },
+      { name: "Throttle House", type: "YouTube", description: "اختبارات سيارات بأسلوب جاد وممتع في آنٍ واحد.", url: "https://www.youtube.com/@ThrottleHouse" },
+    ],
+    environment: [
+      { name: "The Guardian — Environment", type: "RSS", description: "تغطية البيئة والمناخ والاستدامة من مصدر موثوق.", url: "https://www.theguardian.com/environment/rss" },
+      { name: "Yale Environment 360", type: "RSS", description: "تحليلات معمّقة للقضايا البيئية والمناخية.", url: "https://e360.yale.edu/feed" },
+      { name: "Our Changing Climate", type: "YouTube", description: "محتوى مرئي عن التغير المناخي والحلول المستدامة.", url: "https://www.youtube.com/@OurChangingClimate" },
+      { name: "Inside Climate News", type: "RSS", description: "صحافة استقصائية متخصصة في شؤون المناخ والطاقة.", url: "https://insideclimatenews.org/feed/" },
+      { name: "Sustainable Human", type: "YouTube", description: "رؤى إنسانية حول العلاقة بين الإنسان والطبيعة.", url: "https://www.youtube.com/@SustainableHuman" },
+    ],
+    education: [
+      { name: "Edutopia", type: "RSS", description: "أفضل ممارسات التعليم والتقنيات التربوية الحديثة.", url: "https://www.edutopia.org/feeds/blog-posts/topic/all-topics" },
+      { name: "Khan Academy Blog", type: "RSS", description: "موارد تعليمية مجانية وأخبار التعليم الرقمي.", url: "https://blog.khanacademy.org/feed/" },
+      { name: "TED-Ed", type: "YouTube", description: "دروس متحركة ومحاضرات تعليمية قصيرة ومؤثرة.", url: "https://www.youtube.com/@TEDEd" },
+      { name: "MIT OpenCourseWare", type: "YouTube", description: "محاضرات جامعية من MIT مجاناً عبر يوتيوب.", url: "https://www.youtube.com/@mitocw" },
+      { name: "CrashCourse", type: "YouTube", description: "دورات مبسّطة في كل المواد من التاريخ حتى الفيزياء.", url: "https://www.youtube.com/@crashcourse" },
+    ],
+    music: [
+      { name: "Pitchfork", type: "RSS", description: "مراجعات الموسيقى المستقلة والألبومات والأخبار الموسيقية.", url: "https://pitchfork.com/feed/feed-news/rss" },
+      { name: "Rolling Stone Music", type: "RSS", description: "أخبار الموسيقى والفنانين والتغطيات الاستعراضية.", url: "https://www.rollingstone.com/music/feed/" },
+      { name: "Rick Beato", type: "YouTube", description: "نظرية الموسيقى وتحليل الأغاني والمقابلات مع الفنانين.", url: "https://www.youtube.com/@RickBeato" },
+      { name: "Consequence of Sound", type: "RSS", description: "أخبار الموسيقى المستقلة والحفلات والمهرجانات.", url: "https://consequenceofsound.net/feed/" },
+      { name: "Adam Neely", type: "YouTube", description: "نظرية الموسيقى وجاز وتحليل موسيقي عميق.", url: "https://www.youtube.com/@AdamNeely" },
+    ],
+    film: [
+      { name: "IndieWire", type: "RSS", description: "أخبار السينما المستقلة والمهرجانات ومراجعات الأفلام.", url: "https://www.indiewire.com/feed" },
+      { name: "Roger Ebert Reviews", type: "RSS", description: "مراجعات سينمائية متعمقة من إرث روجر إيبرت.", url: "https://www.rogerebert.com/feed" },
+      { name: "Every Frame a Painting", type: "YouTube", description: "تحليل سينمائي مرئي يستكشف فن صناعة الأفلام.", url: "https://www.youtube.com/@everyframeapainting" },
+      { name: "Collider", type: "RSS", description: "أخبار الأفلام والمسلسلات والمقابلات الحصرية.", url: "https://collider.com/feed/" },
+      { name: "Nerdwriter1", type: "YouTube", description: "تحليلات ثقافية وسينمائية وفلسفية بأسلوب استثنائي.", url: "https://www.youtube.com/@Nerdwriter1" },
+    ],
+    islam: [
+      { name: "IslamQA", type: "RSS", description: "فتاوى وإجابات شرعية موثّقة من علماء معتمدين.", url: "https://islamqa.info/ar/feed" },
+      { name: "Yaqeen Institute", type: "RSS", description: "أبحاث إسلامية أكاديمية لمعالجة الشبهات وتعزيز اليقين.", url: "https://yaqeeninstitute.org/feed" },
+      { name: "Omar Suleiman", type: "YouTube", description: "محاضرات وخطب إسلامية ملهمة بالإنجليزية.", url: "https://www.youtube.com/@OmarSuleiman" },
+      { name: "Bayyinah Institute", type: "YouTube", description: "تدبّر القرآن الكريم وعلوم العربية مع نعمان علي خان.", url: "https://www.youtube.com/@bayyinah" },
+      { name: "SeekersGuidance", type: "RSS", description: "تعليم إسلامي منهجي عبر الإنترنت من علماء معتمدين.", url: "https://seekersguidance.org/feed/" },
+    ],
+    history: [
+      { name: "History.com", type: "RSS", description: "قصص تاريخية وحقائق مثيرة من أعماق الحضارات.", url: "https://www.history.com/.rss/full/" },
+      { name: "Smithsonian Magazine — History", type: "RSS", description: "تاريخ وثقافة وحضارات من منظور علمي موثّق.", url: "https://www.smithsonianmag.com/rss/history-archaeology/" },
+      { name: "Oversimplified", type: "YouTube", description: "التاريخ العالمي بأسلوب مضحك ومبسّط.", url: "https://www.youtube.com/@Oversimplified" },
+      { name: "Kings and Generals", type: "YouTube", description: "محتوى تاريخي عن الحروب والإمبراطوريات بجودة وثائقية.", url: "https://www.youtube.com/@KingsandGenerals" },
+      { name: "Dan Carlin — Hardcore History", type: "RSS", description: "بودكاست التاريخ الأشهر في العالم بأسلوب سردي مذهل.", url: "https://feeds.feedburner.com/dancarlin/history" },
+    ],
+    space: [
+      { name: "NASA News", type: "RSS", description: "آخر أخبار الفضاء والاكتشافات الكونية من ناسا.", url: "https://www.nasa.gov/news-release/feed/" },
+      { name: "SpaceX", type: "YouTube", description: "إطلاقات وأخبار SpaceX المباشرة.", url: "https://www.youtube.com/@SpaceX" },
+      { name: "Space.com", type: "RSS", description: "أخبار الفضاء والفلك واكتشافات الكون.", url: "https://www.space.com/feeds/all" },
+      { name: "Scott Manley", type: "YouTube", description: "شرح علم الفضاء والفيزياء الفلكية بأسلوب مبسّط.", url: "https://www.youtube.com/@ScottManley" },
+      { name: "Everyday Astronaut", type: "YouTube", description: "تغطية مفصّلة لإطلاق الصواريخ وصناعة الفضاء.", url: "https://www.youtube.com/@EverydayAstronaut" },
+    ],
+    photography: [
+      { name: "PetaPixel", type: "RSS", description: "أخبار التصوير الفوتوغرافي والكاميرات والتقنيات البصرية.", url: "https://petapixel.com/feed/" },
+      { name: "DPReview", type: "RSS", description: "مراجعات الكاميرات والعدسات الأكثر عمقاً في الإنترنت.", url: "https://www.dpreview.com/feeds/articles.xml" },
+      { name: "Mango Street", type: "YouTube", description: "دروس التصوير والإضاءة لصانعي المحتوى البصري.", url: "https://www.youtube.com/@MangoStreet" },
+      { name: "Tony & Chelsea Northrup", type: "YouTube", description: "اختبارات وإرشادات التصوير الاحترافي.", url: "https://www.youtube.com/@TonyNorthrup" },
+      { name: "Sean Tucker", type: "YouTube", description: "فلسفة التصوير وصناعة المحتوى البصري الإبداعي.", url: "https://www.youtube.com/@seantucker" },
+    ],
+    coding: [
+      { name: "CSS-Tricks", type: "RSS", description: "نصائح وتقنيات تطوير الويب من CSS وJavaScript.", url: "https://css-tricks.com/feed/" },
+      { name: "Smashing Magazine", type: "RSS", description: "مقالات تطوير الويب وتجربة المستخدم والتصميم.", url: "https://www.smashingmagazine.com/feed" },
+      { name: "Fireship", type: "YouTube", description: "دروس برمجة مكثّفة وسريعة بأسلوب جذّاب.", url: "https://www.youtube.com/@Fireship" },
+      { name: "Theo - t3.gg", type: "YouTube", description: "TypeScript وReact وأحدث توجّهات تطوير الويب.", url: "https://www.youtube.com/@t3dotgg" },
+      { name: "ThePrimeagen", type: "YouTube", description: "أداء البرمجة والأدوات والفلسفة التقنية.", url: "https://www.youtube.com/@ThePrimeagen" },
+    ],
+    business: [
+      { name: "Harvard Business Review", type: "RSS", description: "أبحاث وأفكار القيادة والإدارة والابتكار في الأعمال.", url: "https://hbr.org/rss" },
+      { name: "Inc. Magazine", type: "RSS", description: "أخبار الشركات الناشئة وريادة الأعمال والنمو.", url: "https://www.inc.com/rss" },
+      { name: "Y Combinator", type: "YouTube", description: "نصائح ريادة الأعمال والمقابلات مع مؤسسي الشركات الناشئة.", url: "https://www.youtube.com/@ycombinator" },
+      { name: "The Tim Ferriss Show", type: "RSS", description: "مقابلات مع قادة الأعمال والمستثمرين والمبدعين.", url: "https://tim.blog/feed/" },
+      { name: "Bloomberg Businessweek", type: "RSS", description: "تحليلات الأعمال والاقتصاد العالمي.", url: "https://feeds.bloomberg.com/businessweek/news.rss" },
+    ],
+    politics: [
+      { name: "Reuters World News", type: "RSS", description: "الأخبار السياسية الدولية من وكالة رويترز.", url: "https://feeds.reuters.com/reuters/worldNews" },
+      { name: "BBC World News", type: "RSS", description: "تغطية الأخبار السياسية العالمية من هيئة الإذاعة البريطانية.", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+      { name: "Al Jazeera English", type: "RSS", description: "تغطية الأحداث السياسية من منظور عالمي متوازن.", url: "https://www.aljazeera.com/xml/rss/all.xml" },
+      { name: "Foreign Policy", type: "RSS", description: "تحليلات السياسة الخارجية والشؤون الدولية.", url: "https://foreignpolicy.com/feed/" },
+      { name: "Vox World", type: "RSS", description: "شرح القضايا السياسية الدولية بأسلوب مبسّط.", url: "https://www.vox.com/rss/world/index.xml" },
+    ],
+    fashion: [
+      { name: "Vogue", type: "RSS", description: "أحدث صيحات الموضة والأزياء من أشهر مجلة في العالم.", url: "https://www.vogue.com/feed/rss" },
+      { name: "Business of Fashion", type: "RSS", description: "الجانب الاقتصادي والتجاري لصناعة الأزياء.", url: "https://www.businessoffashion.com/feed" },
+      { name: "The Style OG", type: "YouTube", description: "نصائح أناقة عصرية للرجال.", url: "https://www.youtube.com/@TheStyleOG" },
+      { name: "Harper's Bazaar", type: "RSS", description: "الموضة والجمال والثقافة من منظور راقٍ.", url: "https://www.harpersbazaar.com/rss/all.xml/" },
+      { name: "Justine Leconte", type: "YouTube", description: "أسرار الأناقة الفرنسية وبناء خزانة الملابس المثالية.", url: "https://www.youtube.com/@justineleconte" },
+    ],
+    parenting: [
+      { name: "Parents Magazine", type: "RSS", description: "نصائح الأبوة والأمومة وتربية الأطفال بشكل علمي.", url: "https://www.parents.com/feeds/all" },
+      { name: "Zero to Three", type: "RSS", description: "تطوّر الطفل في السنوات الأولى من أبحاث علمية.", url: "https://www.zerotothree.org/rss" },
+      { name: "Big Life Journal", type: "YouTube", description: "تربية الأطفال على عقلية النمو والثقة بالنفس.", url: "https://www.youtube.com/@BigLifeJournal" },
+      { name: "BabyCenter", type: "RSS", description: "دليل الحمل والولادة وتربية الأطفال.", url: "https://www.babycenter.com/rss" },
+      { name: "Child Mind Institute", type: "RSS", description: "الصحة النفسية للأطفال والمراهقين من متخصصين.", url: "https://childmind.org/feed/" },
     ],
     default: [
       { name: "TechCrunch", type: "RSS", description: "أخبار التقنية والشركات الناشئة والتمويل من أبرز المصادر العالمية.", url: "https://techcrunch.com/feed/" },
       { name: "Wired", type: "RSS", description: "التقنية والثقافة والمجتمع الرقمي من منظور استشرافي عميق.", url: "https://www.wired.com/feed/rss" },
       { name: "The Verge", type: "RSS", description: "أخبار التقنية والمنتجات الاستهلاكية والتأثير الثقافي.", url: "https://www.theverge.com/rss/index.xml" },
       { name: "Ars Technica", type: "RSS", description: "تغطية تقنية معمّقة تجمع العلوم والبرمجيات والأجهزة.", url: "https://feeds.arstechnica.com/arstechnica/index" },
-      { name: "Hacker News (YC)", type: "RSS", description: "أبرز نقاشات الشركات الناشئة والبرمجة والتقنية من مجتمع YCombinator.", url: "https://news.ycombinator.com/rss" },
+      { name: "Hacker News (YC)", type: "RSS", description: "أبرز نقاشات الشركات الناشئة والبرمجة والتقنية.", url: "https://news.ycombinator.com/rss" },
     ],
   };
 
   function _resolveNiche(query: string): string {
     const q = query.toLowerCase().trim();
-    if (/\bai\b|artificial|ذكاء|machine learn|gpt|llm|deep learn/.test(q)) return "ai";
-    if (/youtube|content creat|صانع|فيديو|channel|قناة/.test(q)) return "youtube";
-    if (/crypto|bitcoin|blockchain|عملة|بلوك/.test(q)) return "crypto";
-    if (/market|تسويق|seo|brand|عميل/.test(q)) return "marketing";
-    if (/tech|تقنية|gadget|review|apple|android|software/.test(q)) return "tech";
+    // AI / machine learning
+    if (/\bai\b|artificial intel|ذكاء اصطناعي|ذكاء|machine learn|deep learn|\bgpt\b|\bllm\b|openai|chatgpt/.test(q)) return "ai";
+    // YouTube / content creation
+    if (/youtube|content creat|صانع محتوى|صانع|يوتيوب|فيديو|channel|قناة|creator/.test(q)) return "youtube";
+    // Crypto / blockchain
+    if (/crypto|bitcoin|blockchain|عملة رقمية|عملة|بلوك تشين|defi|nft|ethereum/.test(q)) return "crypto";
+    // Marketing / SEO
+    if (/market|تسويق|سيو|\bseo\b|brand|علامة تجارية|عميل|advertising|إعلان/.test(q)) return "marketing";
+    // Gaming
+    if (/gaming|game|\bألعاب\b|لعبة|playstation|xbox|nintendo|esport|قيمنق/.test(q)) return "gaming";
+    // Sports
+    if (/sport|رياضة|رياضي|كرة قدم|football|soccer|basketball|tennis|فيفا|كرة/.test(q)) return "sports";
+    // Health / medicine
+    if (/health|صحة|طب|طبي|diet|nutrition|تغذية|fitness|لياقة|doctor|دكتور/.test(q)) return "health";
+    // Science
+    if (/science|علوم|فيزياء|physics|chemistry|كيمياء|biology|بيولوجيا|research/.test(q)) return "science";
+    // Food / cooking
+    if (/food|طعام|طبخ|cooking|recipe|وصفة|cuisine|مطبخ|مطعم|restaurant/.test(q)) return "food";
+    // Travel
+    if (/travel|سفر|سياحة|tourism|وجهة|destination|رحلة|trip|vacation/.test(q)) return "travel";
+    // Entertainment
+    if (/entertainment|ترفيه|فيلم|مسلسل|series|movie|cinema|سينما|هوليوود/.test(q)) return "entertainment";
+    // Finance / investing
+    if (/finance|مال|استثمار|invest|بورصة|stock|أسهم|اقتصاد|economy|money/.test(q)) return "finance";
+    // Automotive / cars
+    if (/car|سيارة|سيارات|automotive|vehicle|مركبة|موتور|engine/.test(q)) return "automotive";
+    // Environment / climate
+    if (/environment|بيئة|مناخ|climate|sustainability|استدامة|طاقة متجددة|renewable/.test(q)) return "environment";
+    // Education
+    if (/education|تعليم|تربية|دراسة|learning|study|مدرسة|school|جامعة|university/.test(q)) return "education";
+    // Music
+    if (/music|موسيقى|أغاني|songs|singer|مغني|فنان|album|ألبوم/.test(q)) return "music";
+    // Film / cinema
+    if (/film|سينما|أفلام|movies|director|مخرج|screenplay|سيناريو/.test(q)) return "film";
+    // Islam / religion
+    if (/islam|إسلام|ديني|قرآن|quran|سنة|sunna|فقه|فتوى|مسلم/.test(q)) return "islam";
+    // History
+    if (/history|تاريخ|تاريخي|حضارة|civilization|قديم|ancient|حرب|war/.test(q)) return "history";
+    // Space / astronomy
+    if (/space|فضاء|نجوم|stars|planet|كوكب|astronomy|ناسا|nasa|rocket|صاروخ/.test(q)) return "space";
+    // Photography
+    if (/photo|تصوير|كاميرا|camera|photography|lens|عدسة|portrait/.test(q)) return "photography";
+    // Coding / programming
+    if (/cod|برمجة|programming|developer|مطور|software dev|javascript|python|react/.test(q)) return "coding";
+    // Business / entrepreneurship
+    if (/business|أعمال|ريادة|startup|شركة|entrepreneur|management|إدارة/.test(q)) return "business";
+    // Politics / news
+    if (/politic|سياسة|أخبار|news|حكومة|government|انتخاب|election|دولة/.test(q)) return "politics";
+    // Fashion
+    if (/fashion|موضة|أزياء|style|ملابس|clothes|أناقة|تصميم أزياء/.test(q)) return "fashion";
+    // Parenting
+    if (/parent|تربية|أطفال|children|طفل|mother|أم|father|أب|family|عائلة/.test(q)) return "parenting";
+    // Tech (broader catch-all)
+    if (/tech|تقنية|gadget|review|apple|android|software|hardware/.test(q)) return "tech";
     return "default";
   }
 

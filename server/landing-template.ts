@@ -1,4 +1,5 @@
 import type { LandingPageContent } from "@shared/landing-page-content";
+import type { PublicNewsItem } from "./public-feed-cache";
 
 function escapeHtml(str: string): string {
   return str
@@ -33,8 +34,119 @@ function escJs(str: string): string {
   return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
-export function generateLandingHtml(content: LandingPageContent): string {
+export function generateLandingHtml(
+  content: LandingPageContent,
+  feeds?: { tech: PublicNewsItem[]; gaming: PublicNewsItem[]; top: PublicNewsItem[] },
+): string {
   const { hero, about, features, seo } = content;
+
+  // ── Time-ago helper ─────────────────────────────────────────────────────
+  function timeAgo(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const h = Math.floor(diff / 3_600_000);
+    if (h < 1) return "منذ أقل من ساعة";
+    if (h < 24) return `منذ ${h} ساعة`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return "منذ يوم";
+    if (d < 7) return `منذ ${d} أيام`;
+    return `منذ ${Math.floor(d / 7)} أسابيع`;
+  }
+
+  // ── Live news section builder ────────────────────────────────────────────
+  function buildNewsCards(items: PublicNewsItem[]): string {
+    if (!items.length) return `<p class="pnf-empty">جارٍ تحديث الأخبار… يرجى المراجعة لاحقاً.</p>`;
+    return items.map((item) => `
+      <article class="pnf-card">
+        ${item.imageUrl ? `<div class="pnf-img-wrap"><img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.arabicTitle)}" loading="lazy" class="pnf-img"/></div>` : ""}
+        <div class="pnf-card-body">
+          <div class="pnf-normal">
+            <div class="pnf-source">${escapeHtml(item.sourceName)}</div>
+            <h3 class="pnf-title">${escapeHtml(item.title)}</h3>
+            <p class="pnf-summary">${escapeHtml(item.summary.slice(0, 180))}…</p>
+          </div>
+          <div class="pnf-smart" hidden>
+            <span class="pnf-smart-badge">✦ فِكري</span>
+            <h3 class="pnf-ar-title">${escapeHtml(item.arabicTitle)}</h3>
+            <p class="pnf-ar-summary">${escapeHtml(item.arabicSummary.slice(0, 200))}…</p>
+          </div>
+          <footer class="pnf-meta">
+            <span>${escapeHtml(item.sourceName)}</span>
+            <span>${timeAgo(item.publishedAt)}</span>
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">اقرأ المصدر ↗</a>
+          </footer>
+        </div>
+      </article>`).join("");
+  }
+
+  const liveNewsHtml = `
+  <!-- ══ LIVE NEWS ════════════════════════════════════════ -->
+  <section class="pnf-section">
+    <div class="pnf-inner">
+      <div class="pnf-header">
+        <span class="section-pill">📡 أخبار مباشرة</span>
+        <h2>أحدث الأخبار العالمية</h2>
+        <p>محتوى حقيقي من أبرز المصادر — اضغط <strong>عرض ذكي</strong> لترى الترجمة والتلخيص بالعربية.</p>
+      </div>
+      <div class="pnf-controls">
+        <div class="pnf-tabs">
+          <button class="pnf-tab active" data-tab="tech">⚡ التقنية</button>
+          <button class="pnf-tab" data-tab="gaming">🎮 الألعاب</button>
+          <button class="pnf-tab" data-tab="top">🌍 أبرز الأخبار</button>
+        </div>
+        <div class="pnf-view-toggle">
+          <button class="pnf-view-btn active" id="pnfNormalBtn">عادي</button>
+          <button class="pnf-view-btn" id="pnfSmartBtn">✦ ذكي (فِكري)</button>
+        </div>
+      </div>
+      <div class="pnf-panel active" data-panel="tech">
+        ${buildNewsCards(feeds?.tech ?? [])}
+      </div>
+      <div class="pnf-panel" data-panel="gaming">
+        ${buildNewsCards(feeds?.gaming ?? [])}
+      </div>
+      <div class="pnf-panel" data-panel="top">
+        ${buildNewsCards(feeds?.top ?? [])}
+      </div>
+    </div>
+  </section>`;
+
+  const howToUseHtml = `
+  <!-- ══ HOW TO USE ═══════════════════════════════════════ -->
+  <section class="howto-section">
+    <div class="howto-inner">
+      <div class="howto-header">
+        <span class="section-pill">🚀 كيف تبدأ</span>
+        <h2>كيف تستخدم نَسَق؟</h2>
+      </div>
+      <div class="howto-grid">
+        <div class="howto-step">
+          <div class="howto-num">١</div>
+          <div class="howto-emoji">🗂️</div>
+          <h3>أنشئ مجلداً</h3>
+          <p>سجّل دخولك وأنشئ مجلداً لكل مجال يهمّك — تقنية، ألعاب، صحة، وأكثر.</p>
+        </div>
+        <div class="howto-step">
+          <div class="howto-num">٢</div>
+          <div class="howto-emoji">📡</div>
+          <h3>أضف مصادرك</h3>
+          <p>أضف روابط RSS أو قنوات يوتيوب أو استخدم الكاشف ليقترح عليك أفضل المصادر.</p>
+        </div>
+        <div class="howto-step">
+          <div class="howto-num">٣</div>
+          <div class="howto-emoji">✦</div>
+          <h3>شغّل العرض الذكي</h3>
+          <p>بضغطة واحدة يترجم فِكري المقال ويلخّصه بالعربية بجودة احترافية.</p>
+        </div>
+        <div class="howto-step">
+          <div class="howto-num">٤</div>
+          <div class="howto-emoji">💡</div>
+          <h3>ولّد أفكاراً</h3>
+          <p>وجّه فِكري لتوليد أفكار فيديوهات وسكريبتات جاهزة للتنفيذ فوراً.</p>
+        </div>
+      </div>
+    </div>
+  </section>`;
+
 
   const featuresHtml = features
     .map((f, idx) => {
@@ -78,6 +190,28 @@ export function generateLandingHtml(content: LandingPageContent): string {
   <meta name="theme-color" content="#fe90e8" />
   <meta name="google-adsense-account" content="ca-pub-6128644359275323" />
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6128644359275323" crossorigin="anonymous"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "نَسَق",
+    "url": "https://nasaqapp.net",
+    "description": "${escapeHtml(seo.metaDescription)}",
+    "inLanguage": "ar",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://nasaqapp.net/?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "نَسَق",
+      "url": "https://nasaqapp.net",
+      "logo": { "@type": "ImageObject", "url": "https://nasaqapp.net/logo.png" },
+      "contactPoint": { "@type": "ContactPoint", "contactType": "customer support", "email": "hello@nasaqapp.net" }
+    }
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet" />
@@ -836,6 +970,161 @@ export function generateLandingHtml(content: LandingPageContent): string {
     html.dark-mode .news-date { color: hsl(0 0% 50%); }
 
     /* ═══════════════════════════════════════════
+       LIVE NEWS FEED SECTION
+       ═══════════════════════════════════════════ */
+    .pnf-section {
+      background: var(--bg);
+      padding: 5rem 1.5rem;
+    }
+    .pnf-inner { max-width: 1200px; margin: 0 auto; }
+    .pnf-header { text-align: center; margin-bottom: 2rem; }
+    .pnf-header h2 {
+      font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      margin: 0.7rem 0 0.5rem;
+    }
+    .pnf-header p { font-size: 0.95rem; color: var(--muted-fg); }
+    .pnf-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.75rem;
+    }
+    .pnf-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .pnf-tab {
+      font-family: var(--font);
+      font-size: 0.85rem;
+      font-weight: 900;
+      padding: 0.45rem 1rem;
+      border: 2.5px solid var(--border-color);
+      border-radius: 50px;
+      background: var(--card-bg);
+      color: var(--fg);
+      cursor: pointer;
+      transition: background 0.14s, transform 0.14s;
+    }
+    .pnf-tab.active, .pnf-tab:hover {
+      background: var(--hero-a);
+      transform: translate(-2px,-2px);
+    }
+    .pnf-view-toggle { display: flex; gap: 0.35rem; }
+    .pnf-view-btn {
+      font-family: var(--font);
+      font-size: 0.82rem;
+      font-weight: 900;
+      padding: 0.4rem 0.9rem;
+      border: 2.5px solid var(--border-color);
+      border-radius: 50px;
+      background: var(--card-bg);
+      color: var(--fg);
+      cursor: pointer;
+      transition: background 0.14s;
+    }
+    .pnf-view-btn.active { background: var(--hero-b); }
+    .pnf-panel { display: none; }
+    .pnf-panel.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.4rem; }
+    .pnf-empty { text-align: center; padding: 2rem; color: var(--muted-fg); font-size: 0.95rem; }
+    .pnf-card {
+      border: 2.5px solid var(--border-color);
+      border-radius: var(--r-lg);
+      background: var(--card-bg);
+      box-shadow: var(--nb-shadow-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .pnf-card:hover { transform: translate(-3px,-3px); box-shadow: var(--nb-shadow); }
+    .pnf-img-wrap { aspect-ratio: 16/9; overflow: hidden; border-bottom: 2.5px solid var(--border-color); }
+    .pnf-img { width: 100%; height: 100%; object-fit: cover; }
+    .pnf-card-body { padding: 1rem 1.1rem 0.8rem; display: flex; flex-direction: column; flex: 1; }
+    .pnf-source { font-size: 0.72rem; font-weight: 900; color: var(--muted-fg); margin-bottom: 0.4rem; }
+    .pnf-title { font-size: 0.96rem; font-weight: 900; line-height: 1.5; margin-bottom: 0.5rem; direction: ltr; text-align: left; }
+    .pnf-summary { font-size: 0.84rem; color: var(--muted-fg); line-height: 1.75; direction: ltr; text-align: left; }
+    .pnf-smart-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 900;
+      background: var(--hero-a);
+      border: 2px solid var(--border-color);
+      border-radius: var(--r-pill);
+      padding: 0.15rem 0.6rem;
+      margin-bottom: 0.5rem;
+    }
+    .pnf-ar-title { font-size: 1rem; font-weight: 900; line-height: 1.5; margin-bottom: 0.5rem; }
+    .pnf-ar-summary { font-size: 0.86rem; color: var(--muted-fg); line-height: 1.85; }
+    .pnf-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-top: auto;
+      padding-top: 0.75rem;
+      border-top: 2px solid rgba(0,0,0,0.07);
+      font-size: 0.73rem;
+      color: var(--muted-fg);
+    }
+    html.dark-mode .pnf-meta { border-top-color: rgba(255,255,255,0.08); }
+    .pnf-meta a { text-decoration: underline; font-weight: 900; color: var(--fg); }
+
+    /* ═══════════════════════════════════════════
+       HOW TO USE SECTION
+       ═══════════════════════════════════════════ */
+    .howto-section {
+      background: #0d0d0d;
+      padding: 5rem 1.5rem;
+    }
+    html.dark-mode .howto-section { background: #080808; }
+    .howto-inner { max-width: 1100px; margin: 0 auto; }
+    .howto-header { text-align: center; margin-bottom: 3rem; }
+    .howto-header h2 {
+      font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+      font-weight: 900;
+      color: #fff;
+      margin-top: 0.8rem;
+      letter-spacing: -0.04em;
+    }
+    .howto-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.4rem;
+    }
+    .howto-step {
+      background: #fff;
+      border: 3px solid #0d0d0d;
+      border-radius: var(--r-lg);
+      padding: 2rem 1.5rem;
+      box-shadow: var(--nb-shadow-md);
+      text-align: center;
+      position: relative;
+    }
+    html.dark-mode .howto-step { background: #1a1a1a; border-color: #333; }
+    .howto-num {
+      position: absolute;
+      top: -14px;
+      right: 1.2rem;
+      background: var(--hero-a);
+      border: 3px solid #0d0d0d;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+    .howto-emoji { font-size: 2.4rem; margin-bottom: 0.8rem; display: block; }
+    .howto-step h3 { font-size: 1rem; font-weight: 900; margin-bottom: 0.5rem; }
+    .howto-step p { font-size: 0.87rem; color: #555; line-height: 1.75; }
+    html.dark-mode .howto-step h3 { color: #f0f0f0; }
+    html.dark-mode .howto-step p { color: #888; }
+
+    /* ═══════════════════════════════════════════
        RESPONSIVE
        ═══════════════════════════════════════════ */
     @media (max-width: 640px) {
@@ -854,6 +1143,12 @@ export function generateLandingHtml(content: LandingPageContent): string {
       .scout-btn { width: 100%; }
       .smart-display-section { padding: 3.5rem 1.25rem; }
       .news-grid { grid-template-columns: 1fr; }
+      .pnf-section { padding: 3.5rem 1.1rem; }
+      .pnf-panel.active { grid-template-columns: 1fr; }
+      .pnf-controls { flex-direction: column; align-items: flex-start; }
+      .howto-section { padding: 3.5rem 1.1rem; }
+      .howto-grid { grid-template-columns: 1fr 1fr; }
+      .footer-links { flex-wrap: wrap; gap: 0.8rem; }
     }
   </style>
 </head>
@@ -1075,6 +1370,10 @@ export function generateLandingHtml(content: LandingPageContent): string {
       : ""
   }
 
+  ${liveNewsHtml}
+
+  ${howToUseHtml}
+
   <!-- ══ CTA BANNER ═════════════════════════════════════ -->
   <div class="cta-banner">
     <h2 class="cta-banner-title">ابدأ رحلتك مع نَسَق اليوم</h2>
@@ -1088,10 +1387,43 @@ export function generateLandingHtml(content: LandingPageContent): string {
   <footer class="footer">
     <p>جميع الحقوق محفوظة &copy; <strong>نَسَق</strong> ${new Date().getFullYear()}</p>
     <div class="footer-links">
+      <a href="/about">من نحن</a>
+      <a href="/articles">المقالات</a>
+      <a href="/contact">تواصل معنا</a>
+      <a href="/terms">الشروط والأحكام</a>
       <a href="/privacy">سياسة الخصوصية</a>
       <a href="/login">تسجيل الدخول</a>
     </div>
   </footer>
+
+  <!-- ══ LIVE NEWS TABS + VIEW TOGGLE JS ══════════════════ -->
+  <script>
+    (function () {
+      // Tab switching
+      var tabs = document.querySelectorAll('.pnf-tab');
+      var panels = document.querySelectorAll('.pnf-panel');
+      tabs.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          tabs.forEach(function (t) { t.classList.remove('active'); });
+          panels.forEach(function (p) { p.classList.remove('active'); });
+          btn.classList.add('active');
+          var panel = document.querySelector('.pnf-panel[data-panel="' + btn.dataset.tab + '"]');
+          if (panel) panel.classList.add('active');
+        });
+      });
+      // Smart / Normal view toggle
+      var normalBtn = document.getElementById('pnfNormalBtn');
+      var smartBtn  = document.getElementById('pnfSmartBtn');
+      function setView(smart) {
+        document.querySelectorAll('.pnf-normal').forEach(function (el) { el.hidden = smart; });
+        document.querySelectorAll('.pnf-smart').forEach(function (el) { el.hidden = !smart; });
+        if (normalBtn) normalBtn.classList.toggle('active', !smart);
+        if (smartBtn)  smartBtn.classList.toggle('active', smart);
+      }
+      if (normalBtn) normalBtn.addEventListener('click', function () { setView(false); });
+      if (smartBtn)  smartBtn.addEventListener('click', function () { setView(true); });
+    })();
+  </script>
 
   <!-- ══ THEME TOGGLE JS ════════════════════════════════ -->
   <script>
@@ -1234,6 +1566,152 @@ export function generateLandingHtml(content: LandingPageContent): string {
     });
   </script>
 
+</body>
+</html>`;
+}
+
+// ─── simpleMarkdownToHtml ──────────────────────────────────────────────────
+// Converts a small subset of Markdown to safe HTML without any npm dependency.
+export function simpleMarkdownToHtml(md: string): string {
+  let html = escapeHtml(md);
+
+  // Code blocks (must come before inline code)
+  html = html.replace(/```[\s\S]*?```/g, (m) =>
+    `<pre><code>${m.slice(3, -3).trim()}</code></pre>`
+  );
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // H1–H3
+  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  // Unordered lists
+  html = html.replace(/^[\-\*] (.+)$/gm, "<li>$1</li>");
+  html = html.replace(/(<li>[\s\S]+?<\/li>)/g, "<ul>$1</ul>");
+  // Ordered lists
+  html = html.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+  // Links
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Horizontal rule
+  html = html.replace(/^---$/gm, "<hr/>");
+  // Paragraphs — double newlines
+  html = html
+    .split(/\n{2,}/)
+    .map((para) => {
+      const t = para.trim();
+      if (!t) return "";
+      if (/^<(h[1-3]|ul|li|pre|hr)/.test(t)) return t;
+      return `<p>${t.replace(/\n/g, "<br/>")}</p>`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return html;
+}
+
+// ─── generateSimplePageHtml ────────────────────────────────────────────────
+// Shared HTML shell for About, Contact, Terms, Articles pages.
+export function generateSimplePageHtml(opts: {
+  title: string;
+  description?: string;
+  bodyHtml: string;
+  currentPath?: string;
+}): string {
+  const { title, description = title, bodyHtml } = opts;
+  return `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)} — نَسَق</title>
+  <meta name="description" content="${escapeHtml(description)}" />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:title" content="${escapeHtml(title)} — نَسَق" />
+  <meta property="og:description" content="${escapeHtml(description)}" />
+  <meta property="og:type" content="website" />
+  <meta name="google-adsense-account" content="ca-pub-6128644359275323" />
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6128644359275323" crossorigin="anonymous"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --yellow: #F7CB46; --pink: #FE90E8;
+      --black: #0d0d0d; --border: 2.5px solid #0d0d0d;
+      --shadow: 5px 5px 0 0 rgba(0,0,0,0.85);
+      --font: 'Cairo', 'Tajawal', sans-serif;
+      --bg: #fafafa; --fg: #0d0d0d;
+      --muted: #555; --card: #fff;
+      --r: 16px;
+    }
+    body { font-family: var(--font); background: var(--bg); color: var(--fg); line-height: 1.75; }
+    a { color: inherit; }
+    /* Nav */
+    .sp-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.9rem 2rem; border-bottom: 2px solid #e5e5e5;
+      background: #fff; position: sticky; top: 0; z-index: 10;
+    }
+    .sp-nav-logo { font-size: 1.4rem; font-weight: 900; text-decoration: none; color: var(--fg); }
+    .sp-nav-cta {
+      font-size: 0.85rem; font-weight: 900;
+      background: var(--yellow); color: var(--fg);
+      border: var(--border); border-radius: 50px; padding: 0.45rem 1.2rem;
+      box-shadow: 4px 4px 0 0 rgba(0,0,0,0.85); text-decoration: none;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .sp-nav-cta:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 0 rgba(0,0,0,0.85); }
+    /* Content */
+    .sp-main { max-width: 820px; margin: 0 auto; padding: 4rem 2rem; }
+    .sp-main h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 900; letter-spacing: -0.04em; margin-bottom: 1.5rem; }
+    .sp-main h2 { font-size: 1.35rem; font-weight: 900; margin: 2rem 0 0.7rem; }
+    .sp-main h3 { font-size: 1.1rem; font-weight: 900; margin: 1.5rem 0 0.5rem; }
+    .sp-main p { font-size: 1rem; color: var(--muted); line-height: 1.85; margin-bottom: 1rem; }
+    .sp-main ul { padding-right: 1.4rem; margin-bottom: 1rem; }
+    .sp-main li { font-size: 0.96rem; color: var(--muted); line-height: 1.8; margin-bottom: 0.4rem; }
+    .sp-main a { text-decoration: underline; color: var(--fg); font-weight: 700; }
+    .sp-main strong { color: var(--fg); }
+    .sp-main hr { border: none; border-top: 2px solid #e5e5e5; margin: 2rem 0; }
+    .sp-breadcrumb { font-size: 0.82rem; color: var(--muted); margin-bottom: 2rem; }
+    .sp-breadcrumb a { text-decoration: none; }
+    .sp-breadcrumb a:hover { text-decoration: underline; }
+    /* Footer */
+    .sp-footer {
+      background: #0d0d0d; color: #ccc; text-align: center;
+      padding: 2rem; font-size: 0.82rem; margin-top: 4rem;
+    }
+    .sp-footer strong { color: var(--yellow); }
+    .sp-footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 1.2rem; margin-top: 0.6rem; }
+    .sp-footer-links a { color: #aaa; text-decoration: none; }
+    .sp-footer-links a:hover { color: var(--yellow); }
+    @media (max-width: 640px) { .sp-main { padding: 3rem 1.2rem; } .sp-nav { padding: 0.7rem 1rem; } }
+  </style>
+</head>
+<body>
+  <nav class="sp-nav">
+    <a href="/" class="sp-nav-logo">نَسَق</a>
+    <a href="/login" class="sp-nav-cta">تسجيل الدخول ←</a>
+  </nav>
+  <main class="sp-main">
+    <p class="sp-breadcrumb"><a href="/">الرئيسية</a> ‹ ${escapeHtml(title)}</p>
+    ${bodyHtml}
+  </main>
+  <footer class="sp-footer">
+    <p>جميع الحقوق محفوظة &copy; <strong>نَسَق</strong> ${new Date().getFullYear()}</p>
+    <div class="sp-footer-links">
+      <a href="/about">من نحن</a>
+      <a href="/articles">المقالات</a>
+      <a href="/contact">تواصل معنا</a>
+      <a href="/terms">الشروط والأحكام</a>
+      <a href="/privacy">سياسة الخصوصية</a>
+      <a href="/login">تسجيل الدخول</a>
+    </div>
+  </footer>
 </body>
 </html>`;
 }

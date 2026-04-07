@@ -6,6 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { startScheduler } from "./scheduler";
+import { refreshPublicNewsCache } from "./public-feed-cache";
 import { serveStatic } from "./static";
 import {
   checkDatabaseReady,
@@ -17,7 +18,7 @@ import { resolveRuntimeEnv, StartupConfigError } from "./config/env";
 
 const app = express();
 const httpServer = createServer(app);
-const APP_VERSION = "2.8.0";
+const APP_VERSION = "2.8.1";
 
 declare module "http" {
   interface IncomingMessage {
@@ -212,6 +213,18 @@ async function bootstrap() {
     });
 
     await registerRoutes(httpServer, app);
+
+    // ─── Public news feed cache ───────────────────────────────────────────
+    refreshPublicNewsCache().catch((e: unknown) =>
+      log(`public-feed-cache initial refresh failed: ${e instanceof Error ? e.message : String(e)}`, "startup"),
+    );
+    setInterval(
+      () =>
+        refreshPublicNewsCache().catch((e: unknown) =>
+          log(`public-feed-cache refresh failed: ${e instanceof Error ? e.message : String(e)}`, "cache"),
+        ),
+      2 * 60 * 60 * 1000, // every 2 hours
+    );
 
     app.get("/debug-sentry", function mainHandler(_req, res) {
       throw new Error("My first Sentry error!");
