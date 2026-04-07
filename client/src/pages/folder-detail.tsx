@@ -49,7 +49,6 @@ type FetchAllResponse = {
 export default function FolderDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
-  const initialSilentFetchFolderRef = useRef<string | null>(null);
   const silentFetchInFlightRef = useRef(false);
   
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
@@ -113,10 +112,13 @@ export default function FolderDetail() {
     mutationFn: async (data: { name: string; url: string; type: string; folderId: string }) => {
       return apiRequest("POST", "/api/sources", data);
     },
-    onSuccess: () => {
+    onSuccess: (createdSource: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "sources"] });
       setSourceDialogOpen(false);
       toast({ title: "تم إضافة المصدر بنجاح" });
+      if (createdSource?.id) {
+        apiRequest("POST", `/api/sources/${createdSource.id}/fetch`).catch(() => {});
+      }
     },
     onError: () => {
       toast({ title: "حدث خطأ", description: "فشل في إضافة المصدر", variant: "destructive" });
@@ -248,15 +250,9 @@ export default function FolderDetail() {
   };
 
   useEffect(() => {
-    if (!id || (sources?.length ?? 0) === 0) return;
-
-    if (initialSilentFetchFolderRef.current === id) {
-      return;
-    }
-
-    initialSilentFetchFolderRef.current = id;
+    if (!id) return;
     void runSilentFolderFetch();
-  }, [id, sources?.length]);
+  }, [id]);
 
   useEffect(() => {
     if (!id || (sources?.length ?? 0) === 0) {
@@ -276,20 +272,18 @@ export default function FolderDetail() {
   const handleRefreshClick = async () => {
     if (!id || (sources?.length ?? 0) === 0) return;
 
-    // الخطوة 1: اكشف الأخبار الجاهزة فوراً إذا وُجدت (< 100ms)
     if (newContentCount > 0) {
       try {
         await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
-      } catch (error) {
-        console.error("Failed to mark content as displayed:", error);
-      }
+      } catch {}
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+      fetchAllSourcesMutation.mutate({ blocking: false });
+      toast({ title: "🔄 يجري التحديث في الخلفية" });
+    } else {
+      toast({ title: "⚡ مزامنة قسرية، انتظر لحظة..." });
+      fetchAllSourcesMutation.mutate({ blocking: true, revealWhenDone: true, timeoutMs: 30000 });
     }
-
-    // الخطوة 2: أطلق جلب جديد في الخلفية (بدون انتظار)
-    fetchAllSourcesMutation.mutate({ blocking: false });
-    toast({ title: "🔄 يجري التحديث في الخلفية" });
   };
 
   if (folderLoading) {

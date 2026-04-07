@@ -629,10 +629,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReadyContentMissingArabic(limit: number = 25): Promise<Content[]> {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const rows = await db.select().from(content)
       .where(and(
         eq(content.processingStatus, "ready"),
         or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
+        gt(content.fetchedAt, cutoff),
       ))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
@@ -640,11 +642,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReadyContentMissingArabicByFolder(folderId: string, limit: number = 20): Promise<Content[]> {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const rows = await db.select().from(content)
       .where(and(
         eq(content.folderId, folderId),
         eq(content.processingStatus, "ready"),
         or(isNull(content.arabicTitle), isNull(content.arabicFullSummary)),
+        gt(content.fetchedAt, cutoff),
       ))
       .orderBy(desc(content.fetchedAt))
       .limit(limit);
