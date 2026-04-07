@@ -285,6 +285,9 @@ export interface IStorage {
   getUnusedContentByFolderId(folderId: string): Promise<Content[]>;
   markContentUsedForIdeas(ids: string[]): Promise<void>;
   markContentRead(id: string): Promise<Content | undefined>;
+  markContentUnread(id: string): Promise<Content | undefined>;
+  toggleContentSaved(id: string): Promise<Content | undefined>;
+  getSavedContent(userId: string): Promise<any[]>;
 
   getAssistantConversations(userId: string): Promise<AssistantConversation[]>;
   getAssistantConversationById(id: string): Promise<AssistantConversation | undefined>;
@@ -862,6 +865,46 @@ export class DatabaseStorage implements IStorage {
       .where(eq(content.id, id))
       .returning();
     return updated ? decompressContent(updated) : undefined;
+  }
+
+  async markContentUnread(id: string): Promise<Content | undefined> {
+    const [updated] = await db
+      .update(content)
+      .set({ readAt: null })
+      .where(eq(content.id, id))
+      .returning();
+    return updated ? decompressContent(updated) : undefined;
+  }
+
+  async toggleContentSaved(id: string): Promise<Content | undefined> {
+    const [current] = await db.select({ isSaved: content.isSaved }).from(content).where(eq(content.id, id));
+    if (!current) return undefined;
+    const [updated] = await db
+      .update(content)
+      .set({ isSaved: !current.isSaved })
+      .where(eq(content.id, id))
+      .returning();
+    return updated ? decompressContent(updated) : undefined;
+  }
+
+  async getSavedContent(userId: string): Promise<any[]> {
+    // NOTE: isSaved items must NEVER be included in cleanup/TTL deletion queries
+    const rows = await db
+      .select({
+        content: content,
+        source: sources,
+        folder: { id: folders.id, name: folders.name },
+      })
+      .from(content)
+      .innerJoin(sources, eq(content.sourceId, sources.id))
+      .innerJoin(folders, eq(content.folderId, folders.id))
+      .where(and(eq(content.isSaved, true), eq(folders.userId, userId)))
+      .orderBy(desc(content.fetchedAt));
+    return rows.map((row) => ({
+      ...decompressContent(row.content),
+      source: row.source,
+      folder: row.folder,
+    }));
   }
 
   // ─── Assistant Conversations ──────────────────────────────────────────────

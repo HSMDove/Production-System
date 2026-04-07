@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield, Bell, X } from "lucide-react";
+import { Settings, Lightbulb, FolderOpen, CalendarDays, BarChart3, TrendingUp, Menu, Bot, Shield, Bell, X, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { t } from "@/i18n";
@@ -35,6 +35,7 @@ interface UserAnnouncement {
 
 const navItems = [
   { href: "/", icon: FolderOpen, label: t("nav.folders"), testId: "link-dashboard" },
+  { href: "/saved", icon: Bookmark, label: "المحفوظات", testId: "link-saved" },
   { href: "/ideas", icon: Lightbulb, label: t("nav.ideas"), testId: "link-ideas" },
   { href: "/calendar", icon: CalendarDays, label: t("nav.calendar"), testId: "link-calendar" },
   { href: "/analytics", icon: BarChart3, label: t("nav.analytics"), testId: "link-analytics" },

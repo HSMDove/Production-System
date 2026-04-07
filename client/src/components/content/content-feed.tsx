@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, Send, Check, Eye } from "lucide-react";
+import { ExternalLink, Calendar, Rss, Play, Globe, Newspaper, Loader2, Send, Check, Eye, Bookmark, BookmarkCheck } from "lucide-react";
 import { SiYoutube, SiX, SiTiktok } from "react-icons/si";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ interface ContentFeedProps {
   showSmartView?: boolean;
   folderId?: string;
   unifiedTimeline?: boolean;
+  showFolderTag?: boolean;
 }
 
 
@@ -145,9 +146,10 @@ function isValidImageUrl(url: string | null | undefined): boolean {
   }
 }
 
-function ContentCard({ item, showSmartView }: {
+function ContentCard({ item, showSmartView, showFolderTag }: {
   item: ContentWithSource;
   showSmartView?: boolean;
+  showFolderTag?: boolean;
 }) {
   const [imageError, setImageError] = useState(
     () => !!item.imageUrl && failedImageUrls.has(item.imageUrl)
@@ -195,19 +197,32 @@ function ContentCard({ item, showSmartView }: {
   
   const readMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/content/${item.id}/read`);
+      const endpoint = isRead ? "unread" : "read";
+      return apiRequest("POST", `/api/content/${item.id}/${endpoint}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content/saved"] });
       if (item.folderId) {
         queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
       }
     },
   });
 
-  const handleMarkRead = () => {
-    if (!isRead) readMutation.mutate();
-  };
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/content/${item.id}/save`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content/saved"] });
+      if (item.folderId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/folders", item.folderId, "content"] });
+      }
+    },
+  });
+
+  const isSaved = !!item.isSaved;
+  const handleMarkRead = () => readMutation.mutate();
 
   const hasValidImage = isValidImageUrl(item.imageUrl) && !imageError;
   const ageBand = getContentAgeBand(item);
@@ -216,9 +231,14 @@ function ContentCard({ item, showSmartView }: {
   
   return (
     <Card
-      className={`liquid-glass content-news-card transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
+      className={`liquid-glass content-news-card relative transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-px hover:border-primary/35 ring-1 ${ageAccent.ringClassName} ${ageAccent.tintClassName} ${isRead ? "opacity-60 saturate-75" : ""}`}
       data-testid={`content-item-${item.id}`}
     >
+      {isRead && (
+        <span className="absolute top-2 left-2 z-10 text-[10px] font-medium bg-green-500 text-white px-1.5 py-0.5 rounded-full pointer-events-none">
+          مقروء
+        </span>
+      )}
       <CardContent className="p-0">
         <div className="flex flex-row gap-3 p-4 min-h-[100px]">
           {/* Age accent bar */}
@@ -321,17 +341,44 @@ function ContentCard({ item, showSmartView }: {
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleMarkRead}
-                    disabled={isRead || readMutation.isPending}
+                    disabled={readMutation.isPending}
                     data-testid={`button-eye-read-${item.id}`}
-                    aria-label={isRead ? "تمت القراءة" : "تحديد كمقروء"}
+                    aria-label={isRead ? "تحديد كغير مقروء" : "تحديد كمقروء"}
                   >
-                    <Eye className={`h-3.5 w-3.5 ${isRead ? "text-primary" : "text-muted-foreground"}`} />
+                    <Eye className={`h-3.5 w-3.5 ${isRead ? "text-green-500" : "text-muted-foreground"}`} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isRead ? "تمت القراءة" : "تحديد كمقروء"}</p>
+                  <p>{isRead ? "تحديد كغير مقروء" : "تحديد كمقروء"}</p>
                 </TooltipContent>
               </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending}
+                    data-testid={`button-save-${item.id}`}
+                    aria-label={isSaved ? "إلغاء الحفظ" : "حفظ"}
+                  >
+                    {isSaved
+                      ? <BookmarkCheck className="h-3.5 w-3.5 text-amber-500" />
+                      : <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isSaved ? "إلغاء الحفظ" : "حفظ"}</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {showFolderTag && item.folder && (
+                <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+                  {item.folder.name}
+                </span>
+              )}
 
               <Button
                 variant="ghost"
@@ -407,7 +454,7 @@ function ContentSkeleton() {
   );
 }
 
-export function ContentFeed({ content, isLoading, showSmartView, folderId, unifiedTimeline }: ContentFeedProps) {
+export function ContentFeed({ content, isLoading, showSmartView, folderId, unifiedTimeline, showFolderTag }: ContentFeedProps) {
   const { feedAds } = useAdSettings();
   if (isLoading) {
     return (
@@ -452,6 +499,7 @@ export function ContentFeed({ content, isLoading, showSmartView, folderId, unifi
           key={item.id}
           item={item}
           showSmartView={showSmartView}
+          showFolderTag={showFolderTag}
         />
       );
       if (feedAds && (idx + 1) % 3 === 0 && idx < items.length - 1) {

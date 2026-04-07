@@ -95,6 +95,7 @@ export async function ensureIntegrationTables() {
       target_id text NOT NULL,
       created_at timestamp NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE content ADD COLUMN IF NOT EXISTS is_saved boolean NOT NULL DEFAULT false;
     CREATE TABLE IF NOT EXISTS release_notes (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
       version text NOT NULL,

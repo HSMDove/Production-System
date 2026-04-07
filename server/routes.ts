@@ -2020,6 +2020,43 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/content/:id/unread", async (req, res) => {
+    try {
+      const item = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!item) return;
+      const updated = await storage.markContentUnread(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error("Error marking content unread:", error);
+      res.status(500).json({ error: "Failed to mark content as unread" });
+    }
+  });
+
+  app.post("/api/content/:id/save", async (req, res) => {
+    try {
+      const item = await requireContentOwner(req.params.id, req.session.userId!, res);
+      if (!item) return;
+      const updated = await storage.toggleContentSaved(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error("Error toggling content saved:", error);
+      res.status(500).json({ error: "Failed to toggle content saved" });
+    }
+  });
+
+  app.get("/api/content/saved", requireAuth, async (req, res) => {
+    try {
+      const items = await storage.getSavedContent(req.session.userId!);
+      res.json(items);
+    } catch (error) {
+      Sentry.captureException(error);
+      console.error("Error fetching saved content:", error);
+      res.status(500).json({ error: "Failed to fetch saved content" });
+    }
+  });
+
   app.get("/api/assistant/conversations", async (req, res) => {
     try {
       const conversations = await storage.getAssistantConversations(req.session.userId!);

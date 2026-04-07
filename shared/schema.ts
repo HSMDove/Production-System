@@ -140,6 +140,7 @@ export const content = pgTable("content", {
   rewrittenContent: text("rewritten_content"),
   usedForIdeas: boolean("used_for_ideas").default(false).notNull(),
   readAt: timestamp("read_at"),
+  isSaved: boolean("is_saved").default(false).notNull(),
   displayedToUser: boolean("displayed_to_user").default(true).notNull(),
   processingStatus: text("processing_status").$type<ProcessingStatus>().default("ready").notNull(),
 });

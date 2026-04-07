@@ -18,6 +18,7 @@ import Trends from "@/pages/trends";
 import Settings from "@/pages/settings";
 import SplitView from "@/pages/split-view";
 import ModelAssistantPage from "@/pages/model-assistant";
+import SavedPage from "@/pages/saved";
 import LoginPage from "@/pages/login";
 import VerifyOTPPage from "@/pages/verify-otp";
 import OnboardingPage from "@/pages/onboarding";
@@ -47,6 +48,7 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/trends" component={Trends} />
       <Route path="/settings" component={Settings} />
+      <Route path="/saved" component={SavedPage} />
       <Route path="/split-view" component={SplitView} />
       <Route path="/model" component={ModelAssistantPage} />
       <Route path="/privacy" component={PrivacyPage} />
