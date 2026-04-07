@@ -390,12 +390,29 @@ export default function FolderDetail() {
               onClick={handleRefreshClick}
               disabled={fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
               data-testid="button-refresh-all"
-              className={`gap-1.5 relative${newContentCount > 0 && !fetchAllSourcesMutation.isPending ? " refresh-btn-glow" : ""}`}
+              className={`gap-1.5 relative ${
+                newContentCount > 0 && !fetchAllSourcesMutation.isPending
+                  ? "refresh-btn-glow"
+                  : newContentCount === 0 && !fetchAllSourcesMutation.isPending && (sources?.length ?? 0) > 0
+                  ? "border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                  : ""
+              }`}
             >
               <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">{newContentCount > 0 ? `${newContentCount} جديد` : "تحديث"}</span>
-              {newContentCount > 0 && (
+              <span className="hidden sm:inline">
+                {fetchAllSourcesMutation.isPending
+                  ? "تحديث..."
+                  : newContentCount > 0
+                  ? `${newContentCount} جديد`
+                  : (sources?.length ?? 0) > 0
+                  ? "الحين مافي اخبار جديدة..."
+                  : "تحديث"}
+              </span>
+              {newContentCount > 0 && !fetchAllSourcesMutation.isPending && (
                 <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />
+              )}
+              {newContentCount === 0 && !fetchAllSourcesMutation.isPending && (sources?.length ?? 0) > 0 && (
+                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-500" />
               )}
             </Button>
           </div>
