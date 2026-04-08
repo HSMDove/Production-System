@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { MoreVertical, Pencil, Trash2, Rss, Power, Clock, Timer, Loader2 } from "lucide-react";
 import { SiTelegram, SiSlack } from "react-icons/si";
@@ -140,10 +141,17 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
   };
 
   return (
-    <Card
-      className="folder-surface liquid-glass-folder group flex h-full min-h-[14rem] flex-col rounded-[1.618rem]"
-      data-testid={`card-folder-${folder.id}`}
+    <motion.div
+      whileHover={{ y: -3, scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 380, damping: 26 }}
+      style={{ willChange: "transform" }}
+      className="h-full"
     >
+      <Card
+        className="folder-surface liquid-glass-folder group flex h-full min-h-[14rem] flex-col rounded-[1.618rem]"
+        data-testid={`card-folder-${folder.id}`}
+      >
       <CardHeader className="px-4 pb-3 pt-4">
         <div className="flex items-start justify-between gap-3">
           <Link href={`/folder/${folder.id}`} className="flex min-w-0 flex-1 items-center gap-3">
@@ -316,6 +324,7 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
           أُنشئ {formatDistanceToNow(new Date(folder.createdAt), { addSuffix: true, locale: ar })}
         </p>
       </CardContent>
-    </Card>
+      </Card>
+    </motion.div>
   );
 }

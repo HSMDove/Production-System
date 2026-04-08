@@ -1,5 +1,7 @@
 import { useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
+import { AnimatePresence, motion } from "framer-motion";
+import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
@@ -32,28 +34,56 @@ import { WelcomeCards } from "@/components/welcome-cards";
 import { TopBannerDisplay } from "@/components/announcements/top-banner";
 import { AnnouncementModal } from "@/components/announcements/announcement-modal";
 
-function Router() {
+function AnimatedRouter() {
+  const [location] = useLocation();
   return (
-    <Switch>
-      <Route path="/login" component={LoginPage} />
-      <Route path="/verify" component={VerifyOTPPage} />
-      <Route path="/onboarding" component={OnboardingPage} />
-      <Route path="/admin/login" component={AdminLoginPage} />
-      <Route path="/admin" component={AdminDashboard} />
-      <Route path="/" component={Dashboard} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/folder/:id" component={FolderDetail} />
-      <Route path="/ideas" component={Ideas} />
-      <Route path="/calendar" component={ContentCalendar} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/trends" component={Trends} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/saved" component={SavedPage} />
-      <Route path="/split-view" component={SplitView} />
-      <Route path="/model" component={ModelAssistantPage} />
-      <Route path="/privacy" component={PrivacyPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={location}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+        style={{ willChange: "transform, opacity" }}
+      >
+        <Switch>
+          <Route path="/login" component={LoginPage} />
+          <Route path="/verify" component={VerifyOTPPage} />
+          <Route path="/onboarding" component={OnboardingPage} />
+          <Route path="/admin/login" component={AdminLoginPage} />
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/folder/:id" component={FolderDetail} />
+          <Route path="/ideas" component={Ideas} />
+          <Route path="/calendar" component={ContentCalendar} />
+          <Route path="/analytics" component={Analytics} />
+          <Route path="/trends" component={Trends} />
+          <Route path="/settings" component={Settings} />
+          <Route path="/saved" component={SavedPage} />
+          <Route path="/split-view" component={SplitView} />
+          <Route path="/model" component={ModelAssistantPage} />
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function WorkspaceShell({ children }: { children: React.ReactNode }) {
+  const { open } = useFikriOverlay();
+  return (
+    <motion.div
+      animate={{
+        filter: open ? "blur(3px) brightness(0.92)" : "blur(0px) brightness(1)",
+        scale: open ? 0.992 : 1,
+      }}
+      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      style={{ willChange: "filter, transform", transformOrigin: "center center" }}
+    >
+      {children}
+    </motion.div>
   );
 }
 
@@ -109,20 +139,23 @@ function AppContent() {
         <FikriOverlayProvider>
           <AuthGuard>
             <Toaster />
-            <ErrorBoundary fullScreen={false}>
-              <TopBannerDisplay />
-            </ErrorBoundary>
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
+            <WorkspaceShell>
+              <ErrorBoundary fullScreen={false}>
+                <TopBannerDisplay />
+              </ErrorBoundary>
+              <ErrorBoundary>
+                <AnimatedRouter />
+              </ErrorBoundary>
+              <ErrorBoundary fullScreen={false}>
+                <WelcomeCards />
+              </ErrorBoundary>
+              <ErrorBoundary fullScreen={false}>
+                <AnnouncementModal />
+              </ErrorBoundary>
+            </WorkspaceShell>
+            {/* FikriOverlay lives outside WorkspaceShell — must not receive blur */}
             <ErrorBoundary fullScreen={false}>
               <FikriOverlay />
-            </ErrorBoundary>
-            <ErrorBoundary fullScreen={false}>
-              <WelcomeCards />
-            </ErrorBoundary>
-            <ErrorBoundary fullScreen={false}>
-              <AnnouncementModal />
             </ErrorBoundary>
           </AuthGuard>
         </FikriOverlayProvider>

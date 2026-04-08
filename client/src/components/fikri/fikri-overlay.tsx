@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { Bot, Check, Edit2, Loader2, MessageSquarePlus, Plus, Send, Trash2, X } from "lucide-react";
@@ -300,20 +301,29 @@ export function FikriOverlay() {
     }
   };
 
-  if (!open) return null;
-
   // ── Render ───────────────────────────────────────────────────────────────
   return (
+    <AnimatePresence>
+      {open && (
     <div className="fixed inset-0 z-[200]" data-testid="fikri-overlay-root">
-      <button
+      <motion.button
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         aria-label="close-fikri-overlay"
         onClick={() => setOpen(false)}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
       />
 
-      <aside
+      <motion.aside
         dir="rtl"
         className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col liquid-glass border-l shadow-2xl"
+        style={{ willChange: "transform" }}
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", stiffness: 340, damping: 34, mass: 0.9 }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/20 px-4 py-3 shrink-0">
@@ -558,7 +568,7 @@ export function FikriOverlay() {
             </div>
           </>
         )}
-      </aside>
+      </motion.aside>
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={o => { if (!o) setDeleteConfirmId(null); }}>
         <AlertDialogContent dir="rtl">
@@ -581,5 +591,7 @@ export function FikriOverlay() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+      )}
+    </AnimatePresence>
   );
 }

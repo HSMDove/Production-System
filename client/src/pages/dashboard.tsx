@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Columns2, FolderOpen } from "lucide-react";
@@ -151,18 +152,34 @@ export default function Dashboard() {
           ) : (
             <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {folders?.map((folder, idx) => (
-                <>
+                <motion.div
+                  key={folder.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: idx * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                  style={{ willChange: "transform, opacity" }}
+                >
                   <FolderCard
-                    key={folder.id}
                     folder={folder}
                     onEdit={handleEditFolder}
                     onDelete={handleDeleteFolder}
                   />
                   {folderAds && idx === 2 && <FolderAdCard key="folder-ad" />}
-                </>
+                </motion.div>
               ))}
               {folderAds && (folders?.length ?? 0) < 3 && <FolderAdCard key="folder-ad-end" />}
-              <AddFolderCard onClick={handleAddFolder} />
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.3,
+                  delay: (folders?.length ?? 0) * 0.06,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                style={{ willChange: "transform, opacity" }}
+              >
+                <AddFolderCard onClick={handleAddFolder} />
+              </motion.div>
             </div>
           )}
         </div>

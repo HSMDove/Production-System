@@ -868,11 +868,11 @@ body {
 }
 
 .folder-surface {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  /* transform is managed exclusively by Framer Motion on the wrapping motion.div */
+  transition: box-shadow 0.15s ease;
 }
 
 .folder-surface:hover {
-  transform: translateY(-3px);
   box-shadow:
     var(--nb-shadow),
     0 0 0 4px hsl(var(--primary) / 0.12),
