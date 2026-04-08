@@ -50,7 +50,15 @@ export default function FolderDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const silentFetchInFlightRef = useRef(false);
-  
+
+  // ── 4-State Sync Button ──────────────────────────────────────────────────────
+  type SyncPhase = "idle" | "fetching" | "done_empty";
+  const [syncPhase, setSyncPhase] = useState<SyncPhase>("idle");
+  const [syncDots, setSyncDots] = useState("");
+  const hasSeenInFlightRef = useRef(false);
+  const syncDoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncMaxTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [fikriKashshafOpen, setFikriKashshafOpen] = useState(false);
@@ -199,6 +207,14 @@ export default function FolderDetail() {
 
   const newContentCount = newContentQuery.data?.count ?? 0;
 
+  // Poll scheduler status only while user-triggered sync is in progress
+  const { data: schedulerStatus } = useQuery<Record<string, { lastRun: number; inFlight: boolean }>>({
+    queryKey: ["/api/scheduler-status"],
+    refetchInterval: syncPhase === "fetching" ? 2000 : false,
+    enabled: !!id && syncPhase === "fetching",
+  });
+  const isFolderInFlight = id ? (schedulerStatus?.[id]?.inFlight ?? false) : false;
+
   const updateFolderMutation = useMutation({
     mutationFn: async (data: Partial<Folder>) => {
       return apiRequest("PATCH", `/api/folders/${id}`, data);
@@ -231,6 +247,45 @@ export default function FolderDetail() {
       createSourceMutation.mutate(values);
     }
   };
+
+  // Reset sync state when navigating to a different folder
+  useEffect(() => {
+    setSyncPhase("idle");
+    setSyncDots("");
+    hasSeenInFlightRef.current = false;
+    if (syncDoneTimeoutRef.current) { clearTimeout(syncDoneTimeoutRef.current); syncDoneTimeoutRef.current = null; }
+    if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
+  }, [id]);
+
+  // Animated dots while fetching ("..." cycling)
+  useEffect(() => {
+    if (syncPhase !== "fetching") { setSyncDots(""); return; }
+    const iv = setInterval(() => setSyncDots(d => d.length >= 3 ? "" : d + "."), 500);
+    return () => clearInterval(iv);
+  }, [syncPhase]);
+
+  // Completion detection via inFlight transitions
+  useEffect(() => {
+    if (syncPhase !== "fetching") return;
+    // If new content appeared, go back to idle (State 4 is driven by newContentCount directly)
+    if (newContentCount > 0) {
+      if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
+      setSyncPhase("idle");
+      return;
+    }
+    if (isFolderInFlight) {
+      hasSeenInFlightRef.current = true;
+    } else if (hasSeenInFlightRef.current) {
+      // inFlight went true → false: fetch completed with no new items
+      hasSeenInFlightRef.current = false;
+      if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
+      setSyncPhase("done_empty");
+      syncDoneTimeoutRef.current = setTimeout(() => {
+        setSyncPhase("idle");
+        syncDoneTimeoutRef.current = null;
+      }, 4000);
+    }
+  }, [isFolderInFlight, syncPhase, newContentCount]);
 
   const runSilentFolderFetch = async () => {
     if (!id || !folder?.isBackgroundActive || (sources?.length ?? 0) === 0 || silentFetchInFlightRef.current) {
@@ -274,18 +329,29 @@ export default function FolderDetail() {
     if (!id) return;
 
     if (newContentCount > 0) {
+      // State 4 → reveal content + background refresh
+      setSyncPhase("idle");
       try {
         await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
       } catch {}
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
       fetchAllSourcesMutation.mutate({ blocking: false });
-      toast({ title: "🔄 يجري التحديث في الخلفية" });
-    } else {
-      // Task 3: Signal scheduler for immediate fetch instead of blocking HTTP call
-      apiRequest("POST", `/api/folders/${id}/schedule-immediate`)
-        .then(() => toast({ title: "⚡ تم جدولة التحديث، ستظهر الأخبار خلال لحظات" }))
-        .catch(() => toast({ title: "تعذّر جدولة التحديث", variant: "destructive" }));
+    } else if (syncPhase === "idle" || syncPhase === "done_empty") {
+      // State 1/3 → enter State 2: signal scheduler, show fetching UI inline
+      if (syncDoneTimeoutRef.current) { clearTimeout(syncDoneTimeoutRef.current); syncDoneTimeoutRef.current = null; }
+      setSyncPhase("fetching");
+      hasSeenInFlightRef.current = false;
+      // Fallback: revert after 35s if no completion detected
+      syncMaxTimeoutRef.current = setTimeout(() => {
+        setSyncPhase("idle");
+        hasSeenInFlightRef.current = false;
+        syncMaxTimeoutRef.current = null;
+      }, 35000);
+      apiRequest("POST", `/api/folders/${id}/schedule-immediate`).catch(() => {
+        setSyncPhase("idle");
+        if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
+      });
     }
   };
 
@@ -387,37 +453,56 @@ export default function FolderDetail() {
               <Sparkles className="h-4 w-4" />
               <span className="hidden xs:inline">{showSmartView ? "العرض العادي" : "العرض الذكي"}</span>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshClick}
-              disabled={fetchAllSourcesMutation.isPending || !id || (sources?.length ?? 0) === 0}
-              data-testid="button-refresh-all"
-              className={`gap-1.5 relative ${
-                newContentCount > 0 && !fetchAllSourcesMutation.isPending
-                  ? "refresh-btn-glow"
-                  : newContentCount === 0 && !fetchAllSourcesMutation.isPending && (sources?.length ?? 0) > 0
-                  ? "border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                  : ""
-              }`}
-            >
-              <RefreshCw className={`h-4 w-4 ${fetchAllSourcesMutation.isPending ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">
-                {fetchAllSourcesMutation.isPending
-                  ? "تحديث..."
-                  : newContentCount > 0
-                  ? `${newContentCount} جديد`
-                  : (sources?.length ?? 0) > 0
-                  ? "الحين مافي اخبار جديدة..."
-                  : "تحديث"}
-              </span>
-              {newContentCount > 0 && !fetchAllSourcesMutation.isPending && (
-                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />
-              )}
-              {newContentCount === 0 && !fetchAllSourcesMutation.isPending && (sources?.length ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-500" />
-              )}
-            </Button>
+            {/* ── 4-State Sync Button ────────────────────────────────── */}
+            {(() => {
+              const hasSources = (sources?.length ?? 0) > 0;
+              const isPositive = newContentCount > 0;
+              const isFetching = syncPhase === "fetching";
+              const isDoneEmpty = syncPhase === "done_empty";
+
+              const btnClass = isPositive
+                ? "refresh-btn-glow border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                : isFetching
+                ? "border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 animate-pulse"
+                : (isDoneEmpty || hasSources)
+                ? "border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                : "";
+
+              const btnText = isPositive
+                ? `فيه ${newContentCount} أخبار جديدة!`
+                : isFetching
+                ? `ثواني بس، فكري جالس يدوّر لك${syncDots}`
+                : isDoneEmpty
+                ? "أبشرك، ما فاتك شيء!"
+                : hasSources
+                ? "مافي اخبار جديدة تطمن"
+                : "تحديث";
+
+              return (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshClick}
+                  disabled={isFetching || !id}
+                  data-testid="button-refresh-all"
+                  className={`gap-1.5 relative transition-all duration-300 ${btnClass}`}
+                >
+                  {isFetching
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <RefreshCw className="h-4 w-4" />}
+                  <span className="hidden sm:inline">{btnText}</span>
+                  {isPositive && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" data-testid="badge-new-content" />
+                  )}
+                  {isFetching && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                  {!isPositive && !isFetching && hasSources && (
+                    <span className={`absolute -top-1 -right-1 h-3 w-3 rounded-full ${isDoneEmpty ? "bg-green-400 animate-ping" : "bg-green-500"}`} />
+                  )}
+                </Button>
+              );
+            })()}
           </div>
         </div>
 
