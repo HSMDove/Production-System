@@ -55,9 +55,7 @@ export default function FolderDetail() {
   type SyncPhase = "idle" | "fetching" | "done_empty";
   const [syncPhase, setSyncPhase] = useState<SyncPhase>("idle");
   const [syncDots, setSyncDots] = useState("");
-  const hasSeenInFlightRef = useRef(false);
   const syncDoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncMaxTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -207,14 +205,6 @@ export default function FolderDetail() {
 
   const newContentCount = newContentQuery.data?.count ?? 0;
 
-  // Poll scheduler status only while user-triggered sync is in progress
-  const { data: schedulerStatus } = useQuery<Record<string, { lastRun: number; inFlight: boolean }>>({
-    queryKey: ["/api/scheduler-status"],
-    refetchInterval: syncPhase === "fetching" ? 2000 : false,
-    enabled: !!id && syncPhase === "fetching",
-  });
-  const isFolderInFlight = id ? (schedulerStatus?.[id]?.inFlight ?? false) : false;
-
   const updateFolderMutation = useMutation({
     mutationFn: async (data: Partial<Folder>) => {
       return apiRequest("PATCH", `/api/folders/${id}`, data);
@@ -252,9 +242,7 @@ export default function FolderDetail() {
   useEffect(() => {
     setSyncPhase("idle");
     setSyncDots("");
-    hasSeenInFlightRef.current = false;
     if (syncDoneTimeoutRef.current) { clearTimeout(syncDoneTimeoutRef.current); syncDoneTimeoutRef.current = null; }
-    if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
   }, [id]);
 
   // Animated dots while fetching ("..." cycling)
@@ -264,94 +252,81 @@ export default function FolderDetail() {
     return () => clearInterval(iv);
   }, [syncPhase]);
 
-  // Completion detection via inFlight transitions
-  useEffect(() => {
-    if (syncPhase !== "fetching") return;
-    // If new content appeared, go back to idle (State 4 is driven by newContentCount directly)
-    if (newContentCount > 0) {
-      if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
-      setSyncPhase("idle");
-      return;
-    }
-    if (isFolderInFlight) {
-      hasSeenInFlightRef.current = true;
-    } else if (hasSeenInFlightRef.current) {
-      // inFlight went true → false: fetch completed with no new items
-      hasSeenInFlightRef.current = false;
-      if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
-      setSyncPhase("done_empty");
-      syncDoneTimeoutRef.current = setTimeout(() => {
-        setSyncPhase("idle");
-        syncDoneTimeoutRef.current = null;
-      }, 4000);
-    }
-  }, [isFolderInFlight, syncPhase, newContentCount]);
-
-  const runSilentFolderFetch = async () => {
-    if (!id || !folder?.isBackgroundActive || (sources?.length ?? 0) === 0 || silentFetchInFlightRef.current) {
-      return;
-    }
+  /**
+   * performFolderFetch — the single source of truth for all fetch triggers.
+   * Drives syncPhase directly from the real API promise result.
+   * Used by: mount, interval, and manual force-sync.
+   */
+  const performFolderFetch = async () => {
+    if (!id || silentFetchInFlightRef.current) return;
+    if (syncDoneTimeoutRef.current) { clearTimeout(syncDoneTimeoutRef.current); syncDoneTimeoutRef.current = null; }
 
     silentFetchInFlightRef.current = true;
+    setSyncPhase("fetching");
+
     try {
-      await apiRequest<FetchAllResponse>("POST", `/api/folders/${id}/fetch-all`, {
-        blocking: false,
+      const result = await apiRequest<FetchAllResponse>("POST", `/api/folders/${id}/fetch-all`, {
+        blocking: true,
+        timeoutMs: 25000,
       });
-    } catch (error) {
-      console.error("Silent folder fetch failed:", error);
+
+      if ((result.itemsAdded ?? 0) > 0) {
+        // Real new items — let newContentCount query pick them up → State 4
+        queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
+        setSyncPhase("idle");
+      } else if (result.started) {
+        // Fetch ran but found nothing new → State 3 for 4s
+        setSyncPhase("done_empty");
+        syncDoneTimeoutRef.current = setTimeout(() => {
+          setSyncPhase("idle");
+          syncDoneTimeoutRef.current = null;
+        }, 4000);
+      } else {
+        // Nothing started (no sources / background disabled) → stay idle silently
+        setSyncPhase("idle");
+      }
+    } catch {
+      setSyncPhase("idle");
     } finally {
       silentFetchInFlightRef.current = false;
     }
   };
 
-  // Task 2: Signal scheduler immediately on folder navigation — no race condition with query loading
+  // Mount: real fetch fires immediately on every folder navigation
   useEffect(() => {
     if (!id) return;
-    apiRequest("POST", `/api/folders/${id}/schedule-immediate`).catch(() => {});
-  }, [id]);
+    void performFolderFetch();
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Interval: periodic real fetch — also drives the 4-state button
   useEffect(() => {
-    if (!id || (sources?.length ?? 0) === 0) {
-      return;
-    }
+    if (!id || (sources?.length ?? 0) === 0 || !folder?.isBackgroundActive) return;
 
-    const intervalMs = Math.max((folder?.refreshInterval || 0) * 1000, 15000);
+    const intervalMs = Math.max((folder.refreshInterval || 0) * 1000, 15000);
     const intervalId = window.setInterval(() => {
-      void runSilentFolderFetch();
+      void performFolderFetch();
     }, intervalMs);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [id, folder?.refreshInterval, sources?.length]);
+  }, [id, folder?.isBackgroundActive, folder?.refreshInterval, sources?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefreshClick = async () => {
     if (!id) return;
 
     if (newContentCount > 0) {
-      // State 4 → reveal content + background refresh
+      // State 4 → reveal content + kick off a real background refresh
       setSyncPhase("idle");
       try {
         await apiRequest("POST", `/api/folders/${id}/mark-displayed`);
       } catch {}
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "content"] });
       queryClient.invalidateQueries({ queryKey: ["/api/folders", id, "new-content-count"] });
-      fetchAllSourcesMutation.mutate({ blocking: false });
+      void performFolderFetch();
     } else if (syncPhase === "idle" || syncPhase === "done_empty") {
-      // State 1/3 → enter State 2: signal scheduler, show fetching UI inline
-      if (syncDoneTimeoutRef.current) { clearTimeout(syncDoneTimeoutRef.current); syncDoneTimeoutRef.current = null; }
-      setSyncPhase("fetching");
-      hasSeenInFlightRef.current = false;
-      // Fallback: revert after 35s if no completion detected
-      syncMaxTimeoutRef.current = setTimeout(() => {
-        setSyncPhase("idle");
-        hasSeenInFlightRef.current = false;
-        syncMaxTimeoutRef.current = null;
-      }, 35000);
-      apiRequest("POST", `/api/folders/${id}/schedule-immediate`).catch(() => {
-        setSyncPhase("idle");
-        if (syncMaxTimeoutRef.current) { clearTimeout(syncMaxTimeoutRef.current); syncMaxTimeoutRef.current = null; }
-      });
+      // State 1/3 → force sync: real blocking fetch, drives button state directly
+      void performFolderFetch();
     }
   };
 
