@@ -36,13 +36,13 @@ interface FolderCardProps {
 }
 
 export const INTERVAL_OPTIONS = [
-  { value: "0.25", label: "15 ثانية (تجربة)" },
-  { value: "15", label: "15 دقيقة" },
-  { value: "30", label: "30 دقيقة" },
-  { value: "60", label: "ساعة" },
-  { value: "120", label: "ساعتين" },
-  { value: "360", label: "6 ساعات" },
-  { value: "720", label: "12 ساعة" },
+  { value: "15",    label: "15 ثانية (تجربة)" },
+  { value: "900",   label: "15 دقيقة" },
+  { value: "1800",  label: "30 دقيقة" },
+  { value: "3600",  label: "ساعة" },
+  { value: "7200",  label: "ساعتين" },
+  { value: "21600", label: "6 ساعات" },
+  { value: "43200", label: "12 ساعة" },
 ];
 
 function formatCountdown(totalSeconds: number): string {
@@ -80,7 +80,7 @@ export function FolderCountdown({ folderId, refreshInterval }: { folderId: strin
     );
   }
 
-  const intervalMs = refreshInterval * 60 * 1000;
+  const intervalMs = refreshInterval * 1000;
   const nextRun = lastRun + intervalMs;
   const remainingMs = Math.max(0, nextRun - now);
   const remainingSec = Math.ceil(remainingMs / 1000);

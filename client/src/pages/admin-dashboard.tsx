@@ -763,20 +763,20 @@ function SystemSettingsPanel() {
       <div className="card bg-card p-5 mb-4 space-y-4" data-testid="panel-refresh-interval">
         <div className="flex flex-col gap-1">
           <h3 className="text-lg font-bold">التحديث التلقائي العالمي للمجلدات</h3>
-          <p className="text-sm text-muted-foreground">الفترة الافتراضية (بالدقائق) لجلب الأخبار تلقائياً لأي مجلد لا يملك فترة تحديث مخصصة.</p>
+          <p className="text-sm text-muted-foreground">الفترة الافتراضية (بالثواني) لجلب الأخبار تلقائياً لأي مجلد لا يملك فترة تحديث مخصصة.</p>
         </div>
         <div className="flex items-center gap-3">
           <Input
             type="number"
-            min="5"
-            max="1440"
+            min="15"
+            max="86400"
             className="w-32"
             dir="ltr"
             value={refreshIntervalMinutes}
             onChange={(e) => setRefreshIntervalMinutes(e.target.value)}
             data-testid="input-refresh-interval"
           />
-          <span className="text-sm text-muted-foreground">دقيقة (القيمة الافتراضية: 60)</span>
+          <span className="text-sm text-muted-foreground">ثانية (القيمة الافتراضية: 3600)</span>
           <Button
             size="sm"
             variant="outline"
@@ -784,11 +784,11 @@ function SystemSettingsPanel() {
             disabled={upsertMutation.isPending}
             onClick={() => {
               const val = parseInt(refreshIntervalMinutes, 10);
-              if (isNaN(val) || val < 5) return;
+              if (isNaN(val) || val < 15) return;
               upsertMutation.mutate({
                 key: "folder_auto_refresh_interval_minutes",
                 value: String(val),
-                description: "فترة التحديث التلقائي الافتراضية للمجلدات (بالدقائق)",
+                description: "فترة التحديث التلقائي الافتراضية للمجلدات (بالثواني)",
               });
             }}
             data-testid="button-save-refresh-interval"

@@ -12,7 +12,7 @@ import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContent
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
 import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
-import { getSchedulerStatus } from "./scheduler";
+import { getSchedulerStatus, scheduleFolderImmediately } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
 import { FIKRI_GATEWAY_SETTING_KEY, defaultFikriGatewayConfig, fikriGatewayConfigSchema, getFikriGatewayConfig, saveFikriGatewayConfig } from "./fikri-gateway";
 import { FREE_MODEL_ROUTE, ACTIVE_FREE_MODEL_KEY } from "./free-model-router";
@@ -1817,6 +1817,18 @@ export async function registerRoutes(
     } catch (error) {
     Sentry.captureException(error);
       res.status(500).json({ error: "Failed to fetch content from sources" });
+    }
+  });
+
+  app.post("/api/folders/:id/schedule-immediate", requireAuth, async (req, res) => {
+    try {
+      const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
+      if (!folder) return;
+      scheduleFolderImmediately(req.params.id);
+      res.json({ scheduled: true });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to schedule fetch" });
     }
   });
 

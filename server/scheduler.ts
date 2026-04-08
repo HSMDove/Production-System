@@ -9,6 +9,8 @@ import { log } from "./index";
 const folderLastRun = new Map<string, number>();
 const folderInFlight = new Set<string>();
 
+const FETCH_TIMEOUT_MS = 120_000; // 2-minute hard limit per folder fetch
+
 const SCHEDULER_TICK_MS = 5 * 1000;
 const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
 const READY_BACKFILL_INTERVAL_MS = 30 * 1000;
@@ -33,19 +35,27 @@ async function runFolderFetch(folderId: string) {
 
     log(`[Scheduler] Fetching folder: ${folder.name}`, "scheduler");
 
-    const result = await fetchFolderContent(folderId, folder);
+    const result = await Promise.race([
+      fetchFolderContent(folderId, folder),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Folder "${folder.name}" timed out after ${FETCH_TIMEOUT_MS / 1000}s`)),
+          FETCH_TIMEOUT_MS
+        )
+      ),
+    ]);
 
+    folderLastRun.set(folderId, Date.now());
     if (result.itemsAdded > 0) {
       log(`[Scheduler] ${folder.name}: ${result.itemsAdded} new items`, "scheduler");
     } else {
       log(`[Scheduler] ${folder.name}: no new items`, "scheduler");
     }
-
-    folderLastRun.set(folderId, Date.now());
   } catch (error) {
-    console.error(`Scheduler error for folder ${folderId}:`, error);
+    console.error(`[Scheduler] Error for folder ${folderId}:`, error);
+    folderLastRun.set(folderId, Date.now()); // reset on error to prevent immediate retry storm
   } finally {
-    folderInFlight.delete(folderId);
+    folderInFlight.delete(folderId); // always clear — no more permanent locks
   }
 }
 
@@ -97,7 +107,7 @@ async function tick() {
 
     for (const folder of allFolders) {
       const lastRun = folderLastRun.get(folder.id) || 0;
-      const intervalMs = (folder.refreshInterval || 60) * 60 * 1000;
+      const intervalMs = (folder.refreshInterval || 3600) * 1000;
       const elapsed = Date.now() - lastRun;
 
       if (elapsed >= intervalMs) {
@@ -132,4 +142,14 @@ export function stopScheduler() {
     schedulerInterval = null;
     log("Background scheduler stopped", "scheduler");
   }
+}
+
+/**
+ * Mark a folder as immediately due for its next fetch.
+ * Clears any stale in-flight lock and resets the lastRun timer.
+ * The scheduler's next tick (≤5 seconds) will pick it up naturally.
+ */
+export function scheduleFolderImmediately(folderId: string): void {
+  folderInFlight.delete(folderId);
+  folderLastRun.set(folderId, 0);
 }

@@ -249,9 +249,10 @@ export default function FolderDetail() {
     }
   };
 
+  // Task 2: Signal scheduler immediately on folder navigation — no race condition with query loading
   useEffect(() => {
     if (!id) return;
-    void runSilentFolderFetch();
+    apiRequest("POST", `/api/folders/${id}/schedule-immediate`).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -259,7 +260,7 @@ export default function FolderDetail() {
       return;
     }
 
-    const intervalMs = Math.max(Math.round((folder?.refreshInterval || 0) * 60 * 1000), 15000);
+    const intervalMs = Math.max((folder?.refreshInterval || 0) * 1000, 15000);
     const intervalId = window.setInterval(() => {
       void runSilentFolderFetch();
     }, intervalMs);
@@ -270,7 +271,7 @@ export default function FolderDetail() {
   }, [id, folder?.refreshInterval, sources?.length]);
 
   const handleRefreshClick = async () => {
-    if (!id || (sources?.length ?? 0) === 0) return;
+    if (!id) return;
 
     if (newContentCount > 0) {
       try {
@@ -281,8 +282,10 @@ export default function FolderDetail() {
       fetchAllSourcesMutation.mutate({ blocking: false });
       toast({ title: "🔄 يجري التحديث في الخلفية" });
     } else {
-      toast({ title: "⚡ مزامنة قسرية، انتظر لحظة..." });
-      fetchAllSourcesMutation.mutate({ blocking: true, revealWhenDone: true, timeoutMs: 30000 });
+      // Task 3: Signal scheduler for immediate fetch instead of blocking HTTP call
+      apiRequest("POST", `/api/folders/${id}/schedule-immediate`)
+        .then(() => toast({ title: "⚡ تم جدولة التحديث، ستظهر الأخبار خلال لحظات" }))
+        .catch(() => toast({ title: "تعذّر جدولة التحديث", variant: "destructive" }));
     }
   };
 
