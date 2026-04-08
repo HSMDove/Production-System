@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
+import { ChevronLeft } from "lucide-react";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -37,7 +38,7 @@ import { AnnouncementModal } from "@/components/announcements/announcement-modal
 function AnimatedRouter() {
   const [location] = useLocation();
   return (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence initial={false}>
       <motion.div
         key={location}
         initial={{ opacity: 0, y: 8 }}
@@ -74,16 +75,38 @@ function AnimatedRouter() {
 function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const { open } = useFikriOverlay();
   return (
-    <motion.div
-      animate={{
-        filter: open ? "blur(3px) brightness(0.92)" : "blur(0px) brightness(1)",
-        scale: open ? 0.992 : 1,
+    <div
+      style={{
+        transition: "padding-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        paddingRight: open ? "clamp(0px, 24rem, 40vw)" : "0px",
       }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      style={{ willChange: "filter, transform", transformOrigin: "center center" }}
     >
       {children}
-    </motion.div>
+    </div>
+  );
+}
+
+function FikriEdgeHandle() {
+  const { open, setOpen } = useFikriOverlay();
+  const [location] = useLocation();
+  if (location === "/settings") return null;
+  return (
+    <AnimatePresence>
+      {!open && (
+        <motion.button
+          initial={{ opacity: 0, x: 20, y: "-50%" }}
+          animate={{ opacity: 1, x: 0, y: "-50%" }}
+          exit={{ opacity: 0, x: 20, y: "-50%" }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          style={{ top: "50%" }}
+          className="fikri-edge-handle"
+          onClick={() => setOpen(true)}
+          aria-label="فتح فكري"
+        >
+          <ChevronLeft className="h-3.5 w-3.5 text-foreground/60" />
+        </motion.button>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -153,7 +176,10 @@ function AppContent() {
                 <AnnouncementModal />
               </ErrorBoundary>
             </WorkspaceShell>
-            {/* FikriOverlay lives outside WorkspaceShell — must not receive blur */}
+            {/* Edge handle and overlay live outside WorkspaceShell */}
+            <ErrorBoundary fullScreen={false}>
+              <FikriEdgeHandle />
+            </ErrorBoundary>
             <ErrorBoundary fullScreen={false}>
               <FikriOverlay />
             </ErrorBoundary>

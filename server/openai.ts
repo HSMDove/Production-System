@@ -1073,7 +1073,7 @@ ${contentSummary}
       ],
       response_format: { type: "json_object" },
       temperature: 0.4,
-      max_tokens: 400,
+      max_tokens: 600,
     });
 
     if (userId) await logAIRequest(userId, "ai_trends", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
@@ -1082,11 +1082,22 @@ ${contentSummary}
       return [];
     }
 
-    const parsed = JSON.parse(responseContent) as { topics: TrendingTopic[] };
-    return parsed.topics;
+    // Strip markdown code fences (```json ... ```) before parsing
+    const sanitized = responseContent
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/i, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(sanitized) as { topics: TrendingTopic[] };
+      return Array.isArray(parsed.topics) ? parsed.topics : [];
+    } catch (parseError) {
+      console.error("Failed to parse trending topics JSON:", parseError, "Raw:", sanitized.slice(0, 200));
+      return [];
+    }
   } catch (error) {
     console.error("Error detecting trending topics:", error);
-    throw new Error("Failed to detect trending topics");
+    return [];
   }
 }
 

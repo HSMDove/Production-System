@@ -305,20 +305,11 @@ export function FikriOverlay() {
   return (
     <AnimatePresence>
       {open && (
-    <div className="fixed inset-0 z-[200]" data-testid="fikri-overlay-root">
-      <motion.button
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        aria-label="close-fikri-overlay"
-        onClick={() => setOpen(false)}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-      />
-
+    <>
       <motion.aside
         dir="rtl"
-        className="absolute right-0 top-0 h-full w-full max-w-sm sm:max-w-md flex flex-col liquid-glass border-l shadow-2xl"
+        data-testid="fikri-overlay-root"
+        className="fixed right-0 top-0 h-full w-full max-w-sm sm:max-w-md z-[200] flex flex-col liquid-glass border-l shadow-2xl"
         style={{ willChange: "transform" }}
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
@@ -590,7 +581,7 @@ export function FikriOverlay() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
       )}
     </AnimatePresence>
   );

@@ -1192,22 +1192,6 @@ body {
 
 /* ── Keyframe Animations ── */
 
-@keyframes fikri-ring-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-@keyframes fikri-shimmer-label {
-  0%   { background-position: 0%   50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0%   50%; }
-}
-
-@keyframes fikri-pulse-soft {
-  0%, 100% { opacity: 0.75; transform: scale(1); }
-  50%       { opacity: 0.40; transform: scale(1.06); }
-}
-
 /* ── Liquid Glass — Folder Cards ── */
 
 .liquid-glass-folder {
@@ -1406,87 +1390,57 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.20) !important;
 }
 
-/* ── Fikri FAB — Spinning Iridescent Ring ── */
+/* ── Fikri Edge Handle (iPadOS Slide Over style) ── */
 
-.fikri-fab-ring {
-  position: absolute;
-  inset: -6px;
-  border-radius: 28px;
-  background: conic-gradient(
-    from 0deg,
-    hsl(var(--primary)          / 0.95) 0deg,
-    hsl(var(--accent)           / 0.75) 90deg,
-    rgba(255, 255, 255, 0.92)            170deg,
-    hsl(var(--secondary)        / 0.70) 250deg,
-    hsl(var(--primary)          / 0.95) 360deg
-  );
-  animation: fikri-ring-spin 3.5s linear infinite;
-  filter: blur(5px);
-  pointer-events: none;
+.fikri-edge-handle {
+  position: fixed;
+  right: 0;
+  width: 22px;
+  height: 72px;
+  border-radius: 10px 0 0 10px;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-right: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, width 0.2s ease;
+  z-index: 150;
+  box-shadow: -3px 0 14px rgba(0, 0, 0, 0.10);
 }
 
-/* A second, softer outer halo that pulses */
-.fikri-fab-halo {
-  position: absolute;
-  inset: -12px;
-  border-radius: 34px;
-  background: conic-gradient(
-    from 180deg,
-    hsl(var(--primary) / 0.45),
-    hsl(var(--secondary) / 0.30) 120deg,
-    hsl(var(--accent) / 0.35) 240deg,
-    hsl(var(--primary) / 0.45) 360deg
-  );
-  animation:
-    fikri-ring-spin 6s linear infinite reverse,
-    fikri-pulse-soft 2.8s ease-in-out infinite;
-  filter: blur(10px);
-  pointer-events: none;
+.fikri-edge-handle:hover {
+  background: rgba(255, 255, 255, 0.20);
+  width: 28px;
 }
 
-/* ── Fikri FAB — Image styling ── */
-
-.fikri-fab-img {
-  border: 2px solid rgba(255, 255, 255, 0.58) !important;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.10),
-    0 8px 24px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+.dark .fikri-edge-handle {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: -3px 0 14px rgba(0, 0, 0, 0.28);
 }
 
-/* ── Fikri FAB — Label badge ── */
-
-.fikri-fab-label {
-  background: linear-gradient(
-    90deg,
-    hsl(var(--primary)) 0%,
-    hsl(var(--secondary) / 0.85) 50%,
-    hsl(var(--primary)) 100%
-  ) !important;
-  background-size: 200% 100% !important;
-  animation: fikri-shimmer-label 2.8s ease-in-out infinite !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.52) !important;
-  box-shadow:
-    0 2px 12px hsl(var(--primary) / 0.42),
-    0 0 0 2px hsl(var(--primary) / 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-  color: hsl(var(--primary-foreground)) !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.03em !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-}
-
-.dark .fikri-fab-label {
-  box-shadow:
-    0 2px 14px hsl(var(--primary) / 0.55),
-    0 0 0 2px hsl(var(--primary) / 0.20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+.dark .fikri-edge-handle:hover {
+  background: rgba(255, 255, 255, 0.13);
 }
 
 /* ═══════════════════════════════════════════════════════════
    EMOJI STABILITY — prevent sub-pixel jitter from transforms
    ═══════════════════════════════════════════════════════════ */
+
+/* Global emoji font fallback — ensures consistent rendering across platforms */
+body, * {
+  font-family: inherit, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* Radix portals (dropdowns, tooltips, popovers) must always render above GPU layers */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+  isolation: isolate;
+}
 
 /* Stabilise emojis inside animated or transformed containers */
 .emoji-stable,

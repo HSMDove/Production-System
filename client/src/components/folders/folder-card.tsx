@@ -145,7 +145,6 @@ export function FolderCard({ folder, onEdit, onDelete }: FolderCardProps) {
       whileHover={{ y: -3, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 380, damping: 26 }}
-      style={{ willChange: "transform" }}
       className="h-full"
     >
       <Card
