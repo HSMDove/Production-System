@@ -45,9 +45,13 @@ export function ThemeProvider({
       return validThemes.includes(stored as AppTheme) ? (stored as AppTheme) : defaultTheme;
     },
   );
-  const [colorMode, setColorMode] = useState<ColorMode>(
-    () => (localStorage.getItem("nasaq-color-mode") as ColorMode) || defaultColorMode,
-  );
+  const [colorMode, setColorMode] = useState<ColorMode>(() => {
+    try {
+      const stored = localStorage.getItem("nasaq-color-mode");
+      if (stored === "light" || stored === "dark") return stored;
+    } catch (_) {}
+    return defaultColorMode;
+  });
 
   useEffect(() => {
     const root = window.document.documentElement;

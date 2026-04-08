@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion"; // AnimatePresence used by FikriEdgeHandle only
 import { ChevronLeft } from "lucide-react";
 import { useFikriOverlay } from "@/contexts/fikri-overlay-context";
 import { queryClient } from "./lib/queryClient";
@@ -37,38 +37,37 @@ import { AnnouncementModal } from "@/components/announcements/announcement-modal
 
 function AnimatedRouter() {
   const [location] = useLocation();
+  // No AnimatePresence — exit animations cause Wouter's Switch to re-render
+  // the NEW route inside the exiting div, creating a flash + dual-page render delay.
+  // Enter-only animation: old page unmounts instantly (clean), new page fades in smoothly.
   return (
-    <AnimatePresence initial={false}>
-      <motion.div
-        key={location}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
-        style={{ willChange: "transform, opacity" }}
-      >
-        <Switch>
-          <Route path="/login" component={LoginPage} />
-          <Route path="/verify" component={VerifyOTPPage} />
-          <Route path="/onboarding" component={OnboardingPage} />
-          <Route path="/admin/login" component={AdminLoginPage} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/" component={Dashboard} />
-          <Route path="/dashboard" component={Dashboard} />
-          <Route path="/folder/:id" component={FolderDetail} />
-          <Route path="/ideas" component={Ideas} />
-          <Route path="/calendar" component={ContentCalendar} />
-          <Route path="/analytics" component={Analytics} />
-          <Route path="/trends" component={Trends} />
-          <Route path="/settings" component={Settings} />
-          <Route path="/saved" component={SavedPage} />
-          <Route path="/split-view" component={SplitView} />
-          <Route path="/model" component={ModelAssistantPage} />
-          <Route path="/privacy" component={PrivacyPage} />
-          <Route component={NotFound} />
-        </Switch>
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={location}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+    >
+      <Switch>
+        <Route path="/login" component={LoginPage} />
+        <Route path="/verify" component={VerifyOTPPage} />
+        <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/admin/login" component={AdminLoginPage} />
+        <Route path="/admin" component={AdminDashboard} />
+        <Route path="/" component={Dashboard} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/folder/:id" component={FolderDetail} />
+        <Route path="/ideas" component={Ideas} />
+        <Route path="/calendar" component={ContentCalendar} />
+        <Route path="/analytics" component={Analytics} />
+        <Route path="/trends" component={Trends} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/saved" component={SavedPage} />
+        <Route path="/split-view" component={SplitView} />
+        <Route path="/model" component={ModelAssistantPage} />
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </motion.div>
   );
 }
 

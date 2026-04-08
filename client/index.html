@@ -25,6 +25,16 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     
+    <!-- Theme: apply dark class synchronously before first paint to prevent FOUC -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('nasaq-color-mode');
+          if (m === 'dark') document.documentElement.classList.add('dark');
+        } catch (_) {}
+      })();
+    </script>
+
     <!-- Google AdSense Verification -->
     <meta name="google-adsense-account" content="ca-pub-6128644359275323">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6128644359275323" crossorigin="anonymous"></script>
