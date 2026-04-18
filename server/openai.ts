@@ -9,12 +9,18 @@ import {
   wrapWithFallbackToFree,
   FREE_MODEL_ROUTE,
 } from "./free-model-router";
+import {
+  translateTextToArabicFree,
+  translateTitleAndSummaryFree,
+} from "./free-translator";
 
 // ─── In-memory L1 Translation Cache ─────────────────────────────────────────
-// Keyed by sha256(title|summary[:200]|promptHash). Max 5,000 entries, 6h TTL.
+// Keyed by sha256(title|summary[:200]|promptHash). Max 5,000 entries, 24h TTL.
 // Prevents duplicate AI calls for the same article across users/sessions.
+// TTL is long because translations don't change; the only reason to expire is
+// to keep memory bounded.
 const TRANSLATION_CACHE_MAX = 5000;
-const TRANSLATION_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const TRANSLATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 type TranslationCacheEntry<T> = { value: T; expiresAt: number };
 const arabicSummaryCache = new Map<string, TranslationCacheEntry<string | null>>();
@@ -848,6 +854,18 @@ export async function generateArabicSummary(
   const cached = getCacheEntry(arabicSummaryCache, cacheKey);
   if (cached !== undefined) return cached;
 
+  // Tier 0: free translation (Google Translate → Lingva → MyMemory).
+  // Only used when no custom system prompt is configured, because a custom
+  // prompt implies the user wants LLM-flavored summarization, not a literal
+  // translation.
+  if (!customSystemPrompt) {
+    const freeResult = await translateTextToArabicFree(summary || title);
+    if (freeResult) {
+      setCacheEntry(arabicSummaryCache, cacheKey, freeResult);
+      return freeResult;
+    }
+  }
+
   const defaultSystemMsg = "أنت مترجم ومُلخص محترف. قم بترجمة وتلخيص المحتوى التقني إلى العربية بشكل موجز ومفهوم. أجب بالملخص العربي فقط بدون أي شرح إضافي.";
   const systemMsg = customSystemPrompt
     ? `${customSystemPrompt}\n\nمهمتك الآن: ترجم ولخص المحتوى التقني التالي إلى العربية في 1-2 جملة. أجب بالملخص العربي فقط.`
@@ -962,6 +980,17 @@ export async function generateProfessionalTranslation(
   const cacheKey = makeTranslationCacheKey(title, summary, customSystemPrompt);
   const cached = getCacheEntry(professionalTranslationCache, cacheKey);
   if (cached !== undefined) return cached;
+
+  // Tier 0: free translation (Google Translate → Lingva → MyMemory).
+  // Skipped when a custom system prompt is set so user-defined tones still
+  // route through the LLM.
+  if (!customSystemPrompt) {
+    const freeResult = await translateTitleAndSummaryFree(title, summary);
+    if (freeResult) {
+      setCacheEntry(professionalTranslationCache, cacheKey, freeResult);
+      return freeResult;
+    }
+  }
 
   const defaultTranslationPrompt = `أنت مترجم صحفي تقني محترف. مهمتك ترجمة الأخبار التقنية إلى العربية بطريقة احترافية.
 
@@ -1749,6 +1778,35 @@ export async function batchTranslateContent(
     }
   }
   if (uncached.length === 0) return results;
+
+  // Tier 0: free translation for everything we can. Only items the free
+  // providers can't handle fall through to the paid LLM batch call below.
+  if (!customSystemPrompt) {
+    const stillUncached: typeof uncached = [];
+    const freeTasks = uncached.map(async (item) => {
+      try {
+        const r = await translateTitleAndSummaryFree(item.title, item.summary);
+        if (r) {
+          const key = makeTranslationCacheKey(item.title, item.summary, customSystemPrompt);
+          setCacheEntry(professionalTranslationCache, key, r);
+          results.set(item.id, {
+            arabicTitle: r.arabicTitle,
+            arabicSummary: r.arabicFullSummary.substring(0, 200),
+            arabicFullSummary: r.arabicFullSummary,
+          });
+          return true;
+        }
+      } catch {
+        // fall through to LLM path
+      }
+      stillUncached.push(item);
+      return false;
+    });
+    await Promise.all(freeTasks);
+    uncached.length = 0;
+    uncached.push(...stillUncached);
+    if (uncached.length === 0) return results;
+  }
 
   const defaultPrompt = `أنت مترجم صحفي تقني محترف. ترجم الأخبار التالية إلى العربية. أجب بصيغة JSON فقط.`;
   const systemMsg = customSystemPrompt
