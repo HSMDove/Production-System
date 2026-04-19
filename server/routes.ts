@@ -10,7 +10,7 @@ import { fetchRSSFeed, fetchMultipleSources, shouldFilterContent } from "./fetch
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens } from "./openai";
+import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens, isEconomyModeEnabled, invalidateEconomyModeCache } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus, scheduleFolderImmediately } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
@@ -5117,6 +5117,38 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     } catch (error) {
     Sentry.captureException(error);
       res.status(500).json({ error: "فشل حفظ إعدادات محرك فكري" });
+    }
+  });
+
+  app.get("/api/admin/economy-mode", requireAdmin, async (_req, res) => {
+    try {
+      const enabled = await isEconomyModeEnabled();
+      res.json({ enabled });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل قراءة وضع التوفير" });
+    }
+  });
+
+  app.put("/api/admin/economy-mode", requireAdmin, async (req, res) => {
+    try {
+      const enabled = Boolean(req.body?.enabled);
+      await storage.upsertSystemSetting(
+        "economy_mode",
+        enabled ? "true" : "false",
+        "وضع التوفير — يفرض النماذج المجانية على بوابة فكري ويقلل تواتر المهام الدورية",
+      );
+      invalidateEconomyModeCache();
+      await storage.createAuditLog(
+        req.session.userId!,
+        "system_setting_updated",
+        `تحديث economy_mode إلى ${enabled ? "مفعل" : "معطل"}`,
+        req.ip || undefined,
+      );
+      res.json({ enabled });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل حفظ وضع التوفير" });
     }
   });
 

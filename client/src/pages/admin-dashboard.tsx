@@ -592,6 +592,21 @@ function SystemSettingsPanel() {
     },
   });
 
+  const { data: economyData } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/admin/economy-mode"],
+  });
+  const economyEnabled = !!economyData?.enabled;
+  const toggleEconomyMutation = useMutation({
+    mutationFn: (enabled: boolean) => apiRequest("PUT", "/api/admin/economy-mode", { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/economy-mode"] });
+      toast({ title: "تم تحديث وضع التوفير" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل تحديث وضع التوفير", variant: "destructive" });
+    },
+  });
+
   if (isLoading || fikriLoading) return <PanelLoader />;
 
   const knownFlags = [
@@ -614,6 +629,24 @@ function SystemSettingsPanel() {
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">إعدادات النظام</h2>
+
+      <div className="card bg-card p-5 mb-4" data-testid="panel-economy-mode">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold">وضع التوفير</h3>
+            <p className="text-sm text-muted-foreground">
+              عند التفعيل: يُوجَّه كل طلب على بوابة فكري (OpenRouter) إلى النموذج المجاني تلقائياً،
+              ويقل تواتر المهام الدورية (إعادة المعالجة، استرجاع الصور) لتخفيف الاستهلاك.
+            </p>
+          </div>
+          <Switch
+            checked={economyEnabled}
+            onCheckedChange={(v) => toggleEconomyMutation.mutate(v)}
+            disabled={toggleEconomyMutation.isPending}
+            data-testid="toggle-economy-mode"
+          />
+        </div>
+      </div>
 
       <div className="card bg-card p-5 mb-4 space-y-5" data-testid="panel-fikri-gateway">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

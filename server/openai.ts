@@ -14,6 +14,34 @@ import {
   translateTitleAndSummaryFree,
 } from "./free-translator";
 
+// ─── Economy Mode ─────────────────────────────────────────────────────────────
+// System-wide flag. When ON, users on the default Fikri Gateway are forced to
+// openrouter/free, and user-custom OpenRouter selections are overridden too.
+// Cached in-process for 60 s to avoid hitting system_settings on every call.
+const ECONOMY_MODE_KEY = "economy_mode";
+const ECONOMY_MODE_CACHE_TTL_MS = 60_000;
+let economyModeCache: { value: boolean; expiresAt: number } | null = null;
+
+export async function isEconomyModeEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (economyModeCache && economyModeCache.expiresAt > now) {
+    return economyModeCache.value;
+  }
+  try {
+    const setting = await storage.getSystemSetting(ECONOMY_MODE_KEY);
+    const raw = (setting?.value || "").trim().toLowerCase();
+    const value = raw === "1" || raw === "true" || raw === "on";
+    economyModeCache = { value, expiresAt: now + ECONOMY_MODE_CACHE_TTL_MS };
+    return value;
+  } catch {
+    return false;
+  }
+}
+
+export function invalidateEconomyModeCache(): void {
+  economyModeCache = null;
+}
+
 // ─── In-memory L1 Translation Cache ─────────────────────────────────────────
 // Keyed by sha256(title|summary[:200]|promptHash). Max 5,000 entries, 24h TTL.
 // Prevents duplicate AI calls for the same article across users/sessions.
@@ -50,6 +78,25 @@ function setCacheEntry<T>(cache: Map<string, TranslationCacheEntry<T>>, key: str
     }
   }
   cache.set(key, { value, expiresAt: Date.now() + TRANSLATION_CACHE_TTL_MS });
+}
+
+function setCacheEntryTtl<T>(
+  cache: Map<string, TranslationCacheEntry<T>>,
+  key: string,
+  value: T,
+  ttlMs: number,
+  maxSize: number,
+): void {
+  if (cache.size >= maxSize) {
+    const toDelete = Math.ceil(maxSize * 0.1);
+    let deleted = 0;
+    for (const k of cache.keys()) {
+      if (deleted >= toDelete) break;
+      cache.delete(k);
+      deleted++;
+    }
+  }
+  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
 type ChatCompletionMessage = {
@@ -321,6 +368,7 @@ export type AIClientResult = { client: AIChatClient; model: string; miniModel: s
 
 export async function getAIClient(userId?: string): Promise<AIClientResult> {
   const userSettings = await getSettingsMap(userId);
+  const economyMode = await isEconomyModeEnabled();
 
   // "default" is the new canonical value; "replit" is kept for backward compat
   const provider = userSettings.get("ai_provider") || "default";
@@ -329,7 +377,14 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     const apiKey = userSettings.get("ai_custom_api_key");
     // ai_custom_provider: "openai" | "openrouter" | "gemini" | "anthropic" (defaults to "openai")
     const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini" | "anthropic";
-    const model = userSettings.get("ai_custom_model") || "gpt-4o";
+    let model = userSettings.get("ai_custom_model") || "gpt-4o";
+
+    // Economy Mode: downgrade user-custom OpenRouter selections to the free route.
+    // Does NOT override OpenAI/Gemini/Anthropic user keys (those are BYOK and
+    // under the user's own billing — not our concern).
+    if (economyMode && customProvider === "openrouter") {
+      model = FREE_MODEL_ROUTE;
+    }
 
     if (!apiKey || !apiKey.trim()) {
       throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
@@ -415,7 +470,69 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
 
   // "default", "replit", or any unrecognised value → Admin Fikri Gateway
   const defaults = await getFikriGatewayConfig();
+
+  // Economy Mode: if the admin gateway is OpenRouter, force the free route.
+  // For non-OpenRouter gateways (OpenAI/Gemini/Anthropic), we cannot reroute
+  // without the right API key, so we leave the call alone — admin should
+  // configure an OpenRouter key in the Fikri Gateway to get the full benefit.
+  if (economyMode && defaults.aiProvider === "openrouter") {
+    return createSystemGatewayClient({ ...defaults, aiModel: FREE_MODEL_ROUTE });
+  }
+
   return createSystemGatewayClient(defaults);
+}
+
+// ─── Per-user Rate Limiter ────────────────────────────────────────────────────
+// Sliding-window counter keyed by `${userId}:${endpoint}`. Bounded at 10K keys
+// to prevent unbounded growth under churn. When at cap, oldest 10% are dropped.
+// Default per-hour budgets per endpoint — overridable per call.
+export const RATE_LIMITS: Record<string, number> = {
+  ideas: 5,
+  trends: 10,
+  explain: 20,
+  smart_view: 10,
+  sentiment: 3,
+  chat: 60,
+};
+
+const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_CACHE_MAX = 10_000;
+const rateBuckets = new Map<string, number[]>();
+
+export class RateLimitError extends Error {
+  constructor(public endpoint: string, public retryAfterMs: number) {
+    super(`Rate limit exceeded for ${endpoint}. Try again in ${Math.ceil(retryAfterMs / 1000)}s.`);
+    this.name = "RateLimitError";
+  }
+}
+
+export function checkRateLimit(
+  userId: string | undefined,
+  endpoint: string,
+  perHour: number = RATE_LIMITS[endpoint] ?? 30,
+): void {
+  if (!userId) return; // anonymous calls are gated elsewhere
+  const key = `${userId}:${endpoint}`;
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+  const bucket = rateBuckets.get(key) || [];
+  // Drop expired timestamps
+  const live = bucket.filter((t) => t > cutoff);
+  if (live.length >= perHour) {
+    const earliest = live[0];
+    throw new RateLimitError(endpoint, earliest + RATE_WINDOW_MS - now);
+  }
+  live.push(now);
+  if (rateBuckets.size >= RATE_CACHE_MAX && !rateBuckets.has(key)) {
+    const toDelete = Math.ceil(RATE_CACHE_MAX * 0.1);
+    let deleted = 0;
+    for (const k of rateBuckets.keys()) {
+      if (deleted >= toDelete) break;
+      rateBuckets.delete(k);
+      deleted++;
+    }
+  }
+  rateBuckets.set(key, live);
 }
 
 export async function logAIRequest(
@@ -1130,6 +1247,19 @@ ${contentSummary}
   }
 }
 
+// ─── Rewrite cache ────────────────────────────────────────────────────────────
+// Same (title, summary, prompt) → same rewrite. Shared across all callers so
+// notifier loops that hit the same article multiple times collapse to one call.
+const rewriteCache = new Map<string, TranslationCacheEntry<string>>();
+const REWRITE_CACHE_MAX = 3000;
+const REWRITE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function makeRewriteCacheKey(title: string, summary: string | null, prompt: string): string {
+  return createHash("sha256")
+    .update(`${title}|${(summary || "").substring(0, 300)}|${prompt.substring(0, 200)}`)
+    .digest("hex");
+}
+
 export async function rewriteContent(
   title: string,
   summary: string | null,
@@ -1139,6 +1269,9 @@ export async function rewriteContent(
   const defaultPrompt = `أنت حسام من قناة نظام الإنتاج. أسلوبك سعودي تقني كاجوال. أعد كتابة هذا الخبر التقني بأسلوبك الخاص كأنك تحكي لمتابعينك. ركز على المواصفات والتأثير الحقيقي. خلّها قصيرة ومباشرة مناسبة لتيليجرام. لا تضف أي مقدمات أو تحيات - ابدأ مباشرة بالخبر.`;
 
   const prompt = systemPrompt || defaultPrompt;
+  const cacheKey = makeRewriteCacheKey(title, summary, prompt);
+  const cached = getCacheEntry(rewriteCache, cacheKey);
+  if (cached) return cached;
 
   if (systemPrompt) {
     console.log(`[AI Rewrite] Using custom system prompt: "${systemPrompt.substring(0, 50)}${systemPrompt.length > 50 ? '...' : ''}"`);
@@ -1161,7 +1294,9 @@ export async function rewriteContent(
     });
 
     if (userId) await logAIRequest(userId, "ai_rewrite", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
-    return response.choices[0]?.message?.content?.trim() || title;
+    const out = response.choices[0]?.message?.content?.trim() || title;
+    setCacheEntryTtl(rewriteCache, cacheKey, out, REWRITE_CACHE_TTL_MS, REWRITE_CACHE_MAX);
+    return out;
   } catch (error) {
     console.error("Error rewriting content:", error);
     return title;
@@ -1485,12 +1620,16 @@ export type StreamCapableAIClient =
 /** Returns a stream-capable AI client mirroring the same provider resolution as getAIClient. */
 export async function getStreamCapableAIClient(userId?: string): Promise<StreamCapableAIClient> {
   const userSettings = await getSettingsMap(userId);
+  const economyMode = await isEconomyModeEnabled();
   const provider = userSettings.get("ai_provider") || "default";
 
   if (provider === "custom") {
     const apiKey = (userSettings.get("ai_custom_api_key") || "").trim();
     const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini" | "anthropic";
-    const model = userSettings.get("ai_custom_model") || "gpt-4o";
+    let model = userSettings.get("ai_custom_model") || "gpt-4o";
+    if (economyMode && customProvider === "openrouter") {
+      model = FREE_MODEL_ROUTE;
+    }
     if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
     if (customProvider === "gemini")    return { type: "gemini",    apiKey, model, providerUsed: "user_custom_api" };
     if (customProvider === "anthropic") return { type: "anthropic", apiKey, model, providerUsed: "user_custom_api" };
@@ -1516,7 +1655,10 @@ export async function getStreamCapableAIClient(userId?: string): Promise<StreamC
   // default → Admin Fikri Gateway
   const config = await getFikriGatewayConfig();
   const apiKey = config.aiApiKey.trim();
-  const model = config.aiModel.trim();
+  // Economy Mode: force openrouter/free when gateway is OpenRouter.
+  const model = (economyMode && config.aiProvider === "openrouter")
+    ? FREE_MODEL_ROUTE
+    : config.aiModel.trim();
   if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في محرك فكري داخل لوحة الإدارة");
   if (!model)  throw new Error("يرجى إدخال اسم نموذج صحيح في محرك فكري داخل لوحة الإدارة");
 

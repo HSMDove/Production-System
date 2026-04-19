@@ -4,6 +4,7 @@ import { recoverOrphanedContent } from "./folder-fetcher";
 import { backfillReadyContentMissingArabic } from "./folder-fetcher";
 import { backfillContentMissingImages } from "./folder-fetcher";
 import { runFreeModelHealthCheck } from "./free-model-router";
+import { isEconomyModeEnabled } from "./openai";
 import { log } from "./index";
 
 const folderLastRun = new Map<string, number>();
@@ -13,10 +14,14 @@ const FETCH_TIMEOUT_MS = 120_000; // 2-minute hard limit per folder fetch
 
 const SCHEDULER_TICK_MS = 5 * 1000;
 const ORPHAN_REAPER_INTERVAL_MS = 5 * 60 * 1000;
+const ORPHAN_REAPER_INTERVAL_MS_ECONOMY = 15 * 60 * 1000;
 const READY_BACKFILL_INTERVAL_MS = 30 * 1000;
+const READY_BACKFILL_INTERVAL_MS_ECONOMY = 10 * 60 * 1000;
 const DAILY_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const IMAGE_BACKFILL_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-const FREE_MODEL_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const IMAGE_BACKFILL_INTERVAL_MS_ECONOMY = 30 * 60 * 1000;
+const FREE_MODEL_HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+const FREE_MODEL_HEALTH_CHECK_INTERVAL_MS_ECONOMY = 30 * 60 * 1000;
 let lastOrphanReaperRun = 0;
 let lastReadyBackfillRun = 0;
 let lastDailyCleanupRun = 0;
@@ -61,14 +66,20 @@ async function runFolderFetch(folderId: string) {
 
 async function tick() {
   try {
-    if (Date.now() - lastOrphanReaperRun >= ORPHAN_REAPER_INTERVAL_MS) {
+    const economy = await isEconomyModeEnabled().catch(() => false);
+    const orphanInterval = economy ? ORPHAN_REAPER_INTERVAL_MS_ECONOMY : ORPHAN_REAPER_INTERVAL_MS;
+    const backfillInterval = economy ? READY_BACKFILL_INTERVAL_MS_ECONOMY : READY_BACKFILL_INTERVAL_MS;
+    const imageInterval = economy ? IMAGE_BACKFILL_INTERVAL_MS_ECONOMY : IMAGE_BACKFILL_INTERVAL_MS;
+    const healthInterval = economy ? FREE_MODEL_HEALTH_CHECK_INTERVAL_MS_ECONOMY : FREE_MODEL_HEALTH_CHECK_INTERVAL_MS;
+
+    if (Date.now() - lastOrphanReaperRun >= orphanInterval) {
       lastOrphanReaperRun = Date.now();
       recoverOrphanedContent().catch(e => console.error("[Reaper] Error:", e));
     }
 
-    if (Date.now() - lastReadyBackfillRun >= READY_BACKFILL_INTERVAL_MS) {
+    if (Date.now() - lastReadyBackfillRun >= backfillInterval) {
       lastReadyBackfillRun = Date.now();
-      backfillReadyContentMissingArabic(50)
+      backfillReadyContentMissingArabic(economy ? 20 : 50)
         .then((count) => {
           if (count > 0) {
             log(`[Scheduler] Backfilled Arabic pipeline for ${count} ready items`, "scheduler");
@@ -77,14 +88,14 @@ async function tick() {
         .catch((e) => console.error("[Backfill] Error:", e));
     }
 
-    if (Date.now() - lastImageBackfillRun >= IMAGE_BACKFILL_INTERVAL_MS) {
+    if (Date.now() - lastImageBackfillRun >= imageInterval) {
       lastImageBackfillRun = Date.now();
-      backfillContentMissingImages(20).catch((e) =>
+      backfillContentMissingImages(economy ? 10 : 20).catch((e) =>
         console.error("[ImageBackfill] Error:", e)
       );
     }
 
-    if (Date.now() - lastFreeModelHealthCheckRun >= FREE_MODEL_HEALTH_CHECK_INTERVAL_MS) {
+    if (Date.now() - lastFreeModelHealthCheckRun >= healthInterval) {
       lastFreeModelHealthCheckRun = Date.now();
       runFreeModelHealthCheck().catch((e) => console.error("[FreeModelHealth] Error:", e));
     }

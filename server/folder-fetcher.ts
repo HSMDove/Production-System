@@ -16,6 +16,45 @@ export interface FetchFolderResult {
 const AI_RETRY_ATTEMPTS = 2;
 const SOCIAL_VIDEO_SOURCE_TYPES = new Set<Source["type"]>(["twitter", "youtube"]);
 
+// ─── Global rule-based junk filter ────────────────────────────────────────────
+// Applied to every fetched item before ingestion — NO AI involvement, near-zero
+// CPU cost. Patterns target content that is almost never useful for Arabic news
+// summarisation: puzzles, shopping roundups, sponsored posts, paywalled teasers,
+// horoscopes, product hunt-style listicles, and stub articles.
+const JUNK_PATTERNS: RegExp[] = [
+  // NYT-style puzzle spam
+  /\b(crossword|wordle|spelling bee|connections puzzle|quordle|nyt games)\b/i,
+  // Deals / shopping / gift guides
+  /\b(best deals|deal roundup|today'?s deals|shopping guide|buying guide|gift guide|black friday|cyber monday|prime day)\b/i,
+  // Paid / sponsored markers
+  /\b(sponsored|promoted|advertisement|paid post|partner content|affiliate|ad:)\b/i,
+  // Horoscopes, lifestyle fluff
+  /\b(horoscope|zodiac|astrology forecast|tarot reading)\b/i,
+  // Classic listicle clickbait that rarely yields useful news
+  /^\s*(\d{1,3})\s+(best|worst|top|amazing|shocking|weird)\s+/i,
+  // Newsletter / podcast teasers
+  /\b(newsletter|podcast episode|this week in (?:tech|news|gaming)|weekly digest)\b/i,
+  // Paywall teasers that return almost no content
+  /\b(subscribe to read|for subscribers only|premium article|members only)\b/i,
+  // Live-blog stubs (short title + "live updates")
+  /\blive updates?\b.*\b(minute[-\s]?by[-\s]?minute|follow live)\b/i,
+];
+
+function isJunkTitle(title: string | null | undefined): boolean {
+  if (!title) return false;
+  const t = title.trim();
+  if (!t) return false;
+  if (t.length < 12) return true; // too short to be meaningful
+  return JUNK_PATTERNS.some((p) => p.test(t));
+}
+
+function applyJunkPreFilter(results: FetchResult[]): FetchResult[] {
+  return results.map((r) => ({
+    ...r,
+    items: r.items.filter((item) => !isJunkTitle(item.title)),
+  }));
+}
+
 function isMostlyArabicText(...values: Array<string | null | undefined>): boolean {
   const text = values.filter(Boolean).join(" ").trim();
   if (!text) return false;
@@ -364,13 +403,9 @@ async function applySmartFilter(
     const hasDefaultFilter = activeFilters.some((f) => f.isDefault);
     const customFilters = activeFilters.filter((f) => !f.isDefault && f.description.trim());
 
-    // Tier 0: Zero-cost JS junk pattern pre-filter (runs before any AI call)
-    const JUNK_PATTERNS = [
-      /\b(crossword|wordle|spelling bee|connections puzzle|quordle|nyt games)\b/i,
-      /\b(best deals|deal roundup|today's deals|shopping guide|buying guide|gift guide)\b/i,
-      /\b(sponsored|promoted|advertisement|paid post|partner content)\b/i,
-    ];
-    const isJunk = (title: string) => JUNK_PATTERNS.some((p) => p.test(title));
+    // Tier 0: Junk pattern pre-filter is now applied unconditionally at the
+    // top of fetchFolderContent via applyJunkPreFilter — no need to repeat it
+    // here. Items that survived to this point have already passed that filter.
 
     // Tier 0.5: Title word-overlap dedup (drop near-duplicates before AI call)
     const titleWordSets = new Map<string, Set<string>>();
@@ -386,18 +421,16 @@ async function applySmartFilter(
       return false;
     };
 
-    // Tier 1: Instant keyword filter (default filter)
+    // Tier 1: Instant keyword filter (default filter). Junk patterns already
+    // stripped upstream, so we only need the user's default-filter check here.
     let filtered = hasDefaultFilter
       ? results.map((result) => ({
           ...result,
           items: result.items.filter(
-            (item) => !shouldFilterContent(item.title, item.summary ?? null, true) && !isJunk(item.title),
+            (item) => !shouldFilterContent(item.title, item.summary ?? null, true),
           ),
         }))
-      : results.map((result) => ({
-          ...result,
-          items: result.items.filter((item) => !isJunk(item.title)),
-        }));
+      : results;
 
     // Apply title dedup across all filtered results
     filtered = filtered.map((result) => ({
@@ -445,9 +478,14 @@ export async function fetchFolderContent(folderId: string, folder?: Folder): Pro
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const rawResults = await fetchMultipleSources(sources);
 
+  // Unconditional rule-based junk filter — drops listicles/puzzles/sponsored
+  // items before they ever enter AI processing. Runs before the smart filter
+  // so even users without smart_filters_config benefit.
+  const prefiltered = applyJunkPreFilter(rawResults);
+
   // Apply smart filter (FEAT-004) before storing any content
   const folderOwnerUserId = folder?.userId ?? null;
-  const results = await applySmartFilter(rawResults, folderOwnerUserId, folderId).catch(() => rawResults);
+  const results = await applySmartFilter(prefiltered, folderOwnerUserId, folderId).catch(() => prefiltered);
 
   let totalAdded = 0;
   let skipped = 0;
