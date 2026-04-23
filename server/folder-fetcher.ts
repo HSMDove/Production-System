@@ -63,23 +63,29 @@ function isMostlyArabicText(...values: Array<string | null | undefined>): boolea
   return totalChars > 0 && arabicChars.length / totalChars > 0.5;
 }
 
-function truncateTo400Words(text: string): string {
+// News articles follow the inverted-pyramid structure: the first ~120 words
+// contain who/what/when/where/why. Anything beyond that is supporting detail
+// that rarely changes the Arabic output. 150 words gives a small safety margin
+// without wasting tokens on the long tail.
+const PIPELINE_CONTEXT_WORDS = 150;
+
+function truncateToWords(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
-  if (words.length <= 400) return text;
-  return words.slice(0, 400).join(" ");
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(" ");
 }
 
 function buildPipelineSummary(sourceType: Source["type"] | undefined, title: string, summary: string | null): string {
   const cleanedSummary = (summary || "").trim();
   if (!cleanedSummary) {
-    return truncateTo400Words(title);
+    return truncateToWords(title, PIPELINE_CONTEXT_WORDS);
   }
 
   if (sourceType && SOCIAL_VIDEO_SOURCE_TYPES.has(sourceType) && cleanedSummary.length < 40) {
-    return truncateTo400Words(`${title}\n\n${cleanedSummary}`);
+    return truncateToWords(`${title}\n\n${cleanedSummary}`, PIPELINE_CONTEXT_WORDS);
   }
 
-  return truncateTo400Words(cleanedSummary);
+  return truncateToWords(cleanedSummary, PIPELINE_CONTEXT_WORDS);
 }
 
 function shouldSkipImageBackfill(sourceType: Source["type"] | undefined, imageUrl: string | null): boolean {

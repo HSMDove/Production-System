@@ -18,7 +18,7 @@ import { resolveRuntimeEnv, StartupConfigError } from "./config/env";
 
 const app = express();
 const httpServer = createServer(app);
-const APP_VERSION = "2.9.0";
+const APP_VERSION = "2.9.1";
 
 declare module "http" {
   interface IncomingMessage {

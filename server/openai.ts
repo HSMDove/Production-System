@@ -170,6 +170,20 @@ type AIChatClient = {
   };
 };
 
+// Cap input length sent to paid LLM translations. News ledes are self-
+// sufficient; beyond ~140 words we pay tokens for detail that rarely changes
+// the Arabic output. Summary path is even shorter — 60 words is enough for a
+// 1-2 sentence Arabic TL;DR.
+const LLM_INPUT_SUMMARY_WORDS = 60;
+const LLM_INPUT_TRANSLATE_WORDS = 140;
+
+function truncateForLLM(text: string | null | undefined, maxWords: number): string {
+  if (!text) return "";
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(" ");
+}
+
 async function getSettingsMap(userId?: string): Promise<Map<string, string | null>> {
   if (!userId) return new Map();
   const allSettings = await storage.getAllSettings(userId);
@@ -1060,6 +1074,10 @@ export async function generateArabicSummary(
     ? `${customSystemPrompt}\n\nمهمتك الآن: ترجم ولخص المحتوى التقني التالي إلى العربية في 1-2 جملة. أجب بالملخص العربي فقط.`
     : defaultSystemMsg;
 
+  // Trim to the lede: 1-2 sentence summary needs at most ~60 English words
+  // of context. The rest is billable padding.
+  const summaryContext = truncateForLLM(summary, LLM_INPUT_SUMMARY_WORDS);
+
   try {
     const { client, miniModel, providerUsed } = await getAIClient(userId);
     const startTime = Date.now();
@@ -1072,11 +1090,11 @@ export async function generateArabicSummary(
         },
         {
           role: "user",
-          content: `قم بترجمة وتلخيص هذا المحتوى التقني إلى العربية في 1-2 جملة:\n\nالعنوان: ${title}\n${summary ? `الملخص: ${summary}` : ''}`
+          content: `قم بترجمة وتلخيص هذا المحتوى التقني إلى العربية في 1-2 جملة:\n\nالعنوان: ${title}\n${summaryContext ? `الملخص: ${summaryContext}` : ''}`
         }
       ],
       temperature: 0.3,
-      max_tokens: 200,
+      max_tokens: 150,
     });
 
     if (userId) await logAIRequest(userId, "ai_summary", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
@@ -1223,6 +1241,10 @@ export async function generateProfessionalTranslation(
     ? `${customSystemPrompt}\n\nمهمتك الآن: ترجم الخبر التقني التالي إلى العربية بأسلوبك. العنوان يجب أن يكون جذاباً ومختصراً. الملخص يجب أن يوضح الخبر بشكل كامل. أجب بصيغة JSON فقط.`
     : defaultTranslationPrompt;
 
+  // Trim to the lede window — news inverted-pyramid means the first ~140
+  // English words carry the full story gist. Extra tail is billable padding.
+  const translateContext = truncateForLLM(summary, LLM_INPUT_TRANSLATE_WORDS);
+
   try {
     const { client, miniModel, providerUsed } = await getAIClient(userId);
     const startTime = Date.now();
@@ -1238,7 +1260,7 @@ export async function generateProfessionalTranslation(
           content: `ترجم هذا الخبر التقني إلى العربية:
 
 العنوان: ${title}
-${summary ? `الملخص: ${summary}` : ''}
+${translateContext ? `الملخص: ${translateContext}` : ''}
 
 أجب بهذه الصيغة:
 {
@@ -1249,7 +1271,7 @@ ${summary ? `الملخص: ${summary}` : ''}
       ],
       response_format: { type: "json_object" },
       temperature: 0.3,
-      max_tokens: 500,
+      max_tokens: 350,
     });
 
     if (userId) await logAIRequest(userId, "ai_translate", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
@@ -2070,11 +2092,13 @@ export async function batchTranslateContent(
     ? `${customSystemPrompt}\n\nمهمتك: ترجم الأخبار التالية إلى العربية. أجب بصيغة JSON فقط.`
     : defaultPrompt;
 
+  // Per-item context cap: ~200 chars ≈ 40 English words. Plenty for a news
+  // lede, and keeps the batch payload bounded even at 10 items per call.
   const payload = uncached.map((item, i) => ({
     index: i,
     id: item.id,
     title: item.title,
-    summary: (item.summary || "").substring(0, 300),
+    summary: (item.summary || "").substring(0, 200),
   }));
 
   try {
@@ -2092,7 +2116,7 @@ export async function batchTranslateContent(
       ],
       response_format: { type: "json_object" },
       temperature: 0.3,
-      max_tokens: 200 * uncached.length,
+      max_tokens: 150 * uncached.length,
     });
 
     if (userId) await logAIRequest(userId, "ai_translate", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
