@@ -10,7 +10,7 @@ import { fetchRSSFeed, fetchMultipleSources, shouldFilterContent } from "./fetch
 import { fetchGoogleDocText } from "./google-docs";
 import { generateIdeasFromContent, generateSmartIdeasForTemplate, analyzeContentSentiment, detectTrendingTopics, generateArabicSummary, generateDetailedArabicExplanation, generateProfessionalTranslation, analyzeTrainingSampleStyle, generateStyleMatrix } from "./openai";
 import { processNewContentNotifications, broadcastSingleContent, testTelegramConnection, testSlackConnection } from "./notifier";
-import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens, isEconomyModeEnabled, invalidateEconomyModeCache } from "./openai";
+import { getAIClient, rewriteContent, logAIRequest, testSystemGatewayAiConnection, getStreamCapableAIClient, streamAITokens, isEconomyModeEnabled, invalidateEconomyModeCache, invalidateDailyBudgetCache, checkRateLimit, RateLimitError } from "./openai";
 import { composeAiSystemPrompt, getUserComposedSystemPrompt } from "./ai-system-prompt";
 import { getSchedulerStatus, scheduleFolderImmediately } from "./scheduler";
 import { fetchFolderContent, processContentIdsThroughPipeline } from "./folder-fetcher";
@@ -628,6 +628,29 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   next();
+}
+
+// Applies a per-user hourly rate limit for a named LLM endpoint. Returns
+// `true` when the caller should continue, `false` when it has already
+// responded with 429. Admins bypass the limit (set in req by requireAuth
+// callers; we re-check via session and skip gracefully if unknown).
+function rateLimitGuard(req: Request, res: Response, endpoint: string): boolean {
+  const userId = req.session?.userId;
+  if (!userId) return true; // unauthenticated routes gate elsewhere
+  try {
+    checkRateLimit(userId, endpoint);
+    return true;
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      res.status(429).json({
+        error: "تجاوزت الحد المسموح لهذه العملية في الساعة. يرجى المحاولة لاحقاً.",
+        retryAfterMs: err.retryAfterMs,
+        endpoint,
+      });
+      return false;
+    }
+    throw err;
+  }
 }
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -1858,6 +1881,7 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/smart-view", async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "smart_view")) return;
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
 
@@ -1894,9 +1918,10 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/generate-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "ideas")) return;
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
-      
+
       const allUnusedContent = await storage.getUnusedContentByFolderId(req.params.id);
       if (allUnusedContent.length === 0) {
         return res.status(400).json({ error: "لا توجد أخبار جديدة غير مستخدمة. كل الأخبار تم استخدامها في توليد أفكار سابقة." });
@@ -1995,6 +2020,7 @@ export async function registerRoutes(
 
   app.post("/api/generate-smart-ideas", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "ideas")) return;
       const { folderIds, days, templates: templateRequests } = req.body as {
         folderIds: string[];
         days: number;
@@ -2632,6 +2658,7 @@ export async function registerRoutes(
 
   app.post("/api/assistant/chat", checkFeatureFlag("fikri_enabled"), async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "chat")) return;
       const body = req.body as AssistantChatRequest & { conversationId?: string };
       const userMessage = body?.message?.trim();
       const userId = req.session.userId!;
@@ -2691,6 +2718,8 @@ export async function registerRoutes(
 
   // Streaming variant — returns Server-Sent Events so the AI response types out token-by-token.
   app.post("/api/assistant/chat/stream", checkFeatureFlag("fikri_enabled"), async (req, res) => {
+    // Rate limit must fire BEFORE SSE headers — otherwise a 429 can't be sent.
+    if (!rateLimitGuard(req, res, "chat")) return;
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -3711,6 +3740,7 @@ export async function registerRoutes(
   // Content Analysis endpoints
   app.post("/api/content/analyze", async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "sentiment")) return;
       const contentItems = await storage.getUnanalyzedContent(20);
       
       if (contentItems.length === 0) {
@@ -3741,6 +3771,7 @@ export async function registerRoutes(
 
   app.post("/api/folders/:id/content/analyze", async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "sentiment")) return;
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
       const folderContent = await storage.getContentByFolderId(req.params.id);
@@ -3775,6 +3806,7 @@ export async function registerRoutes(
   // Generate detailed Arabic explanation for a content item
   app.post("/api/content/:id/explain", checkFeatureFlag("ai_generation_enabled"), async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "explain")) return;
       const contentItem = await requireContentOwner(req.params.id, req.session.userId!, res);
       if (!contentItem) return;
 
@@ -3961,6 +3993,7 @@ export async function registerRoutes(
 
   app.get("/api/folders/:id/trending-topics", async (req, res) => {
     try {
+      if (!rateLimitGuard(req, res, "trends")) return;
       const folder = await requireFolderOwner(req.params.id, req.session.userId!, res);
       if (!folder) return;
       const folderContent = await storage.getContentByFolderId(req.params.id);
@@ -5149,6 +5182,44 @@ ${JSON.stringify(allResults.map((r: any) => ({ title: r.title, snippet: r.snippe
     } catch (error) {
       Sentry.captureException(error);
       res.status(500).json({ error: "فشل حفظ وضع التوفير" });
+    }
+  });
+
+  app.get("/api/admin/daily-budget", requireAdmin, async (_req, res) => {
+    try {
+      const setting = await storage.getSystemSetting("daily_llm_budget");
+      const limitRaw = Number((setting?.value || "").trim());
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 10_000;
+      const count = await storage.getDailyLLMCallCount().catch(() => 0);
+      res.json({ limit, count, exceeded: count >= limit });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل قراءة الميزانية اليومية" });
+    }
+  });
+
+  app.put("/api/admin/daily-budget", requireAdmin, async (req, res) => {
+    try {
+      const raw = Number(req.body?.limit);
+      if (!Number.isFinite(raw) || raw < 0) {
+        return res.status(400).json({ error: "قيمة غير صالحة — مطلوب رقم موجب" });
+      }
+      await storage.upsertSystemSetting(
+        "daily_llm_budget",
+        String(Math.floor(raw)),
+        "السقف اليومي لعدد استدعاءات LLM عبر كامل النظام — عند التجاوز يُجبَر التحويل للمجاني",
+      );
+      invalidateDailyBudgetCache();
+      await storage.createAuditLog(
+        req.session.userId!,
+        "system_setting_updated",
+        `تحديث daily_llm_budget إلى ${Math.floor(raw)}`,
+        req.ip || undefined,
+      );
+      res.json({ limit: Math.floor(raw) });
+    } catch (error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: "فشل حفظ الميزانية اليومية" });
     }
   });
 

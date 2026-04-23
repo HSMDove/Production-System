@@ -69,6 +69,8 @@ import {
   type PlatformType,
   systemSettings,
   type SystemSetting,
+  translationCache,
+  type TranslationCacheRow,
   apiUsageLogs,
   type ApiUsageLog,
   type InsertApiUsageLog,
@@ -311,6 +313,20 @@ export interface IStorage {
   getSystemSetting(key: string): Promise<SystemSetting | undefined>;
   getAllSystemSettings(): Promise<SystemSetting[]>;
   upsertSystemSetting(key: string, value: string | null, description?: string): Promise<SystemSetting>;
+
+  // Global translation cache
+  getCachedTranslation(hash: string): Promise<TranslationCacheRow | undefined>;
+  saveCachedTranslation(row: {
+    hash: string;
+    arabicTitle?: string | null;
+    arabicSummary?: string | null;
+    arabicFullSummary?: string | null;
+    source: string;
+  }): Promise<void>;
+  cleanupOldTranslationCache(daysToKeep?: number): Promise<number>;
+
+  // Daily LLM budget
+  getDailyLLMCallCount(): Promise<number>;
 
   // Training Samples
   getTrainingSamples(userId: string): Promise<TrainingSample[]>;
@@ -1052,6 +1068,63 @@ export class DatabaseStorage implements IStorage {
       ...result,
       value: result.value && SENSITIVE_SYSTEM_SETTING_KEYS.has(result.key) ? decryptRawValue(result.value) : result.value,
     };
+  }
+
+  // ─── Global Translation Cache ─────────────────────────────────────────────
+  async getCachedTranslation(hash: string): Promise<TranslationCacheRow | undefined> {
+    const [row] = await db.select().from(translationCache).where(eq(translationCache.hash, hash));
+    if (!row) return undefined;
+    // Fire-and-forget bump of hit counter + last_used_at — don't block the caller.
+    db.execute(sql`
+      UPDATE translation_cache
+      SET hit_count = hit_count + 1, last_used_at = NOW()
+      WHERE hash = ${hash}
+    `).catch(() => {});
+    return row;
+  }
+
+  async saveCachedTranslation(row: {
+    hash: string;
+    arabicTitle?: string | null;
+    arabicSummary?: string | null;
+    arabicFullSummary?: string | null;
+    source: string;
+  }): Promise<void> {
+    // Merge semantics: if a partial row exists (e.g. summary-only), preserve
+    // existing non-null fields while filling in newly-translated ones.
+    await db.execute(sql`
+      INSERT INTO translation_cache (hash, arabic_title, arabic_summary, arabic_full_summary, source)
+      VALUES (${row.hash}, ${row.arabicTitle ?? null}, ${row.arabicSummary ?? null}, ${row.arabicFullSummary ?? null}, ${row.source})
+      ON CONFLICT (hash) DO UPDATE SET
+        arabic_title = COALESCE(translation_cache.arabic_title, EXCLUDED.arabic_title),
+        arabic_summary = COALESCE(translation_cache.arabic_summary, EXCLUDED.arabic_summary),
+        arabic_full_summary = COALESCE(translation_cache.arabic_full_summary, EXCLUDED.arabic_full_summary),
+        source = EXCLUDED.source,
+        last_used_at = NOW()
+    `);
+  }
+
+  async cleanupOldTranslationCache(daysToKeep: number = 30): Promise<number> {
+    const result = await db.execute(sql`
+      DELETE FROM translation_cache
+      WHERE last_used_at < NOW() - INTERVAL '1 day' * ${daysToKeep}
+    `);
+    return (result as any).rowCount ?? 0;
+  }
+
+  // ─── Daily LLM budget ─────────────────────────────────────────────────────
+  async getDailyLLMCallCount(): Promise<number> {
+    // Counts successful LLM-bearing requests since 00:00 today (UTC).
+    // web_search is excluded — it's not billed against the LLM budget.
+    const result = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt
+      FROM api_usage_logs
+      WHERE created_at >= DATE_TRUNC('day', NOW())
+        AND request_type <> 'web_search'
+        AND success = true
+    `);
+    const row = (result as any).rows?.[0] ?? (result as any)[0];
+    return Number(row?.cnt ?? 0);
   }
 
   // ─── Training Samples ─────────────────────────────────────────────────────

@@ -42,6 +42,48 @@ export function invalidateEconomyModeCache(): void {
   economyModeCache = null;
 }
 
+// ─── Daily LLM Budget Guard ───────────────────────────────────────────────────
+// Hard system-wide ceiling on billable LLM calls per calendar day. When the
+// ceiling is reached, new calls either route to openrouter/free (if Fikri is
+// OpenRouter) or raise BudgetExceededError (for any other paid provider).
+// Setting: `daily_llm_budget` in system_settings (default 10_000).
+// Cached for 60 s to avoid counting api_usage_logs on every request.
+const DAILY_BUDGET_KEY = "daily_llm_budget";
+const DAILY_BUDGET_CACHE_TTL_MS = 60_000;
+const DEFAULT_DAILY_BUDGET = 10_000;
+let dailyBudgetCache: { limit: number; count: number; expiresAt: number } | null = null;
+
+export class BudgetExceededError extends Error {
+  constructor(count: number, limit: number) {
+    super(`Daily LLM budget exceeded (${count}/${limit}). Calls will resume at midnight UTC.`);
+    this.name = "BudgetExceededError";
+  }
+}
+
+async function getDailyBudget(): Promise<{ limit: number; count: number }> {
+  const now = Date.now();
+  if (dailyBudgetCache && dailyBudgetCache.expiresAt > now) {
+    return { limit: dailyBudgetCache.limit, count: dailyBudgetCache.count };
+  }
+  const [setting, count] = await Promise.all([
+    storage.getSystemSetting(DAILY_BUDGET_KEY).catch(() => undefined),
+    storage.getDailyLLMCallCount().catch(() => 0),
+  ]);
+  const parsed = Number((setting?.value || "").trim());
+  const limit = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_BUDGET;
+  dailyBudgetCache = { limit, count, expiresAt: now + DAILY_BUDGET_CACHE_TTL_MS };
+  return { limit, count };
+}
+
+export async function isDailyBudgetExceeded(): Promise<boolean> {
+  const { limit, count } = await getDailyBudget();
+  return count >= limit;
+}
+
+export function invalidateDailyBudgetCache(): void {
+  dailyBudgetCache = null;
+}
+
 // ─── In-memory L1 Translation Cache ─────────────────────────────────────────
 // Keyed by sha256(title|summary[:200]|promptHash). Max 5,000 entries, 24h TTL.
 // Prevents duplicate AI calls for the same article across users/sessions.
@@ -368,7 +410,14 @@ export type AIClientResult = { client: AIChatClient; model: string; miniModel: s
 
 export async function getAIClient(userId?: string): Promise<AIClientResult> {
   const userSettings = await getSettingsMap(userId);
-  const economyMode = await isEconomyModeEnabled();
+  const [economyMode, budgetExceeded] = await Promise.all([
+    isEconomyModeEnabled(),
+    isDailyBudgetExceeded().catch(() => false),
+  ]);
+  // Budget exceeded acts like Economy Mode: force free route on every path
+  // where we can. Paid models through user BYOK OpenAI/Gemini/Anthropic still
+  // go through — those are the user's own bill, not ours.
+  const forceFree = economyMode || budgetExceeded;
 
   // "default" is the new canonical value; "replit" is kept for backward compat
   const provider = userSettings.get("ai_provider") || "default";
@@ -382,7 +431,7 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
     // Economy Mode: downgrade user-custom OpenRouter selections to the free route.
     // Does NOT override OpenAI/Gemini/Anthropic user keys (those are BYOK and
     // under the user's own billing — not our concern).
-    if (economyMode && customProvider === "openrouter") {
+    if (forceFree && customProvider === "openrouter") {
       model = FREE_MODEL_ROUTE;
     }
 
@@ -475,8 +524,16 @@ export async function getAIClient(userId?: string): Promise<AIClientResult> {
   // For non-OpenRouter gateways (OpenAI/Gemini/Anthropic), we cannot reroute
   // without the right API key, so we leave the call alone — admin should
   // configure an OpenRouter key in the Fikri Gateway to get the full benefit.
-  if (economyMode && defaults.aiProvider === "openrouter") {
+  if (forceFree && defaults.aiProvider === "openrouter") {
     return createSystemGatewayClient({ ...defaults, aiModel: FREE_MODEL_ROUTE });
+  }
+
+  // Budget exhausted AND Fikri gateway is a paid provider (OpenAI/Gemini/
+  // Anthropic) — we cannot reroute, so we refuse the call. User must either
+  // switch to their own BYOK key or wait for the daily reset.
+  if (budgetExceeded && defaults.aiProvider !== "openrouter") {
+    const { limit, count } = await getDailyBudget();
+    throw new BudgetExceededError(count, limit);
   }
 
   return createSystemGatewayClient(defaults);
@@ -971,6 +1028,16 @@ export async function generateArabicSummary(
   const cached = getCacheEntry(arabicSummaryCache, cacheKey);
   if (cached !== undefined) return cached;
 
+  // L2 global DB cache — only valid for default prompt (prompt-flavored
+  // outputs aren't interchangeable across users).
+  if (!customSystemPrompt) {
+    const dbHit = await storage.getCachedTranslation(cacheKey).catch(() => undefined);
+    if (dbHit?.arabicSummary) {
+      setCacheEntry(arabicSummaryCache, cacheKey, dbHit.arabicSummary);
+      return dbHit.arabicSummary;
+    }
+  }
+
   // Tier 0: free translation (Google Translate → Lingva → MyMemory).
   // Only used when no custom system prompt is configured, because a custom
   // prompt implies the user wants LLM-flavored summarization, not a literal
@@ -979,6 +1046,11 @@ export async function generateArabicSummary(
     const freeResult = await translateTextToArabicFree(summary || title);
     if (freeResult) {
       setCacheEntry(arabicSummaryCache, cacheKey, freeResult);
+      storage.saveCachedTranslation({
+        hash: cacheKey,
+        arabicSummary: freeResult,
+        source: "free",
+      }).catch(() => {});
       return freeResult;
     }
   }
@@ -1010,6 +1082,13 @@ export async function generateArabicSummary(
     if (userId) await logAIRequest(userId, "ai_summary", providerUsed, miniModel, true, startTime, undefined, response.usage?.total_tokens);
     const result = response.choices[0]?.message?.content?.trim() || null;
     setCacheEntry(arabicSummaryCache, cacheKey, result);
+    if (result && !customSystemPrompt) {
+      storage.saveCachedTranslation({
+        hash: cacheKey,
+        arabicSummary: result,
+        source: "llm",
+      }).catch(() => {});
+    }
     return result;
   } catch (error) {
     console.error("Error generating Arabic summary:", error);
@@ -1098,6 +1177,19 @@ export async function generateProfessionalTranslation(
   const cached = getCacheEntry(professionalTranslationCache, cacheKey);
   if (cached !== undefined) return cached;
 
+  // L2 global DB cache — default-prompt translations are shareable across users.
+  if (!customSystemPrompt) {
+    const dbHit = await storage.getCachedTranslation(cacheKey).catch(() => undefined);
+    if (dbHit?.arabicTitle && dbHit?.arabicFullSummary) {
+      const hit: ProfessionalTranslation = {
+        arabicTitle: dbHit.arabicTitle,
+        arabicFullSummary: dbHit.arabicFullSummary,
+      };
+      setCacheEntry(professionalTranslationCache, cacheKey, hit);
+      return hit;
+    }
+  }
+
   // Tier 0: free translation (Google Translate → Lingva → MyMemory).
   // Skipped when a custom system prompt is set so user-defined tones still
   // route through the LLM.
@@ -1105,6 +1197,12 @@ export async function generateProfessionalTranslation(
     const freeResult = await translateTitleAndSummaryFree(title, summary);
     if (freeResult) {
       setCacheEntry(professionalTranslationCache, cacheKey, freeResult);
+      storage.saveCachedTranslation({
+        hash: cacheKey,
+        arabicTitle: freeResult.arabicTitle,
+        arabicFullSummary: freeResult.arabicFullSummary,
+        source: "free",
+      }).catch(() => {});
       return freeResult;
     }
   }
@@ -1160,6 +1258,14 @@ ${summary ? `الملخص: ${summary}` : ''}
 
     const parsed = JSON.parse(content) as ProfessionalTranslation;
     setCacheEntry(professionalTranslationCache, cacheKey, parsed);
+    if (parsed?.arabicTitle && parsed?.arabicFullSummary && !customSystemPrompt) {
+      storage.saveCachedTranslation({
+        hash: cacheKey,
+        arabicTitle: parsed.arabicTitle,
+        arabicFullSummary: parsed.arabicFullSummary,
+        source: "llm",
+      }).catch(() => {});
+    }
     return parsed;
   } catch (error) {
     console.error("Error generating professional translation:", error);
@@ -1620,14 +1726,18 @@ export type StreamCapableAIClient =
 /** Returns a stream-capable AI client mirroring the same provider resolution as getAIClient. */
 export async function getStreamCapableAIClient(userId?: string): Promise<StreamCapableAIClient> {
   const userSettings = await getSettingsMap(userId);
-  const economyMode = await isEconomyModeEnabled();
+  const [economyMode, budgetExceeded] = await Promise.all([
+    isEconomyModeEnabled(),
+    isDailyBudgetExceeded().catch(() => false),
+  ]);
+  const forceFree = economyMode || budgetExceeded;
   const provider = userSettings.get("ai_provider") || "default";
 
   if (provider === "custom") {
     const apiKey = (userSettings.get("ai_custom_api_key") || "").trim();
     const customProvider = (userSettings.get("ai_custom_provider") || "openai") as "openai" | "openrouter" | "gemini" | "anthropic";
     let model = userSettings.get("ai_custom_model") || "gpt-4o";
-    if (economyMode && customProvider === "openrouter") {
+    if (forceFree && customProvider === "openrouter") {
       model = FREE_MODEL_ROUTE;
     }
     if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في إعدادات الذكاء الاصطناعي المخصص");
@@ -1655,8 +1765,13 @@ export async function getStreamCapableAIClient(userId?: string): Promise<StreamC
   // default → Admin Fikri Gateway
   const config = await getFikriGatewayConfig();
   const apiKey = config.aiApiKey.trim();
-  // Economy Mode: force openrouter/free when gateway is OpenRouter.
-  const model = (economyMode && config.aiProvider === "openrouter")
+  // Economy Mode / daily budget exhausted: force openrouter/free when gateway
+  // is OpenRouter; refuse otherwise so we don't silently burn the admin key.
+  if (budgetExceeded && config.aiProvider !== "openrouter") {
+    const { limit, count } = await getDailyBudget();
+    throw new BudgetExceededError(count, limit);
+  }
+  const model = (forceFree && config.aiProvider === "openrouter")
     ? FREE_MODEL_ROUTE
     : config.aiModel.trim();
   if (!apiKey) throw new Error("يرجى إدخال مفتاح API صحيح في محرك فكري داخل لوحة الإدارة");

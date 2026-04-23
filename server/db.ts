@@ -107,5 +107,20 @@ export async function ensureIntegrationTables() {
       created_at timestamp NOT NULL DEFAULT NOW(),
       updated_at timestamp NOT NULL DEFAULT NOW()
     );
+    -- Global translation cache: dedup Arabic translations across all users.
+    -- Key is sha256(title|summary|prompt_hint). The same English article
+    -- imported by 1000 users translates ONCE.
+    CREATE TABLE IF NOT EXISTS translation_cache (
+      hash varchar PRIMARY KEY,
+      arabic_title text,
+      arabic_summary text,
+      arabic_full_summary text,
+      source text NOT NULL DEFAULT 'unknown',
+      hit_count integer NOT NULL DEFAULT 1,
+      created_at timestamp NOT NULL DEFAULT NOW(),
+      last_used_at timestamp NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_translation_cache_last_used
+      ON translation_cache(last_used_at);
   `);
 }

@@ -607,6 +607,24 @@ function SystemSettingsPanel() {
     },
   });
 
+  const { data: budgetData } = useQuery<{ limit: number; count: number; exceeded: boolean }>({
+    queryKey: ["/api/admin/daily-budget"],
+  });
+  const [budgetInput, setBudgetInput] = useState<string>("");
+  useEffect(() => {
+    if (budgetData?.limit !== undefined) setBudgetInput(String(budgetData.limit));
+  }, [budgetData?.limit]);
+  const saveBudgetMutation = useMutation({
+    mutationFn: (limit: number) => apiRequest("PUT", "/api/admin/daily-budget", { limit }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/daily-budget"] });
+      toast({ title: "تم حفظ السقف اليومي" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error?.message || "فشل حفظ السقف اليومي", variant: "destructive" });
+    },
+  });
+
   if (isLoading || fikriLoading) return <PanelLoader />;
 
   const knownFlags = [
@@ -645,6 +663,48 @@ function SystemSettingsPanel() {
             disabled={toggleEconomyMutation.isPending}
             data-testid="toggle-economy-mode"
           />
+        </div>
+      </div>
+
+      <div className="card bg-card p-5 mb-4" data-testid="panel-daily-budget">
+        <div className="flex flex-col gap-3">
+          <div>
+            <h3 className="text-lg font-bold">السقف اليومي لاستدعاءات الذكاء الاصطناعي</h3>
+            <p className="text-sm text-muted-foreground">
+              حد نظامي أقصى لعدد الطلبات المدفوعة عبر كامل المستخدمين في اليوم الواحد.
+              عند الوصول: تتحول كل طلبات بوابة فكري (OpenRouter) تلقائياً إلى النموذج المجاني
+              حتى منتصف الليل (UTC). مثالي لضمان عدم تجاوز ميزانيتك الشهرية.
+            </p>
+          </div>
+          <div className="text-sm">
+            الاستهلاك اليوم:
+            <span className="mx-1 font-bold">{budgetData?.count ?? 0}</span>
+            من
+            <span className="mx-1 font-bold">{budgetData?.limit ?? 0}</span>
+            {budgetData?.exceeded ? <span className="mx-2 text-destructive">(تم بلوغ السقف)</span> : null}
+          </div>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number"
+              min={0}
+              step={100}
+              className="rounded-md border px-3 py-2 bg-background w-40"
+              value={budgetInput}
+              onChange={(e) => setBudgetInput(e.target.value)}
+              data-testid="input-daily-budget"
+            />
+            <button
+              className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50"
+              disabled={saveBudgetMutation.isPending || !budgetInput}
+              onClick={() => {
+                const n = Number(budgetInput);
+                if (Number.isFinite(n) && n >= 0) saveBudgetMutation.mutate(Math.floor(n));
+              }}
+              data-testid="button-save-daily-budget"
+            >
+              حفظ
+            </button>
+          </div>
         </div>
       </div>
 

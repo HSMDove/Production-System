@@ -467,6 +467,24 @@ export const apiUsageLogs = pgTable("api_usage_logs", {
 export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
 export type InsertApiUsageLog = typeof apiUsageLogs.$inferInsert;
 
+// Global translation cache — dedupes Arabic translations across ALL users.
+// Keyed by sha256(title|summary|prompt_hint). When 1000 users import the
+// same English article, it translates ONCE. Scales O(unique articles) not
+// O(users × articles). Populated both by the free translator (Google/Lingva/
+// MyMemory) and the LLM fallback.
+export const translationCache = pgTable("translation_cache", {
+  hash: varchar("hash").primaryKey(),
+  arabicTitle: text("arabic_title"),
+  arabicSummary: text("arabic_summary"),
+  arabicFullSummary: text("arabic_full_summary"),
+  source: text("source").notNull().default("unknown"), // 'free_google'|'free_lingva'|'free_mymemory'|'llm'
+  hitCount: integer("hit_count").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+});
+
+export type TranslationCacheRow = typeof translationCache.$inferSelect;
+
 // Free Model Health Logs — operational log for free-tier OpenRouter routing
 export const freeModelCheckResults = ["success", "failed", "switched", "reset"] as const;
 export type FreeModelCheckResult = typeof freeModelCheckResults[number];
